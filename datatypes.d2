@@ -1,0 +1,36 @@
+direction: right
+
+User: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  email: str
+  password_hash: str
+  fname: str
+  lname: str
+  phone: str
+  bio: str
+  active: bool
+  calling: str
+}
+
+Calling: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  name: str
+  num: int
+  permissions: "int[]"
+  custom: bool
+}
+
+Permissions: {
+  shape: sql_table
+  foreign_id: str {constraint: foreign_key}
+  is_calling: bool
+  scope_1: bool
+  scope_2: bool
+  "scope_n...": bool
+}
+
+# Relationships based on common fields
+User.calling -> Calling.id : "references"
+Permissions.foreign_id -> User.id : "references"

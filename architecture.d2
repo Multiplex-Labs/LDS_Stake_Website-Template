@@ -1,0 +1,46 @@
+# Changing to down makes it less "wide"
+direction: down
+
+# Grid layout forces components into a square-like matrix
+Docker Composed Application: {
+  style: {
+    stroke-dash: 5
+  }
+
+
+  Frontend: Svelte / Node.js
+  Backend: FastAPI
+  SlackBot: FastAPI Slack Bot
+  DB: SQLite {
+    shape: cylinder
+  }
+
+  Frontend -> Backend: CRUD
+  Backend -> SlackBot: Request Messages
+  SlackBot -> Backend: Update Database
+  Backend -> DB
+}
+
+# Grouping users to sit closer together
+Users: {
+  style: { stroke-width: 0; fill: transparent }
+  User: User {
+    shape: person
+  }
+}
+
+SMTP: SMTP (optional) {
+  shape: cloud
+}
+
+Slack API: Slack API {
+  shape: cloud
+}
+
+Users.User -> Docker Composed Application.Frontend: Interacts
+
+Docker Composed Application.SlackBot <-> Slack API: Events & Messages
+Slack API <-> Users.User
+
+Docker Composed Application.Backend -> SMTP: Email?
+SMTP -> Users.User
