@@ -1,8 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from .db.orm import ORM
+import os
 
-app = FastAPI(title="lds-stake-backend")
+orm: ORM = None
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup code can go here
+    engine_kind = os.getenv("DB_ENGINE", None)
+    orm = ORM(engine_kind)
+    yield
+    # shutdown code can go here
+
+app = FastAPI(title="lds-stake-backend", lifespan=lifespan)
 
 def configure_app(application: FastAPI) -> None:
     # basic middleware
@@ -17,7 +29,7 @@ def configure_app(application: FastAPI) -> None:
 configure_app(app)
 
 # Import and include routers here to avoid import cycles
-from src.routers.health import router as health_router  # noqa: E402
+from .routers import auth_router,health_router
 
 app.include_router(health_router, prefix="")
 
