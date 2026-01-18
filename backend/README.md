@@ -1,0 +1,67 @@
+
+# LDS Stake Website — Backend
+
+Minimal backend for the LDS stake website template (API, auth, and content management).
+
+## Features
+- FastAPI application with pluggable routers
+- Uvicorn-based ASGI server and programmatic start in `main.py`
+- Environment-based configuration via `.env` (uses `python-dotenv`)
+- Rich logging configuration for readable console output
+
+## Prerequisites
+- Python 3.11 or newer
+- A virtual environment (recommended)
+- `uvicorn` is a runtime dependency (installed via project dependencies)
+- This project is developed with a lightweight package manager workflow; if you use `uv` for dependency management follow the `uv` commands below. Otherwise use the standard `venv` + `pip` flow.
+
+## Quick start (local)
+
+Using `uv` (if you have it installed):
+
+```
+uv install
+uv run python main.py
+```
+
+Using a virtual environment and `pip`:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+python main.py
+```
+
+You can also run the server directly with uvicorn (reload in development):
+
+```bash
+python -m uvicorn src.app:app --reload --host localhost --port 8000
+```
+
+The app is exposed at `http://localhost:8000` (or the host/port configured via environment variables).
+
+## Environment (example)
+
+Create a `.env` file at the project root or set environment variables directly. Common variables used by the app:
+
+```
+DEV=true        # development mode; enables reload and local host binding
+PORT=8000       # port to bind the server
+```
+
+`main.py` uses `python-dotenv` to load `.env` and reads `DEV` and `PORT`. Additional configuration (auth secrets, DB URLs) can be added as needed by your routers and services.
+
+## Endpoints / Testing
+
+- Health check: `GET /health` — returns `{ "status": "ok" }`
+
+To test quickly after starting the server:
+
+```bash
+curl http://localhost:8000/health
+```
+
+## Development notes
+- The ASGI application instance is defined in `src.app:app` and the server is started programmatically from `main.py`.
+- Logging configuration is provided by `src/logging_config.py` and integrated into `main.py`.

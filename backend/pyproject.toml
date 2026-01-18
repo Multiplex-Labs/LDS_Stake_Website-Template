@@ -1,0 +1,12 @@
+[project]
+name = "lds_stake_backend"
+version = "0.1.0"
+description = "Backend for LDS Stake Website Template"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+	"fastapi>=0.95.0",
+	"uvicorn[standard]>=0.22.0",
+	"python-dotenv>=1.0.0",
+	"rich>=13.0.0",
+]
