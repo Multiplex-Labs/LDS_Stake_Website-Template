@@ -13,3 +13,30 @@ class User(SQLModel, table=True):
     bio: Optional[str] = None
     profile_image: Optional[str] = None
     calling: Optional[str] = None
+
+class APISafeUser(SQLModel):
+    id: int
+    email: str
+    force_password_reset: bool = Field(default=True)
+    fname: str
+    lname: str
+    active: bool
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    profile_image: Optional[str] = None
+    calling: Optional[str] = None
+
+    @classmethod
+    def from_user(cls, user: User) -> "APISafeUser":
+        return cls(
+            id=user.id,
+            email=user.email,
+            force_password_reset=user.force_password_reset,
+            fname=user.fname,
+            lname=user.lname,
+            active=user.active,
+            phone=user.phone,
+            bio=user.bio,
+            profile_image=user.profile_image,
+            calling=user.calling
+        )
