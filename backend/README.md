@@ -130,3 +130,21 @@ If you plan to support other database engines later, update `migrations/env.py` 
 ## Development notes
 - The ASGI application instance is defined in `src.app:app` and the server is started programmatically from `main.py`.
 - Logging configuration is provided by `src/logging_config.py` and integrated into `main.py`.
+
+### Testing
+
+Tests are written and executed using the `pytest` framework.
+
+Test source is located at `src/tests`.
+
+To run tests make sure you install dev dependencies:
+
+```bash
+uv sync --group dev
+```
+
+And then you can execute them by invoking pytest
+
+```bash
+uv run pytest
+```
