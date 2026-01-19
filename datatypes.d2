@@ -3,15 +3,16 @@ direction: right
 User: {
   shape: sql_table
   id: str {constraint: primary_key}
-  email: str
+  email: str {constraint: unique, index}
   password_hash: str
+  force_password_reset: bool {constraint: default=true}
   fname: str
   lname: str
-  active: bool
-  phone: str
-  bio: str
-  profile_image: str
-  calling: str
+  active: bool {constraint: default=true}
+  phone: str {constraint: nullable}
+  bio: str {constraint: nullable}
+  profile_image: str {constraint: nullable}
+  calling: str {constraint: nullable}
 }
 
 Calling: {

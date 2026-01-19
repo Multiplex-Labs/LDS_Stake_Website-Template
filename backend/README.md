@@ -19,7 +19,7 @@ Minimal backend for the LDS stake website template (API, auth, and content manag
 
 Using `uv` (if you have it installed):
 
-```
+```bash
 uv install
 uv run alembic upgrade head
 uv run python main.py
@@ -41,6 +41,11 @@ You can also run the server directly with uvicorn (reload in development):
 python -m uvicorn src.app:app --reload --host localhost --port 8000
 ```
 
+> :warning: NOTE: at first launch you will need to set the `INITIAL_ADMIN_PASSWORD` environment variable. :warning:
+>
+> This can be done by prepending `INITIAL_ADMIN_PASSWORD=<value>` to your invoke.
+> The initial admin account will only be created when there are no users in the database and you will be forced to change the password at first login.
+
 The app is exposed at `http://localhost:8000` (or the host/port configured via environment variables).
 
 ## Environment (example)
@@ -54,7 +59,9 @@ PORT=8000       # port to bind the server
 
 `main.py` uses `python-dotenv` to load `.env` and reads `DEV` and `PORT`. Additional configuration (auth secrets, DB URLs) can be added as needed by your routers and services.
 
-## Endpoints / Testing
+Please see available options for environment variables in `.env.example`
+
+## Endpoints
 
 - Health check: `GET /health` — returns `{ "status": "ok" }`
 
@@ -64,9 +71,12 @@ To test quickly after starting the server:
 curl http://localhost:8000/health
 ```
 
-## Development notes
-- The ASGI application instance is defined in `src.app:app` and the server is started programmatically from `main.py`.
-- Logging configuration is provided by `src/logging_config.py` and integrated into `main.py`.
+Other endpoints are automatically documented courtesy of FastAPI and are accessible
+via the swagger UI at:
+
+```
+http://localhost:8000/docs
+```
 
 ## Database migrations (Alembic)
 
@@ -116,3 +126,7 @@ alembic -c alembic.ini history --verbose
 If you use a `.env` file, ensure `DB_ENGINE` and `DATABASE_PATH` are set before running Alembic commands (the `env.py` reads them via `python-dotenv`).
 
 If you plan to support other database engines later, update `migrations/env.py` to accept connection strings for those engines; currently only `sqlite` is supported and other values will raise a `ValueError`.
+
+## Development notes
+- The ASGI application instance is defined in `src.app:app` and the server is started programmatically from `main.py`.
+- Logging configuration is provided by `src/logging_config.py` and integrated into `main.py`.
