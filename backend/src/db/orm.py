@@ -47,6 +47,6 @@ class ORM:
                            "`engine_kind` should not be provided again")
         return cls._instance
 
-    def get_session(self):
-        with Session(self.engine) as session:
-            yield session
+def get_session():
+    with Session(ORM().engine) as session:
+        yield session

@@ -1,1 +1,1 @@
-from .orm import ORM
+from .orm import ORM, get_session
