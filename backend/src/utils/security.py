@@ -14,7 +14,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if SECRET_KEY is None:
     raise ValueError("JWT_SECRET_KEY environment variable must be set for security purposes.")
 ALGORITHM = "HS256"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -29,27 +29,40 @@ def create_access_token(data: dict, expires_delta: timedelta) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
-    session: Session = Depends(get_session)
-):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401)
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401)
-    
-    user = session.get(User, user_id)
-    if not user or not user.active:
-        raise HTTPException(status_code=401)
-    return user
+class CallingUser:
+    def __init__(
+            self,
+            require_fresh:bool = False,
+            api_safe:bool = False
+            ):
+        self.require_fresh = require_fresh
+        self.api_safe_user = api_safe
 
-async def get_current_api_safe_user(
-        user: User = Depends(get_current_user)
-):
-    return APISafeUser.from_user(user)
+
+    async def __call__(
+            self,
+            token: str = Depends(oauth2_scheme),
+            session: Session = Depends(get_session)
+    ) -> User|APISafeUser:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id: int = payload.get("sub")
+            fresh: bool = payload.get("fresh", False)
+            if user_id is None:
+                raise HTTPException(status_code=401)
+            if (self.require_fresh and not fresh):
+                raise HTTPException(status_code=401, detail="Action requires fresh token. Reauthenticate.")
+
+        except jwt.PyJWTError:
+            raise HTTPException(status_code=401)
+        
+        user = session.get(User, user_id)
+        if not user or not user.active:
+            raise HTTPException(status_code=401)
+        if self.api_safe_user:
+            return APISafeUser.from_user(user)
+        else:
+            return user
 
 async def get_current_user_session(
     refresh_token: str = Cookie(default=None),
@@ -77,3 +90,4 @@ async def get_current_user_session(
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
 
     return matched_session
+

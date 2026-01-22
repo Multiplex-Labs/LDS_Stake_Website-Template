@@ -7,8 +7,7 @@ from datetime import timedelta, datetime, timezone
 from logging import getLogger
 from ..models import User, APISafeUser, UserSession
 from ..utils import (
-    get_current_user,
-    get_current_api_safe_user,
+    CallingUser,
     verify_password, 
     create_access_token,
     hash_password,
@@ -19,14 +18,14 @@ from ..db import get_session
 
 logger = getLogger("application")
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Simple endpoint to get current user info
 @router.get("/me")
-def read_own_data(current_user: APISafeUser = Depends(get_current_api_safe_user)):
+def read_own_data(current_user: APISafeUser = Depends(CallingUser(api_safe=True))):
     return current_user
 
 @router.post("/login")
@@ -46,7 +45,10 @@ def login(
     
     # Create tokens
     access_token = create_access_token(
-        data={"sub": str(user.id)},
+        data={
+            "sub": str(user.id),
+            "fresh": True
+            },
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     # Encode user id into refresh token for faster database operation on refresh
@@ -88,7 +90,10 @@ def refresh_token(
     user_id = userSession.user_id    
     # Create new access token
     access_token = create_access_token(
-        data={"sub": str(user_id)},
+        data={
+            "sub": str(user_id),
+            "fresh":False
+            },
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
@@ -123,8 +128,7 @@ def refresh_token(
 class LogoutRequest(SQLModel):
     all_devices: bool = Field(default=False)
 @router.post("/logout")
-def logout(request:Request,
-           response: Response,
+def logout(response: Response,
            logout_request: LogoutRequest,
            userSession: UserSession = Depends(get_current_user_session),
            session: Session = Depends(get_session),
@@ -148,3 +152,5 @@ def logout(request:Request,
         samesite="lax",
         secure=os.getenv("SSL_ENABLED", "true").lower() == "true"
     )
+
+    return {"message":message}
