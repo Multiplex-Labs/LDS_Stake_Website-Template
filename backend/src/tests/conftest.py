@@ -17,7 +17,7 @@ from src.utils import hash_password
 import pytest
 
 
-@pytest.fixture(scope="module", name="db_session")
+@pytest.fixture(scope="session", name="db_session")
 def db_session_fixture():
     """Fixture to provide a database session for tests."""
     # Setup ORM to use in-memory SQLite for testing
@@ -54,6 +54,7 @@ def user_fixture(db_session: Session):
         fname="First",
         lname="Last",
         active=True,
+        force_password_reset=False,
     )
     db_session.add(user)
     db_session.commit()

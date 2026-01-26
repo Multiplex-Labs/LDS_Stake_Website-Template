@@ -47,9 +47,9 @@ def configure_app(application: FastAPI) -> None:
 configure_app(app)
 
 # Import and include routers here to avoid import cycles
-from .routers import auth_router,health_router
+from .routers import auth_router,health_router,users_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
-
+app.include_router(users_router)
 

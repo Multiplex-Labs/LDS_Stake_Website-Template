@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select, SQLModel, Field, delete
 from datetime import timedelta, datetime, timezone
 from logging import getLogger
-from ..models import User, APISafeUser, UserSession
+from ..models import User, ResponseSafeUser, UserSession
 from ..utils import (
     CallingUser,
     verify_password, 
@@ -25,7 +25,12 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Simple endpoint to get current user info
 @router.get("/me")
-def read_own_data(current_user: APISafeUser = Depends(CallingUser(api_safe=True))):
+def read_own_data(
+    current_user: ResponseSafeUser = Depends(CallingUser(
+        api_safe=True,
+        allow_unchanged_password=True
+        ))
+    ):
     return current_user
 
 @router.post("/login")

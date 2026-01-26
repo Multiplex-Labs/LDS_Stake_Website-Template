@@ -1,12 +1,16 @@
 import os
+from typing import List
 import jwt
 from passlib.context import CryptContext
 from datetime import timedelta, datetime, timezone
 from sqlmodel import Session, select
 from fastapi import Depends, HTTPException, status, Cookie
 from fastapi.security import OAuth2PasswordBearer
+
+from .permissions import user_has_permission
+
 from ..db import get_session
-from ..models import User, APISafeUser, UserSession
+from ..models import User, ResponseSafeUser, UserSession, Permission, Permissions
 
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -33,17 +37,21 @@ class CallingUser:
     def __init__(
             self,
             require_fresh:bool = False,
-            api_safe:bool = False
+            api_safe:bool = False,
+            permissions:List[Permission] = [],
+            allow_unchanged_password:bool = False
             ):
         self.require_fresh = require_fresh
         self.api_safe_user = api_safe
+        self.permissions = permissions
+        self.allow_unchanged_password = allow_unchanged_password
 
 
     async def __call__(
             self,
             token: str = Depends(oauth2_scheme),
             session: Session = Depends(get_session)
-    ) -> User|APISafeUser:
+    ) -> User|ResponseSafeUser:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id: int = payload.get("sub")
@@ -59,8 +67,15 @@ class CallingUser:
         user = session.get(User, user_id)
         if not user or not user.active:
             raise HTTPException(status_code=401)
+        
+        # Validate permissions if any are required
+        if self.permissions and not user_has_permission(user, self.permissions, session):
+                raise HTTPException(status_code=403, detail="Insufficient permissions.")
+        # Do not allow users who must reset their password unless explicitly allowed
+        if user.force_password_reset and not self.allow_unchanged_password:
+            raise HTTPException(status_code=403, detail="Password reset required.")
         if self.api_safe_user:
-            return APISafeUser.from_user(user)
+            return ResponseSafeUser.from_user(user)
         else:
             return user
 

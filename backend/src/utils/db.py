@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
-from sqlmodel import select, delete, Session, func
+from enum import IntFlag
+from typing import Any, Type
+from fastapi import HTTPException
+from sqlmodel import SQLModel, select, delete, Session, func
 from ..db import ORM
-from ..models import UserSession, User
+from ..models import UserSession, User, Permission, Permissions
 from .security import hash_password
 from logging import getLogger
 
@@ -61,6 +64,46 @@ def create_default_admin_user():
             )
             db.add(default_admin)
             db.commit()
+            db.refresh(default_admin)
+
+            admin_permissions = Permissions(
+                foreign_id=str(default_admin.id),
+                is_calling=False,
+                scopes=~Permission.NONE  # All permissions
+            )
+            db.add(admin_permissions)
+            db.commit()
             logger.info("Default admin user created with email 'admin@admin.com'"
                         " and password from INITIAL_ADMIN_PASSWORD environment variable."
                         " Please change the password upon first login.")
+            
+def validate_unique_field(
+    session: Session,
+    model: Type[SQLModel],
+    field_name: str,
+    value: Any,
+    exclude_id: Any = None
+):
+    """
+    Returns True if the value is unique (or None), 
+    raises 400 if it belongs to another record.
+    """
+    if value is None:
+        return True
+
+    statement = select(model).where(getattr(model, field_name) == value)
+    
+    # If updating, don't flag the record as a duplicate of itself
+    if exclude_id is not None:
+        statement = statement.where(model.id != exclude_id)
+        
+    existing = session.exec(statement).first()
+    
+    if existing:
+        # Format the field name for the error message (e.g., "phone_number" -> "Phone number")
+        display_name = field_name.replace("_", " ").capitalize()
+        raise HTTPException(
+            status_code=400, 
+            detail=f"{display_name} already in use."
+        )
+    return True

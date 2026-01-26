@@ -1,4 +1,4 @@
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -11,6 +11,8 @@ class UserSession(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_active_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime = Field()
+
+    user: "User" = Relationship(back_populates="sessions")  # type: ignore
 
 class APISafeUserSession(SQLModel):
     id: int

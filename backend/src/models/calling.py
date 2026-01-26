@@ -1,0 +1,28 @@
+from typing import List, Optional
+from sqlmodel import Field, Relationship, SQLModel
+
+class Calling(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    max_slots: int = Field(default=1)
+    system_defined: bool = Field(default=False)
+
+    # Relationship to assignments
+    assignments: List["UserCalling"] = Relationship(
+        back_populates="calling",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+
+class UserCalling(SQLModel, table=True):
+    """
+    A junction table to represent the many-to-many relationship 
+    between Users and Callings.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    calling_id: int = Field(foreign_key="calling.id", index=True)
+    slot_number: int = Field(default=1)
+
+    # Relationships
+    user: "User" = Relationship(back_populates="callings") # type: ignore
+    calling: Calling = Relationship(back_populates="assignments")

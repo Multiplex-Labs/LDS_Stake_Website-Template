@@ -1,4 +1,4 @@
-direction: right
+# direction: up
 
 User: {
   shape: sql_table
@@ -9,30 +9,49 @@ User: {
   fname: str
   lname: str
   active: bool {constraint: default=true}
-  phone: str {constraint: nullable}
+  phone: str {constraint: nullable,unique}
   bio: str {constraint: nullable}
   profile_image: str {constraint: nullable}
-  calling: str {constraint: nullable}
 }
 
 Calling: {
   shape: sql_table
   id: str {constraint: primary_key}
   name: str
-  num: int
-  permissions: "int[]"
-  custom: bool
+  max_slots: int
+  system_defined: bool
+}
+
+UserCalling: {
+  shape: sql_table
+  user_id: str {constraint: foreign_key}
+  calling_id: str {constraint: foreign_key}
+  slot_number: int
 }
 
 Permissions: {
   shape: sql_table
+  id: str {constraint: primary_key}
   foreign_id: str {constraint: foreign_key}
   is_calling: bool
-  scope_1: bool
-  scope_2: bool
-  "scope_n...": bool
+  scopes: int
+}
+
+UserSession: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  user_id: str {constraint: foreign_key,index}
+  token_hash: str {constraint: unique}
+  ip_address: str
+  user_agent: str
+  created_at: datetime {constraint: default=current_timestamp}
+  last_active_at: datetime {constraint: default=current_timestamp}
+  expires_at: datetime
 }
 
 # Relationships based on common fields
-User.calling -> Calling.id : "references"
+UserCalling -> User : "joins"
+UserCalling -> Calling : "joins"
 Permissions.foreign_id -> User.id : "references"
+Permissions.foreign_id -> Calling.id : "references"
+UserSession.user_id -> User.id : "references"
