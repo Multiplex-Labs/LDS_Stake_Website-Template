@@ -36,7 +36,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 from sqlmodel import SQLModel
 from src.models import *  # import all models to register them with SQLModel metadata
-target_metadata = SQLModel.metadata
+target_metadata = BaseModel.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

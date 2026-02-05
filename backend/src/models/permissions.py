@@ -1,13 +1,15 @@
 from enum import IntFlag, auto
-from sqlmodel import Field, SQLModel, UniqueConstraint
-from typing import List, Optional
+from sqlmodel import Field, UniqueConstraint
+from typing import Optional
+
+from .base import BaseModel
 
 
 class Permission(IntFlag):
     NONE = 0
     MANAGE_USERS = auto()
 
-class Permissions(SQLModel, table=True):
+class Permissions(BaseModel, table=True):
     # Composite unique constraint: Prevents User #1 and Calling #1 
     # from conflicting while ensuring User #1 can't have two rows.
     __table_args__ = (

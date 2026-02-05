@@ -10,7 +10,9 @@ from ..models import (
     User,
     Permission,
     Permissions,
-    UserSession
+    UserSession,
+    Calling,
+    UserCalling
 )
 from ..db import get_session
 from ..utils import (
@@ -40,22 +42,47 @@ def can_manage_user_or_throw(
 
     if not user_has_permission(current_user, Permission.MANAGE_USERS, session):
         raise HTTPException(status_code=403, detail="Insufficient permissions to manage users.")
+@router.get("/")
+def list_users(
+    session: Session = Depends(get_session),
+    calling_user: Optional[User] = Depends(CallingUser(allow_anonymous=True))
+    ):
+    """
+    Lists "all" users in the system.
+
+    If the caller is authenticated, returns all users.
+    If not authenticated, returns public users only.
+    """
+    if calling_user is None:
+        # Anonymous user, limit to public users only
+        # Select all users who have at least one public calling
+        statement = (
+            select(User)
+            .join(UserCalling)
+            .join(Calling)
+            .where(Calling.is_public == True)
+            .distinct()
+        )
+    else:
+        # Authenticated user, return all users
+        statement = select(User)
+    users = session.exec(statement).all()
+    return [ResponseSafeUser.from_user(user) for user in users]
 
 @router.get("/{user_id}")
 def get_user(
     user_id:int,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    calling_user: Optional[User] = Depends(CallingUser(allow_anonymous=True))
     ):
     user = session.exec(
         select(User).where(User.id == user_id)
     ).first()
-
-    if user is None:
+    logger.debug(f"Calling User: {calling_user}")
+    logger.debug(f"Calling Count: {len(calling_user.callings) if calling_user else 'N/A'}")
+    logger.debug(f"User Callings: {[c.calling.name for c in calling_user.callings] if calling_user else 'N/A'}")
+    if user is None or (calling_user is None and not any(c.calling.is_public for c in user.callings)):
         raise HTTPException(status_code=404, detail="User not found")
-
-
-    # TODO: How should we limit access to users?
-    # Should anyone be able to see anyone?
     
     return ResponseSafeUser.from_user(user)
 

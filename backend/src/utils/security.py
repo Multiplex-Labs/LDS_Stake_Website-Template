@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Optional
 import jwt
 from passlib.context import CryptContext
 from datetime import timedelta, datetime, timezone
@@ -18,7 +18,11 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if SECRET_KEY is None:
     raise ValueError("JWT_SECRET_KEY environment variable must be set for security purposes.")
 ALGORITHM = "HS256"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="auth/login", 
+    auto_error=False, 
+    refreshUrl="auth/refresh"
+    )
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -39,19 +43,25 @@ class CallingUser:
             require_fresh:bool = False,
             api_safe:bool = False,
             permissions:List[Permission] = [],
-            allow_unchanged_password:bool = False
+            allow_unchanged_password:bool = False,
+            allow_anonymous:bool = False
             ):
         self.require_fresh = require_fresh
         self.api_safe_user = api_safe
         self.permissions = permissions
         self.allow_unchanged_password = allow_unchanged_password
+        self.allow_anonymous = allow_anonymous
 
 
     async def __call__(
             self,
-            token: str = Depends(oauth2_scheme),
+            token: Optional[str] = Depends(oauth2_scheme),
             session: Session = Depends(get_session)
     ) -> User|ResponseSafeUser:
+        if token is None:
+            if self.allow_anonymous:
+                return None
+            raise HTTPException(status_code=401)
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id: int = payload.get("sub")

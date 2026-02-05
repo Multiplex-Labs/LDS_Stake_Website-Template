@@ -1,10 +1,13 @@
 from typing import List, Optional
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship
 
-class Calling(SQLModel, table=True):
+from .base import BaseModel
+
+class Calling(BaseModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     max_slots: int = Field(default=1)
+    is_public: bool = Field(default=False)
     system_defined: bool = Field(default=False)
 
     # Relationship to assignments
@@ -13,7 +16,7 @@ class Calling(SQLModel, table=True):
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
-class UserCalling(SQLModel, table=True):
+class UserCalling(BaseModel, table=True):
     """
     A junction table to represent the many-to-many relationship 
     between Users and Callings.

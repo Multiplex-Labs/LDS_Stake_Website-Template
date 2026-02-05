@@ -8,6 +8,7 @@ from typing import Tuple
 # Set necessary env variables for app initialization
 os.environ["JWT_SECRET_KEY"] = secrets.token_urlsafe(32)
 os.environ["SSL_ENABLED"] = "false"
+os.environ["DEBUG"] = "true"
 
 from src.app import app
 from src.db.orm import ORM, get_session
@@ -24,7 +25,7 @@ def db_session_fixture():
     fd, temp_db_path = tempfile.mkstemp(suffix=".db")
     os.environ["DATABASE_PATH"] = temp_db_path
     orm = ORM(engine_kind="sqlite")
-    SQLModel.metadata.create_all(orm.engine)
+    BaseModel.metadata.create_all(orm.engine)
     with Session(orm.engine) as session:
         yield session
     # Teardown: drop all tables after tests complete

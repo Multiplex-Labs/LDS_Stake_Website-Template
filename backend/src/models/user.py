@@ -1,10 +1,10 @@
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship
 from typing import List, Optional
 
 from .calling import UserCalling
 from .user_session import UserSession
-
-class User(SQLModel, table=True):
+from .base import BaseModel
+class User(BaseModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     password_hash: str
@@ -39,7 +39,7 @@ class User(SQLModel, table=True):
             profile_image=request_safe_user.profile_image
         )
 
-class ResponseSafeUser(SQLModel):
+class ResponseSafeUser(BaseModel):
     id: int
     email: str
     force_password_reset: bool = Field(default=True)
@@ -66,7 +66,7 @@ class ResponseSafeUser(SQLModel):
             callings=user.callings
         )
     
-class RequestSafeUser(SQLModel):
+class RequestSafeUser(BaseModel):
     email: str
     force_password_reset: bool = Field(default=True)
     fname: str
