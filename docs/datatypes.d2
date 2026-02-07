@@ -20,10 +20,12 @@ Calling: {
   name: str
   max_slots: int
   system_defined: bool
+  is_public: bool
 }
 
 UserCalling: {
   shape: sql_table
+  id: str {constraint: primary_key}
   user_id: str {constraint: foreign_key}
   calling_id: str {constraint: foreign_key}
   slot_number: int
@@ -49,9 +51,45 @@ UserSession: {
   expires_at: datetime
 }
 
+# Ward related datatypes
+Ward: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  name: str
+}
+
+# High Councilor related datatypes
+Assignment: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  high_councilor_id: str {constraint: foreign_key}
+  responsibility: str  {constraint: nullable,comma separated}
+  comitte: str {constraint: nullable,comma separated}
+}
+
+SpeakingAssignment: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  high_councilor_id: str {constraint: foreign_key}
+  speaker2: str {constraint: nullable}
+  ward_id: str {constraint: foreign_key}
+  month: datetime
+}
+
+SpeakingTopic: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  topic: str
+  reference_material: str {constraint: nullable}
+  month: datetime
+}
+
 # Relationships based on common fields
 UserCalling -> User : "joins"
 UserCalling -> Calling : "joins"
 Permissions.foreign_id -> User.id : "references"
 Permissions.foreign_id -> Calling.id : "references"
 UserSession.user_id -> User.id : "references"
+Assignment.high_councilor_id -> UserCalling.id : "references"
+SpeakingAssignment.high_councilor_id -> UserCalling.id : "references"
+SpeakingAssignment.ward_id -> Ward.id : "references"
