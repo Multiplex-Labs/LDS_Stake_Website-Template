@@ -182,19 +182,18 @@ def delete_user(
 
     # Fetch existing user
     db_user = session.get(User, user_id)
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    
+
     # Cascade delete permissions
-    session.exec(
-        delete(Permissions).where(
-        Permissions.foreign_id == str(user_id),
-        Permissions.is_calling == False
+    if db_user:
+        session.exec(
+            delete(Permissions).where(
+            Permissions.foreign_id == str(user_id),
+            Permissions.is_calling == False
+            )
         )
-    )
-    session.delete(db_user)
-    session.commit()
-    return {"detail": "User deleted successfully."}
+        session.delete(db_user)
+        session.commit()
+    return None
 
 class UserCreateRequest(RequestSafeUser):
     password: str
