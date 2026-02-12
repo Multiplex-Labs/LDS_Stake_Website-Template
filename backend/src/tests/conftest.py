@@ -1,7 +1,7 @@
 import secrets
 import os
 import tempfile
-from sqlmodel import SQLModel, Session
+from sqlmodel import SQLModel, Session, select
 from fastapi.testclient import TestClient
 from typing import Tuple
 
@@ -61,5 +61,15 @@ def user_fixture(db_session: Session):
     db_session.commit()
     db_session.refresh(user)
     yield user,password
+    # Delete permission row if it exists
+    stmt = select(Permissions).where(
+        Permissions.foreign_id == str(user.id),
+        Permissions.is_calling == False
+        )
+
+    perm = db_session.exec(stmt).first()
+    if perm:
+        db_session.delete(perm)
+        db_session.commit()
     db_session.delete(user)
     db_session.commit()

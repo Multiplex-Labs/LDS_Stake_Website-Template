@@ -22,7 +22,7 @@ class UserCalling(BaseModel, table=True):
     between Users and Callings.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True, nullable=True)
     calling_id: int = Field(foreign_key="calling.id", index=True)
     slot_number: int = Field(default=1)
 

@@ -27,7 +27,7 @@ def get_callings(
     while anonymous users can only see callings that are marked as public.
     """
     if current_user is None:
-        statement = select(Calling).where(Calling.public == True)
+        statement = select(Calling).where(Calling.is_public == True)
     else:
         statement = select(Calling)
 
@@ -200,7 +200,7 @@ def assign_calling_slot(
         raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
     # Check if slot is already filled    
     existing_assignment = session.exec(
-        select(UserCalling).where(UserCalling.call_id == calling_id, UserCalling.slot_number == slot_id)
+        select(UserCalling).where(UserCalling.calling_id == calling_id, UserCalling.slot_number == slot_id)
         ).first()
     if existing_assignment and existing_assignment.user_id is not None:
         raise HTTPException(status_code=400, detail="This slot is already filled.")
@@ -234,7 +234,7 @@ def unassign_calling_slot(
     if slot_id < 1 or slot_id > calling.max_slots:
         raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
     existing_assignment = session.exec(
-        select(UserCalling).where(UserCalling.call_id == calling_id, UserCalling.slot_number == slot_id)
+        select(UserCalling).where(UserCalling.calling_id == calling_id, UserCalling.slot_number == slot_id)
         ).first()
     if existing_assignment:
         existing_assignment.user_id = None
