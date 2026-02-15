@@ -9,6 +9,7 @@ class Permission(IntFlag):
     NONE = 0
     MANAGE_USERS = auto()
     MANAGE_CALLINGS = auto()
+    MANAGE_ASSIGNMENTS = auto()
 
 class Permissions(BaseModel, table=True):
     # Composite unique constraint: Prevents User #1 and Calling #1 

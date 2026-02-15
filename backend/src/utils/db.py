@@ -4,7 +4,9 @@ from typing import Any, Type
 from fastapi import HTTPException
 from sqlmodel import SQLModel, select, delete, Session, func
 from ..db import ORM
-from ..models import UserSession, User, Permission, Permissions
+from ..models import (
+    UserSession, User, Permission, Permissions, Calling, Assignment
+)
 from .security import hash_password
 from logging import getLogger
 
@@ -77,6 +79,40 @@ def create_default_admin_user():
                         " and password from INITIAL_ADMIN_PASSWORD environment variable."
                         " Please change the password upon first login.")
             
+def _create_calling_if_not_exists(session: Session, name: str, max_slots: int, is_public: bool) -> Calling:
+    """
+    Helper function to create a calling if it doesn't already exist.
+    """
+    statement = select(Calling).where(Calling.name == name)
+    calling = session.exec(statement).first()
+    if calling is None:
+        logger.info(f"Creating '{name}' calling.")
+        calling = Calling(name=name, max_slots=max_slots, is_public=is_public, system_defined=True)
+        session.add(calling)
+        session.commit()
+        session.refresh(calling)
+    return calling
+
+def create_system_callings_and_assignments():
+    """Creates system callings and assignments if they don't exist."""
+    orm = ORM()
+    with Session(orm.engine) as session:
+        # Check if the "High Councilor" calling exists
+        _create_calling_if_not_exists(session, "High Councilor", max_slots=15, is_public=True)
+
+        # Check if the "Stake President" calling existst
+        _create_calling_if_not_exists(session, "Stake President", max_slots=1, is_public=True)
+
+        # Check if the "First Counselor" calling exists
+        _create_calling_if_not_exists(session, "First Counselor", max_slots=1, is_public=True)
+
+        # Check if the "Second Counselor" calling exists
+        _create_calling_if_not_exists(session, "Second Counselor", max_slots=1, is_public=True)
+
+        # Check if the "Executive Secretary" calling exists
+        _create_calling_if_not_exists(session, "Executive Secretary", max_slots=1, is_public=True)
+
+        
 def validate_unique_field(
     session: Session,
     model: Type[SQLModel],

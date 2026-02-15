@@ -4,7 +4,7 @@ from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, delete, select
 
-from ..utils import CallingUser
+from ..utils import CallingUser, get_or_make_user_calling
 from ..db import get_session
 from ..models import Calling, Permission, BaseModel, UserCalling, Permissions
 
@@ -158,25 +158,7 @@ def get_calling_slot(
     Authenticated users can access all slots,
     while anonymous users can only access slots for callings that are marked as public.
     """
-    calling = session.get(Calling, calling_id)
-    if calling is None or (not calling.is_public and current_user is None):
-        raise HTTPException(status_code=404, detail="Calling not found")
-    if slot_id < 1 or slot_id > calling.max_slots:
-        raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
-    assignment = session.exec(
-        select(UserCalling).where(UserCalling.calling_id == calling_id, UserCalling.slot_number == slot_id)
-    ).first()
-    if assignment is None:
-        # We should create a database entry for this slot even if it's unassigned
-        assignment = UserCalling(
-            calling_id=calling_id,
-            slot_number=slot_id,
-            user_id=None
-        )
-        session.add(assignment)
-        session.commit()
-        session.refresh(assignment)
-    return assignment
+    return get_or_make_user_calling(calling_id, slot_id, session, current_user)
 
 class CallingAssignmentRequest(BaseModel):
     user_id: int

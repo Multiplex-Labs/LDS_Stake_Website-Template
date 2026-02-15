@@ -5,7 +5,11 @@ from logging import getLogger
 from sqlmodel import Session, select, func
 from .db.orm import ORM
 from .models import User
-from .utils import hash_password, session_cleanup_loop, create_default_admin_user
+from .utils import (
+    create_system_callings_and_assignments, 
+    session_cleanup_loop,
+    create_default_admin_user
+)
 import os
 import asyncio
 
@@ -19,6 +23,8 @@ async def lifespan(app: FastAPI):
     ORM(engine_kind)
     ## On first launch, create a default admin user if none exist
     create_default_admin_user()
+    ## Create system callings and assignments if they don't exist
+    create_system_callings_and_assignments()
     ## Start background task for session cleanup
     cleanup_task = asyncio.create_task(session_cleanup_loop())
     ## Check SSL setting
@@ -51,11 +57,13 @@ from .routers import (
     auth_router,
     health_router,
     users_router,
-    callings_router
+    callings_router,
+    assignments_router
 )
 
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(callings_router)
+app.include_router(assignments_router)
 

@@ -73,3 +73,32 @@ def user_fixture(db_session: Session):
         db_session.commit()
     db_session.delete(user)
     db_session.commit()
+
+@pytest.fixture(scope="session", name="high_councilor_calling")
+def high_councilor_calling_fixture(db_session: Session):
+    calling = db_session.exec(
+        select(Calling).where(Calling.name == "High Councilor")
+    ).first()
+    if calling is None:
+        calling = Calling(name="High Councilor", max_slots=15, is_public=True)
+        db_session.add(calling)
+        db_session.commit()
+        db_session.refresh(calling)
+    yield calling
+    # db_session.delete(calling)
+    # db_session.commit()
+
+@pytest.fixture(scope="session", name="high_councilor_assignment")
+def high_councilor_assignment_fixture(db_session: Session, high_councilor_calling: Calling):
+    usercalling = UserCalling(calling_id=high_councilor_calling.id, slot_number=1, user_id=None)
+    db_session.add(usercalling)
+    db_session.commit()
+    db_session.refresh(usercalling)
+
+    assignment = Assignment(high_councilor_id=usercalling.id)
+    db_session.add(assignment)
+    db_session.commit()
+    yield assignment
+    db_session.delete(assignment)
+    db_session.delete(usercalling)
+    db_session.commit()
