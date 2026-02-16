@@ -42,12 +42,12 @@ def get_assignment(
 
 @router.put("/slot/{slot_id}")
 def update_assignment(
-    assignment_id: str,
+    slot_id: int,
     data: Assignment,
     current_user = Depends(CallingUser(permissions=[Permission.MANAGE_ASSIGNMENTS])),
     session: Session = Depends(get_session)
 ):
-    assignment = get_or_make_hc_assignment(assignment_id, session, current_user)
+    assignment = get_or_make_hc_assignment(slot_id, session, current_user)
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
 

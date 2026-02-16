@@ -72,7 +72,12 @@ def test_update_assignment_requires_permission_and_allows_with_permission(
 
 
     # try update without permission
-    payload = {"high_councilor_id": high_councilor_assignment["high_councilor_id"], "responsibility": "Serve", "committee": "Alpha"}
+    payload = {
+        "id": high_councilor_assignment.id,
+        "high_councilor_id": high_councilor_assignment.high_councilor_id,
+        "responsibility":"Serve",
+        "committee": "Alpha"
+        }
     r = client.put(
         f"/assignments/slot/{high_councilor_assignment.high_councilor.slot_number}",
         json=payload,
