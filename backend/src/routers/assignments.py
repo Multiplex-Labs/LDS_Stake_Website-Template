@@ -13,7 +13,7 @@ from ..models import Assignment, Permission
 
 logger = getLogger("application")
 
-router = APIRouter(prefix="/assignments", tags=["assignments"])
+router = APIRouter(prefix="/assignments", tags=["assignments","high-council"])
 
 
 @router.get("/")

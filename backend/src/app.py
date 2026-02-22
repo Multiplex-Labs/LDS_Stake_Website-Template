@@ -8,12 +8,14 @@ from .models import User
 from .utils import (
     create_system_callings_and_assignments, 
     session_cleanup_loop,
-    create_default_admin_user
+    create_default_admin_user,
+    load_speaking_schedule
 )
 import os
 import asyncio
 
 logger = getLogger("application")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,6 +29,12 @@ async def lifespan(app: FastAPI):
     create_system_callings_and_assignments()
     ## Start background task for session cleanup
     cleanup_task = asyncio.create_task(session_cleanup_loop())
+    ## Load speaking schedule from csv
+    schedule = load_speaking_schedule()
+    if schedule:
+        app.state.speaking_schedule = schedule
+    else:
+        app.state.speaking_schedule = None
     ## Check SSL setting
     if os.getenv("SSL_ENABLED", None) is None:
         logger.warning("SSL_ENABLED is not set. "
