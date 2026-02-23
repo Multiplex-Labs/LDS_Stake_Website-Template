@@ -58,7 +58,7 @@ def add_speaking_override(
     request: Request,
     override: SpeakingOverrideRequest,
     session: Session = Depends(get_session),
-    _ = Depends(CallingUser(required_permissions=[Permissions.MANAGE_SPEAKING_SCHEDULE]))
+    _ = Depends(CallingUser(permissions=[Permission.MANAGE_SPEAKING_SCHEDULE]))
 ):
     """
     Endpoint to add an override to the speaking schedule.
@@ -101,7 +101,7 @@ def add_speaking_override(
         session.commit()
         session.refresh(existing_override)
     # Check who is currently assigned to speak in the given month in the given ward
-    previous_assignment = calendar.speakers[userCalling.slot_id - 1].assignments[override.month - 1]
+    previous_assignment = calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1]
     for speaker in calendar.speakers:
         if speaker.high_councilor_id == override.high_councilor_id:
             continue
@@ -132,7 +132,7 @@ def add_speaking_override(
             )
             break
     # Update the calendar with the new override
-    calendar.speakers[userCalling.slot_id - 1].assignments[override.month - 1] = SpeakingAssignmentAPI(
+    calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1] = SpeakingAssignmentAPI(
         ward_id=override.ward_id,
         speaker2=override.speaker2
     )
@@ -163,7 +163,7 @@ def update_speaking_topic(
     month: int,
     topic_request: SpeakingTopicRequest,
     session: Session = Depends(get_session),
-    _ = Depends(CallingUser(required_permissions=[Permissions.MANAGE_SPEAKING_SCHEDULE]))
+    _ = Depends(CallingUser(permissions=[Permission.MANAGE_SPEAKING_SCHEDULE]))
 ):
     """
     Endpoint to update the speaking topic for a specific month and year.

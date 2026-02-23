@@ -105,7 +105,7 @@ def get_speaking_calendar(request:Request, session: Session, year: int=-1) -> Sp
             high_councilor_id=usercalling.id,
             assignments=[]
         )
-        for assn in calendar[i]:
+        for assn in request.app.state.speaking_schedule[i]:
             speaker_schedule.assignments.append(
                 SpeakingAssignmentAPI(
                     ward_id=int(assn) if assn else None,
