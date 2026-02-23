@@ -7,5 +7,7 @@ from .assignment import Assignment
 from .speaking_assignment import (
     SpeakingAssignment, 
     SpeakingCalendar,
-    SpeakingTopic
+    SpeakingTopic,
+    SpeakingAssignmentAPI,
+    SpeakerSchedule
 )

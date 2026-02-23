@@ -7,9 +7,12 @@ from fastapi import Depends, HTTPException, Request
 from sqlmodel import select
 
 from .db import ORM, Session
+from .usercalling import get_or_make_user_calling
 from ..db import get_session
-
-from ..models import Calling
+from ..models import (
+    Calling, SpeakerSchedule, SpeakingCalendar, SpeakingAssignmentAPI,
+    SpeakingAssignment, UserCalling
+    )
 
 logger = getLogger("application")
 
@@ -64,7 +67,7 @@ def load_speaking_schedule() -> list[list[str]]:
     return schedule
 
 
-def get_speaking_calendar(request:Request, session: Session, year: int=-1):
+def get_speaking_calendar(request:Request, session: Session, year: int=-1) -> SpeakingCalendar:
     """
     Helper function to get the speaking calendar for a given year.
     If year is not provided, defaults to the current year.
@@ -80,7 +83,58 @@ def get_speaking_calendar(request:Request, session: Session, year: int=-1):
                    "Please contact the administrator to resolve this issue."
         )
     # Iterate through schedule and populate SpeakingCalendar object
+    calendar = SpeakingCalendar(year=year, speakers=[])
+    ## Get High Councilor callings
+    statement = select(Calling).where(Calling.name == "High Councilor")
+    high_councilor_calling = session.exec(statement).first()
+    if high_councilor_calling is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="High Councilor calling not found in database. "
+                   "This is required to generate the speaking calendar. "
+                   "Please contact the administrator to resolve this issue."
+        )
+    slots = high_councilor_calling.max_slots
+    for i in range(slots):
+        usercalling = get_or_make_user_calling(
+            calling_id=high_councilor_calling.id,
+            slot_id=i+1,
+            session=session
+        )
+        speaker_schedule = SpeakerSchedule(
+            high_councilor_id=usercalling.id,
+            assignments=[]
+        )
+        for assn in calendar[i]:
+            speaker_schedule.assignments.append(
+                SpeakingAssignmentAPI(
+                    ward_id=int(assn) if assn else None,
+                    speaker2=None
+                )
+            )
+        calendar.speakers.append(speaker_schedule)
     # Pull overrides from the database and update the calendar accordingly
+    statement = select(SpeakingAssignment).where(SpeakingAssignment.month.between(
+        datetime(year, 1, 1), datetime(year, 12, 31)
+    ))
+    overrides = session.exec(statement).all()
+    for override in overrides:
+        usercalling = session.get(UserCalling, override.high_councilor_id)
+        if usercalling is None:
+            logger.warning(
+                f"UserCalling with id {override.high_councilor_id} not found in database. "
+                f"Skipping override with id {override.id}."
+            )
+            continue
+        slot = usercalling.slot_id - 1
+        month = override.month.month - 1
+        if slot < len(calendar.speakers) and month < len(calendar.speakers[slot].assignments):
+            calendar.speakers[slot].assignments[month] = SpeakingAssignmentAPI(
+                ward_id=override.ward_id,
+                speaker2=override.speaker2
+            )
+
+    return calendar
     
     
 async def speaking_schedule(

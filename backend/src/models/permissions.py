@@ -10,6 +10,7 @@ class Permission(IntFlag):
     MANAGE_USERS = auto()
     MANAGE_CALLINGS = auto()
     MANAGE_ASSIGNMENTS = auto()
+    MANAGE_SPEAKING_SCHEDULE = auto()
 
 class Permissions(BaseModel, table=True):
     # Composite unique constraint: Prevents User #1 and Calling #1 
