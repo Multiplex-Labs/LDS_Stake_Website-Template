@@ -5,7 +5,10 @@ from fastapi import HTTPException
 from sqlmodel import SQLModel, select, delete, Session, func
 from ..db import ORM
 from ..models import (
-    UserSession, User, Permission, Permissions, Calling, Assignment
+    UserSession, Assignment,
+    SpeakingTopic, SpeakingAssignment,
+    User, Permissions, Permission,
+    Calling
 )
 from .security import hash_password
 from logging import getLogger
@@ -42,6 +45,42 @@ async def session_cleanup_loop():
         except Exception as e:
             logger.error(f"Error during session cleanup: {e}")
         await asyncio.sleep(86400)  # Sleep for 24 hours
+
+def cleanup_speaking_assignments():
+    """
+    Cleans up all speaking assignments + topics older than 1 year from the current month.
+    """
+    with Session(ORM().engine) as session:
+        now = datetime.now(timezone.utc)
+        cutoff_date = datetime(now.year - 1, now.month, 1, tzinfo=timezone.utc)
+
+        assn_statement = delete(SpeakingAssignment).where(
+            SpeakingAssignment.month < cutoff_date
+        )
+
+        topic_statement = delete(SpeakingTopic).where(
+            SpeakingTopic.month < cutoff_date
+        )
+            
+        assn_results = session.exec(assn_statement)
+        topic_results = session.exec(topic_statement)
+        session.commit()
+        
+        assn_count = assn_results.rowcount
+        topic_count = topic_results.rowcount
+        if assn_count > 0:
+            logger.info(f"Cleaned up {assn_count} old speaking assignments.")
+        if topic_count > 0:
+            logger.info(f"Cleaned up {topic_count} old speaking topics.")
+
+async def speaking_assignment_cleanup_loop():
+    """Background task that periodically cleans up old speaking assignments."""
+    while True:
+        try:
+            cleanup_speaking_assignments()
+        except Exception as e:
+            logger.error(f"Error during speaking assignment cleanup: {e}")
+        await asyncio.sleep(2592000)  # Sleep for 30 days
 
 def create_default_admin_user():
     """Creates a default admin user if no users exist in the database."""

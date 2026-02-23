@@ -69,7 +69,7 @@ Assignment: {
 
 SpeakingAssignment: {
   shape: sql_table
-  id: str {constraint: primary_key}
+  id: int {constraint: primary_key}
   high_councilor_id: str {constraint: foreign_key}
   speaker2: str {constraint: nullable}
   ward_id: str {constraint: foreign_key}
@@ -78,7 +78,7 @@ SpeakingAssignment: {
 
 SpeakingTopic: {
   shape: sql_table
-  id: str {constraint: primary_key}
+  id: int {constraint: primary_key}
   topic: str
   reference_material: str {constraint: nullable}
   month: datetime

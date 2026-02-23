@@ -73,7 +73,20 @@ def user_fixture(db_session: Session):
         db_session.commit()
     db_session.delete(user)
     db_session.commit()
-
+@pytest.fixture(scope="function", name="admin")
+def admin_fixture(userpass):
+    user, password = userpass
+    permFlag = Permission.NONE
+    for p in Permission:
+        permFlag |= p 
+    admin_perm = Permissions(foreign_id=str(user.id), is_calling=False, scopes=int(permFlag))
+    with Session(ORM().engine) as session:
+        session.add(admin_perm)
+        session.commit()
+    yield user, password
+    with Session(ORM().engine) as session:
+        session.delete(admin_perm)
+        session.commit()
 @pytest.fixture(scope="session", name="high_councilor_calling")
 def high_councilor_calling_fixture(db_session: Session):
     calling = db_session.exec(

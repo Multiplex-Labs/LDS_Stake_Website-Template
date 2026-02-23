@@ -8,12 +8,15 @@ from .models import User
 from .utils import (
     create_system_callings_and_assignments, 
     session_cleanup_loop,
-    create_default_admin_user
+    create_default_admin_user,
+    load_speaking_schedule,
+    speaking_assignment_cleanup_loop
 )
 import os
 import asyncio
 
 logger = getLogger("application")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,7 +29,15 @@ async def lifespan(app: FastAPI):
     ## Create system callings and assignments if they don't exist
     create_system_callings_and_assignments()
     ## Start background task for session cleanup
-    cleanup_task = asyncio.create_task(session_cleanup_loop())
+    session_cleanup_task = asyncio.create_task(session_cleanup_loop())
+    ## Start background task for speaking assignment cleanup
+    speaking_assignment_cleanup_task = asyncio.create_task(speaking_assignment_cleanup_loop())
+    ## Load speaking schedule from csv
+    schedule = load_speaking_schedule()
+    if schedule:
+        app.state.speaking_schedule = schedule
+    else:
+        app.state.speaking_schedule = None
     ## Check SSL setting
     if os.getenv("SSL_ENABLED", None) is None:
         logger.warning("SSL_ENABLED is not set. "
@@ -36,7 +47,8 @@ async def lifespan(app: FastAPI):
                        "Otherwise, refresh tokens will not work.")
     yield
     # shutdown code can go here
-    cleanup_task.cancel()
+    session_cleanup_task.cancel()
+    speaking_assignment_cleanup_task.cancel()
 
 app = FastAPI(title="lds-stake-backend", lifespan=lifespan)
 
@@ -58,7 +70,8 @@ from .routers import (
     health_router,
     users_router,
     callings_router,
-    assignments_router
+    assignments_router,
+    speaking_router
 )
 
 app.include_router(health_router)
@@ -66,4 +79,5 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(callings_router)
 app.include_router(assignments_router)
+app.include_router(speaking_router)
 
