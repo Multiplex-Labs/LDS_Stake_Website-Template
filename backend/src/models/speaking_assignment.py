@@ -16,3 +16,14 @@ class SpeakingTopic(BaseModel, table=True):
     topic: str = Field(default=None, nullable=False)
     reference_material: Optional[str] = Field(default=None, nullable=True)
     month: datetime = Field(default=None, index=True, nullable=False)
+
+class SpeakingAssignmentAPI(BaseModel):
+    ward_id: Optional[int]
+    speaker2: Optional[str]
+
+class SpeakerSchedule(BaseModel):
+    high_councilor_id: int
+    assignments: list[SpeakingAssignmentAPI]
+class SpeakingCalendar(BaseModel):
+    year: int
+    speakers: list[SpeakerSchedule]

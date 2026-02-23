@@ -1,10 +1,13 @@
+from datetime import datetime
 import os
 import csv
 
 from logging import getLogger
+from fastapi import Depends, HTTPException, Request
 from sqlmodel import select
 
 from .db import ORM, Session
+from ..db import get_session
 
 from ..models import Calling
 
@@ -59,3 +62,32 @@ def load_speaking_schedule() -> list[list[str]]:
             return []
     logger.info(f"Loaded speaking schedule with {len(schedule)} rows and {len(schedule[0])} columns")
     return schedule
+
+
+def get_speaking_calendar(request:Request, session: Session, year: int=-1):
+    """
+    Helper function to get the speaking calendar for a given year.
+    If year is not provided, defaults to the current year.
+    """
+    if year == -1:
+        year = datetime.now().year
+    if not hasattr(request.app.state, "speaking_schedule") or \
+        request.app.state.speaking_schedule is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Speaking schedule is not available. "
+                   "This may be due to a problem loading the schedule from the csv file on startup. "
+                   "Please contact the administrator to resolve this issue."
+        )
+    # Iterate through schedule and populate SpeakingCalendar object
+    # Pull overrides from the database and update the calendar accordingly
+    
+    
+async def speaking_schedule(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """
+    Helper Dependency to load the speaking schedule 
+    """
+    return get_speaking_calendar(request, session)
