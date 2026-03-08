@@ -84,6 +84,49 @@ SpeakingTopic: {
   month: datetime
 }
 
+
+# Calling Kanban related datatypes
+CallingProposal: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  fname: str
+  lname: str
+  spouse_name: str {constraint: nullable}
+  proposed_calling: str
+  ward_id: int {constraint: foreign_key}
+  is_release: bool {constraint: default=false}
+  stage: int {constraint: default=0}
+  submitted_at: datetime {constraint: default=current_timestamp}
+  updated_at: datetime {constraint: default=current_timestamp}
+}
+
+CallingComment: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  commenter_id: str {constraint: foreign_key}
+  comment: str
+  created_at: datetime {constraint: default=current_timestamp}
+  edited_at: datetime {constraint: nullable}
+}
+
+CallingApproval: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  approver_id: str {constraint: foreign_key}
+  approved: bool
+  decision_at: datetime {constraint: default=current_timestamp}
+}
+
+CallingInterview: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  interviewer_id: str {constraint: foreign_key}
+  interview_date: datetime
+}
+
 # Relationships based on common fields
 UserCalling -> User : "joins"
 UserCalling -> Calling : "joins"
