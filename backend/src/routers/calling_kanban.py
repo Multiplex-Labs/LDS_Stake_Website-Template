@@ -3,7 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from datetime import datetime, timezone
 
-from ..utils import CallingUser
+from ..utils import (
+    CallingUser,
+    can_approve_proposal,
+    get_current_proposal_status,
+    create_kanban_update,
+    update_proposal_status
+)
 from ..db import get_session
 from ..models import (
     KanbanStages,
@@ -158,7 +164,7 @@ def delete_comment(
     proposal_id: int,
     comment_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Delete a comment from a calling proposal"""
     comment = session.get(CallingComment, comment_id)
@@ -176,21 +182,58 @@ def add_approval(
     proposal_id: int,
     approved: bool,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Add an approval (approve/reject) to a calling proposal"""
-    
+    if not can_approve_proposal(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to approve/reject proposals")
+    approval = CallingApproval(
+        proposal_id=proposal_id,
+        approver_id=current_user.id,
+        approved=approved,
+    )
+    session.add(approval)
+    session.commit()
+    session.refresh(approval)
+    update_proposal_status(session, proposal_id)  # Update proposal status based on new approval
+    return approval    
 
 
 @router.get("/proposals/{proposal_id}/approvals", response_model=list[CallingApproval])
 def get_approvals(
     proposal_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Get all approvals for a calling proposal"""
-    pass
+    statement = select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)
+    approvals = session.exec(statement).all()
+    return approvals
 
+@router.patch("/proposals/{proposal_id}/approvals")
+def change_approval_status(
+    proposal_id: int,
+    approved: bool,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+):
+    """Change an existing approval (approve/reject) for a calling proposal"""
+    if not can_approve_proposal(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to approve/reject proposals")
+    statement = select(CallingApproval).where(
+        CallingApproval.proposal_id == proposal_id,
+        CallingApproval.approver_id == current_user.id
+    )
+    approval = session.exec(statement).first()
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    approval.approved = approved
+    approval.created_at = datetime.now(timezone.utc)  # Update timestamp to reflect change
+    session.add(approval)
+    session.commit()
+    session.refresh(approval)
+    update_proposal_status(session, proposal_id)  # Update proposal status based on changed approval
+    return approval
 
 # CallingInterview endpoints
 @router.post("/proposals/{proposal_id}/interviews", response_model=CallingInterview)
