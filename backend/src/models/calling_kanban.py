@@ -71,7 +71,7 @@ class CallingApproval(BaseModel, table=True):
 class CallingInterview(BaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
     proposal_id: int = Field(foreign_key="callingproposal.id", index=True)
-    interviewer_id: int = Field(foreign_key="user.id", index=True)
+    interviewer_id: int = Field(foreign_key="user.id", index=True, nullable=True)
     interview_date: datetime = Field(default=None, nullable=True)
 
     # Relationships

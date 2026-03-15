@@ -34,11 +34,12 @@ def create_proposal(
     proposal.submitted_at = proposal.updated_at = datetime.now(timezone.utc)  # Let defaults handle timestamps
 
     # Create initial KanbanUpdate for the new proposal
+    to_stage = KanbanStages.INTERVIEW if proposal.is_release else KanbanStages.SP_APPROVAL
     initial_update = KanbanUpdate(
         proposal_id=proposal.id,  # Will be set after proposal is added to session
         updater_id=current_user.id,
         from_stage=None,  # No previous stage
-        to_stage=KanbanStages.SUBMITTED
+        to_stage=to_stage
     )
     session.add(proposal)
     session.add(initial_update)
@@ -122,10 +123,12 @@ def add_comment(
 def get_comments(
     proposal_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    _ = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Get all comments for a calling proposal"""
-    pass
+    statement = select(CallingComment).where(CallingComment.proposal_id == proposal_id)
+    comments = session.exec(statement).all()
+    return comments
 
 @router.put("/proposals/{proposal_id}/comments/{comment_id}", response_model=CallingComment)
 def edit_comment(
@@ -133,10 +136,22 @@ def edit_comment(
     comment_id: int,
     comment_data: CallingComment,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Edit an existing comment on a calling proposal"""
-    pass
+    comment = session.get(CallingComment, comment_id)
+    if not comment or comment.proposal_id != proposal_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.commenter_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this comment")
+    # Update fields
+    comment.comment_text = comment_data.comment_text
+    comment.edited_at = datetime.now(timezone.utc)
+    
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+    return comment
 
 @router.delete("/proposals/{proposal_id}/comments/{comment_id}")
 def delete_comment(
@@ -146,18 +161,25 @@ def delete_comment(
     current_user: User = Depends(CallingUser())
 ):
     """Delete a comment from a calling proposal"""
-    pass
+    comment = session.get(CallingComment, comment_id)
+    if not comment or comment.proposal_id != proposal_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.commenter_id != current_user.id and not current_user.has_permission(Permission.MANAGE_CALLING_PROPOSALS):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
+    session.delete(comment)
+    session.commit()
+    return {"detail": "Comment deleted successfully"}
 
 # CallingApproval endpoints
 @router.post("/proposals/{proposal_id}/approvals", response_model=CallingApproval)
 def add_approval(
     proposal_id: int,
-    approval: CallingApproval,
+    approved: bool,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser())
 ):
     """Add an approval (approve/reject) to a calling proposal"""
-    pass
+    
 
 
 @router.get("/proposals/{proposal_id}/approvals", response_model=list[CallingApproval])
