@@ -11,3 +11,11 @@ from .speaking_assignment import (
     SpeakingAssignmentAPI,
     SpeakerSchedule
 )
+from .calling_kanban import (
+    KanbanStages,
+    KanbanUpdate,
+    CallingProposal,
+    CallingComment,
+    CallingApproval,
+    CallingInterview
+)
