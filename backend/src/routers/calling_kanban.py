@@ -302,6 +302,23 @@ def get_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
 
+@router.post("/proposals/{proposal_id}/sustain", response_model=CallingProposal)
+def sustain_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Mark sustaining as completed for a calling proposal"""
+    pass
+
+@router.post("/proposals/{proposal_id}/lcr", response_model=CallingProposal)
+def update_lcr_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Mark proposal as updated in LCR"""
+    pass
 
 # Kanban board view
 @router.get("/board")
