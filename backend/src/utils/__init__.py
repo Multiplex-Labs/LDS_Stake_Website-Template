@@ -25,3 +25,12 @@ from .speaking_assignments import (
     get_speaking_calendar,
     speaking_schedule
 )
+
+from .calling_kanban import (
+    can_approve_proposal,
+    is_high_councilor,
+    is_stake_presidency,
+    get_current_proposal_status,
+    create_kanban_update,
+    update_proposal_status
+)

@@ -236,25 +236,71 @@ def change_approval_status(
     return approval
 
 # CallingInterview endpoints
-@router.post("/proposals/{proposal_id}/interviews", response_model=CallingInterview)
+@router.post("/proposals/{proposal_id}/interview", response_model=CallingInterview)
 def schedule_interview(
     proposal_id: int,
-    interview: CallingInterview,
+    interviewer_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Schedule an interview for a calling proposal"""
-    pass
+    statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    interview = session.exec(statement).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
 
+    interviewer = session.get(User, interviewer_id)
+    if not interviewer:
+        raise HTTPException(status_code=404, detail="Interviewer not found")
+    
 
-@router.get("/proposals/{proposal_id}/interviews", response_model=list[CallingInterview])
-def get_interviews(
+    interview.proposal_id = proposal_id
+    interview.interviewer_id = interviewer_id
+    session.add(interview)
+    session.commit()
+    session.refresh(interview)
+    return interview
+
+@router.post("/proposals/{proposal_id}/interview/complete", response_model=CallingInterview)
+def complete_interview(
+    proposal_id: int,
+    completion_date: datetime = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Mark an interview as completed for a calling proposal"""
+    statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    interview = session.exec(statement).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+    if interview.interviewer_id is None:
+        raise HTTPException(status_code=400, detail="Interview has not been scheduled with an interviewer yet")
+    interview.interview_date = completion_date or datetime.now(timezone.utc)
+    session.add(interview)
+    session.commit()
+    session.refresh(interview)
+    # Create kanban update
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=KanbanStages.INTERVIEW,
+        to_stage=KanbanStages.SUSTAIN
+    )
+    return interview
+
+@router.get("/proposals/{proposal_id}/interview", response_model=CallingInterview)
+def get_interview(
     proposal_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser())
+    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
-    """Get all interviews for a calling proposal"""
-    pass
+    """Get interview for a calling proposal"""
+    statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    interview = session.exec(statement).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return interview
 
 
 # Kanban board view
