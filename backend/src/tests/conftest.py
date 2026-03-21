@@ -18,22 +18,32 @@ from src.utils import hash_password
 import pytest
 
 
-@pytest.fixture(scope="session", name="db_session")
-def db_session_fixture():
-    """Fixture to provide a database session for tests."""
-    # Setup ORM to use in-memory SQLite for testing
+@pytest.fixture(scope="session")
+def db_engine():
+    """Fixture to provide a database engine for tests."""
+    # Setup ORM to use tempfile SQLite for testing
     fd, temp_db_path = tempfile.mkstemp(suffix=".db")
     os.environ["DATABASE_PATH"] = temp_db_path
     orm = ORM(engine_kind="sqlite")
     BaseModel.metadata.create_all(orm.engine)
-    with Session(orm.engine) as session:
-        yield session
-    # Teardown: drop all tables after tests complete
+    yield orm.engine
+    # Teardown: close file descriptor and remove temp file
     os.close(fd)
     if os.path.exists(temp_db_path):
         os.remove(temp_db_path)
 
-@pytest.fixture(scope="module", name="client")
+
+@pytest.fixture(scope="function", name="db_session")
+def db_session_fixture(db_engine):
+    """Fixture to provide a database session for tests."""
+    session = Session(db_engine)
+    try:
+        yield session
+    finally:
+        session.rollback()  # Ensure rollback on failure
+        session.close()
+
+@pytest.fixture(scope="function", name="client")
 def client_fixture(db_session:Session):
     """Fixture to provide a TestClient for FastAPI app."""
 
@@ -45,8 +55,9 @@ def client_fixture(db_session:Session):
     yield client
     # Cleanup dependency overrides
     app.dependency_overrides.clear()
-@pytest.fixture(scope="function", name="userpass")
-def user_fixture(db_session: Session):
+
+def create_user() -> Tuple[User, str]:
+    """Helper function to create a user and return the user object and plaintext password."""
     email = f"{secrets.token_urlsafe(10)}@{secrets.token_urlsafe(10)}.com"
     password = secrets.token_urlsafe(16)
     user = User(
@@ -57,6 +68,12 @@ def user_fixture(db_session: Session):
         active=True,
         force_password_reset=False,
     )
+    return user, password
+
+@pytest.fixture(scope="function", name="userpass")
+def user_fixture(db_session: Session):
+    user, password = create_user()
+
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -73,9 +90,13 @@ def user_fixture(db_session: Session):
         db_session.commit()
     db_session.delete(user)
     db_session.commit()
+
 @pytest.fixture(scope="function", name="admin")
-def admin_fixture(userpass):
-    user, password = userpass
+def admin_fixture(db_session: Session):
+    user, password = create_user()
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
     permFlag = Permission.NONE
     for p in Permission:
         permFlag |= p 
@@ -87,7 +108,8 @@ def admin_fixture(userpass):
     with Session(ORM().engine) as session:
         session.delete(admin_perm)
         session.commit()
-@pytest.fixture(scope="session", name="high_councilor_calling")
+
+@pytest.fixture(scope="function", name="high_councilor_calling")
 def high_councilor_calling_fixture(db_session: Session):
     calling = db_session.exec(
         select(Calling).where(Calling.name == "High Councilor")
@@ -101,16 +123,27 @@ def high_councilor_calling_fixture(db_session: Session):
     # db_session.delete(calling)
     # db_session.commit()
 
-@pytest.fixture(scope="session", name="high_councilor_assignment")
+@pytest.fixture(scope="function", name="high_councilor_assignment")
 def high_councilor_assignment_fixture(db_session: Session, high_councilor_calling: Calling):
-    usercalling = UserCalling(calling_id=high_councilor_calling.id, slot_number=1, user_id=None)
-    db_session.add(usercalling)
-    db_session.commit()
-    db_session.refresh(usercalling)
+    usercalling = db_session.exec(
+        select(UserCalling).where(
+            UserCalling.calling_id == high_councilor_calling.id,
+            UserCalling.slot_number == 1
+        )
+    ).first()
+    if usercalling is None:
+        usercalling = UserCalling(calling_id=high_councilor_calling.id, slot_number=1, user_id=None)
+        db_session.add(usercalling)
+        db_session.commit()
+        db_session.refresh(usercalling)
 
-    assignment = Assignment(high_councilor_id=usercalling.id)
-    db_session.add(assignment)
-    db_session.commit()
+    assignment = db_session.exec(
+        select(Assignment).where(Assignment.high_councilor_id == usercalling.id)
+    ).first()
+    if assignment is None:
+        assignment = Assignment(high_councilor_id=usercalling.id)
+        db_session.add(assignment)
+        db_session.commit()
     yield assignment
     db_session.delete(assignment)
     db_session.delete(usercalling)

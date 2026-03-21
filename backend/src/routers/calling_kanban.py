@@ -34,10 +34,14 @@ def create_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.SUBMIT_CALLING_PROPOSALS))
 ):
     """Create a new calling proposal"""
+    logger.debug(f"User {current_user.id} is attempting to create a new calling proposal with data: {proposal}")
     # TODO: Who should be allowed to create calling proposals?
     proposal.submitter = current_user.id
     proposal.id = None  # Ensure ID is not set by client
     proposal.submitted_at = proposal.updated_at = datetime.now(timezone.utc)  # Let defaults handle timestamps
+    session.add(proposal)
+    session.commit()
+    session.refresh(proposal)
 
     # Create initial KanbanUpdate for the new proposal
     to_stage = KanbanStages.INTERVIEW if proposal.is_release else KanbanStages.SP_APPROVAL
@@ -47,10 +51,9 @@ def create_proposal(
         from_stage=None,  # No previous stage
         to_stage=to_stage
     )
-    session.add(proposal)
     session.add(initial_update)
     session.commit()
-    session.refresh(proposal)
+    logger.debug(f"Created new proposal with ID {proposal.id} and initial kanban stage {to_stage}")
     return proposal
 
 
@@ -83,10 +86,11 @@ def update_proposal(
     proposal_id: int,
     proposal_data: CallingProposal,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.CREATE_CALLING_PROPOSALS))
+    current_user: User = Depends(CallingUser(permissions=Permission.SUBMIT_CALLING_PROPOSALS))
 ):
     """Update an existing calling proposal"""
     # TODO: Should updating a calling proposal reset its stage back to submitted?
+    logger.debug(f"User {current_user.id} is attempting to update calling proposal with ID {proposal_id}, submitter {proposal_data.submitter}, and data: {proposal_data}")
     if current_user.id != proposal_data.submitter and not current_user.has_permission(Permission.MANAGE_CALLING_PROPOSALS):
         raise HTTPException(status_code=403, detail="Not authorized to update this proposal")
     proposal = session.get(CallingProposal, proposal_id)
@@ -309,7 +313,42 @@ def sustain_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Mark sustaining as completed for a calling proposal"""
-    pass
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if get_current_proposal_status(session, proposal_id) != KanbanStages.SUSTAIN:
+        raise HTTPException(status_code=400, detail="Proposal is not at sustaining stage")
+    # Create kanban update
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=KanbanStages.SUSTAIN,
+        to_stage=KanbanStages.SET_APART
+    )
+    return proposal
+
+@router.post("/proposals/{proposal_id}/set-apart", response_model=CallingProposal)
+def set_apart_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Mark a calling proposal as set apart (finalized)"""
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if get_current_proposal_status(session, proposal_id) != KanbanStages.SET_APART:
+        raise HTTPException(status_code=400, detail="Proposal is not at set apart stage")
+    # Create kanban update
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=KanbanStages.SET_APART,
+        to_stage=KanbanStages.LCR_UPDATE
+    )
+    return proposal
 
 @router.post("/proposals/{proposal_id}/lcr", response_model=CallingProposal)
 def update_lcr_proposal(
@@ -318,7 +357,20 @@ def update_lcr_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Mark proposal as updated in LCR"""
-    pass
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if get_current_proposal_status(session, proposal_id) != KanbanStages.LCR_UPDATE:
+        raise HTTPException(status_code=400, detail="Proposal is not at LCR update stage")
+    # Create kanban update
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=KanbanStages.LCR_UPDATE,
+        to_stage=KanbanStages.DONE
+    )
+    return proposal
 
 # Kanban board view
 @router.get("/board")
@@ -327,5 +379,10 @@ def get_kanban_board(
     current_user: User = Depends(CallingUser())
 ):
     """Get kanban board view with proposals grouped by stage"""
-    pass
+    proposals = session.exec(select(CallingProposal)).all()
+    board = {stage: [] for stage in KanbanStages}
+    for proposal in proposals:
+        stage = get_current_proposal_status(session, proposal.id)
+        board[stage].append(proposal)
+    return board
 

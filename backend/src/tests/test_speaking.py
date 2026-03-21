@@ -71,6 +71,8 @@ def test_override_requires_permission_and_updates(client, db_session, userpass, 
         "speaker2": None,
     }
 
+    print(payload)
+
     # Without permission should be 403
     resp = client.put("/speaking/calendar/override", headers=headers, json=payload)
     assert resp.status_code == 403
@@ -97,7 +99,7 @@ def test_override_requires_permission_and_updates(client, db_session, userpass, 
     # Find the speaker entry for our usercalling id
     speaker = None
     for s in data.get("speakers", []):
-        if s.get("high_councilor_id") == assignment.high_councilor.slot_number:
+        if s.get("high_councilor_id") == assignment.high_councilor_id:
             speaker = s
             break
     assert speaker is not None
