@@ -151,10 +151,20 @@ def _create_calling_if_not_exists(
         permFlag = Permission.NONE
         for p in permissions:
             permFlag |= p
-        calling_perm = Permissions(foreign_id=str(
-            calling.id), is_calling=True, scopes=int(permFlag))
-        session.add(calling_perm)
-        session.commit()
+        existing_perms_statement = select(Permissions).where(
+            Permissions.foreign_id == str(calling.id),
+            Permissions.is_calling == True
+        )
+        existing_perms = session.exec(existing_perms_statement).first()
+        if existing_perms:
+            existing_perms.scopes = permFlag
+            session.add(existing_perms)
+            session.commit()
+        else:
+            calling_perm = Permissions(foreign_id=str(
+                calling.id), is_calling=True, scopes=int(permFlag))
+            session.add(calling_perm)
+            session.commit()
     return calling
 
 

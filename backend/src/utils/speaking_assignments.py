@@ -27,7 +27,15 @@ def load_speaking_schedule() -> list[list[str]]:
     """
 
     # Load the csv file
-    with open(os.getenv("SPEAKING_SCHEDULE_CSV_PATH","./"), "r") as f:
+    speaking_schedule_csv_path = os.getenv("SPEAKING_SCHEDULE_CSV_PATH", None)
+    if speaking_schedule_csv_path is None or not os.path.isfile(speaking_schedule_csv_path):
+        logger.warning(
+            "SPEAKING_SCHEDULE_CSV_PATH environment variable is not set or the file does not exist. "
+            "Speaking schedule will be disabled. "
+            "To fix this, add a csv file with the correct format and set the SPEAKING_SCHEDULE_CSV_PATH environment variable to the path of the csv file."
+        )
+        return []
+    with open(speaking_schedule_csv_path, "r") as f:
         reader = csv.reader(f)
         schedule = list(reader)
     
