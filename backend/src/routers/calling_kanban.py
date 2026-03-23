@@ -191,6 +191,18 @@ def add_approval(
     """Add an approval (approve/reject) to a calling proposal"""
     if not can_approve_proposal(current_user):
         raise HTTPException(status_code=403, detail="Not authorized to approve/reject proposals")
+    # Get proposal
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    # Check if user has already approved/rejected
+    statement = select(CallingApproval).where(
+        CallingApproval.proposal_id == proposal_id,
+        CallingApproval.approver_id == current_user.id
+    )
+    existing_approval = session.exec(statement).first()
+    if existing_approval:
+        raise HTTPException(status_code=400, detail="You have already submitted an approval/rejection for this proposal, to update, send a PATCH request to the same endpoint")
     approval = CallingApproval(
         proposal_id=proposal_id,
         approver_id=current_user.id,
@@ -199,7 +211,7 @@ def add_approval(
     session.add(approval)
     session.commit()
     session.refresh(approval)
-    update_proposal_status(session, proposal_id)  # Update proposal status based on new approval
+    update_proposal_status(proposal, session)  # Update proposal status based on new approval
     return approval    
 
 
@@ -231,12 +243,15 @@ def change_approval_status(
     approval = session.exec(statement).first()
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
     approval.approved = approved
     approval.created_at = datetime.now(timezone.utc)  # Update timestamp to reflect change
     session.add(approval)
     session.commit()
     session.refresh(approval)
-    update_proposal_status(session, proposal_id)  # Update proposal status based on changed approval
+    update_proposal_status(proposal, session)  # Update proposal status based on changed approval
     return approval
 
 # CallingInterview endpoints
@@ -316,7 +331,7 @@ def sustain_proposal(
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    if get_current_proposal_status(session, proposal_id) != KanbanStages.SUSTAIN:
+    if get_current_proposal_status(proposal, session) != KanbanStages.SUSTAIN:
         raise HTTPException(status_code=400, detail="Proposal is not at sustaining stage")
     # Create kanban update
     create_kanban_update(
@@ -338,7 +353,7 @@ def set_apart_proposal(
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    if get_current_proposal_status(session, proposal_id) != KanbanStages.SET_APART:
+    if get_current_proposal_status(proposal, session) != KanbanStages.SET_APART:
         raise HTTPException(status_code=400, detail="Proposal is not at set apart stage")
     # Create kanban update
     create_kanban_update(
@@ -360,7 +375,7 @@ def update_lcr_proposal(
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    if get_current_proposal_status(session, proposal_id) != KanbanStages.LCR_UPDATE:
+    if get_current_proposal_status(proposal, session) != KanbanStages.LCR_UPDATE:
         raise HTTPException(status_code=400, detail="Proposal is not at LCR update stage")
     # Create kanban update
     create_kanban_update(
@@ -382,7 +397,7 @@ def get_kanban_board(
     proposals = session.exec(select(CallingProposal)).all()
     board = {stage: [] for stage in KanbanStages}
     for proposal in proposals:
-        stage = get_current_proposal_status(session, proposal.id)
+        stage = get_current_proposal_status(proposal, session)
         board[stage].append(proposal)
     return board
 

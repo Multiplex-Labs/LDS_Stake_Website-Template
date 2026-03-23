@@ -4,6 +4,9 @@ from typing import List
 from sqlmodel import Session, col, select
 from fastapi import HTTPException
 from datetime import datetime, timezone
+from logging import getLogger
+
+logger = getLogger("application")
 
 from ..models import (
     CallingProposal, 
@@ -37,8 +40,8 @@ def can_approve_proposal(
         presidency and high council have oversight over calling proposals.
     """
     # Gather all relevant Permissions objects for the user
-    approver_callings = ["high councilor", "stake president", "first councilor", "second councilor"]
-    callings = [calling.name.lower() for calling in user.callings]
+    approver_callings = ["high councilor", "stake president", "first counselor", "second counselor"]
+    callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
         callings = []
     return any(calling in approver_callings for calling in callings)
@@ -61,7 +64,7 @@ def is_high_councilor(user: User) -> bool:
         This function performs a case-insensitive check against the user's callings.
         The calling name must exactly match "high councilor" (case insensitive).
     """
-    callings = [calling.name.lower() for calling in user.callings]
+    callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
         callings = []
     return "high councilor" in callings
@@ -84,10 +87,11 @@ def is_stake_presidency(user: User) -> bool:
         This function checks for the callings: "stake president", "first councilor",
         and "second councilor". The check is case-insensitive.
     """
-    callings = [calling.name.lower() for calling in user.callings]
+    callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
         callings = []
-    return any(calling in ["stake president", "first councilor", "second councilor"] for calling in callings)
+    return any(calling in ["stake president", "first counselor", "second counselor"] for calling in callings)
+
 def get_current_proposal_status(proposal: CallingProposal, session: Session) -> KanbanStages:
     """
     Retrieve the current kanban stage of a calling proposal.
@@ -116,10 +120,12 @@ def get_current_proposal_status(proposal: CallingProposal, session: Session) -> 
     statement = (
         select(KanbanUpdate)
         .where(KanbanUpdate.proposal_id == proposal.id)
-        .order_by(col(KanbanUpdate.to_stage).desc())
     )
-    latest_update = session.exec(statement).first()
-    return latest_update.to_stage
+    updates = session.exec(statement).all()
+    if not updates:
+        raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
+    latest_stage = max(updates, key=lambda u: u.to_stage.value)
+    return latest_stage.to_stage
 
 def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanStages, to_stage: KanbanStages, session: Session):
     """
@@ -144,6 +150,7 @@ def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanSt
         This function commits the transaction immediately. The updated_at timestamp
         is automatically set to the current UTC time when the object is created.
     """
+    logger.debug(f"Creating KanbanUpdate for proposal {proposal_id}, from {from_stage} to {to_stage} by user {updater_id}")
     update = KanbanUpdate(
         proposal_id=proposal_id,
         updater_id=updater_id,
@@ -195,13 +202,17 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
     updates = []
     if status == KanbanStages.SP_APPROVAL:
         # Check to see if enough stake presidency approvals have been received
+        logger.debug(f"Checking SP approvals for proposal {proposal.id}")
         statement = select(CallingApproval).where(
             CallingApproval.proposal_id == proposal.id
         )
         approvals = session.exec(statement).all()
+        logger.debug(f"Found {len(approvals)} total approvals for proposal {proposal.id}")
         sp_approvals = [a for a in approvals if a.approver_user and is_stake_presidency(a.approver_user)]
+        logger.debug(f"Found {len(sp_approvals)} SP approvals for proposal {proposal.id}")
         if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD","2")) and all(a.approved for a in sp_approvals):
             # updater should be most recent person to approve
+            logger.debug(f"Found enough SP approvals for proposal {proposal.id}")
             sorted_approvals = sorted(sp_approvals, key=lambda a: a.created_at, reverse=True)
             latest_approver_id = sorted_approvals[0].approver_id
             update = create_kanban_update(

@@ -13,7 +13,7 @@ os.environ["DEBUG"] = "true"
 from src.app import app
 from src.db.orm import ORM, get_session
 from src.models import *
-from src.utils import hash_password
+from src.utils import hash_password, create_system_callings_and_assignments
 
 import pytest
 
@@ -26,6 +26,7 @@ def db_engine():
     os.environ["DATABASE_PATH"] = temp_db_path
     orm = ORM(engine_kind="sqlite")
     BaseModel.metadata.create_all(orm.engine)
+    create_system_callings_and_assignments()
     yield orm.engine
     # Teardown: close file descriptor and remove temp file
     os.close(fd)
@@ -56,22 +57,25 @@ def client_fixture(db_session:Session):
     # Cleanup dependency overrides
     app.dependency_overrides.clear()
 
-def create_user() -> Tuple[User, str]:
+@pytest.fixture(scope="session")
+def create_user() -> callable:
     """Helper function to create a user and return the user object and plaintext password."""
-    email = f"{secrets.token_urlsafe(10)}@{secrets.token_urlsafe(10)}.com"
-    password = secrets.token_urlsafe(16)
-    user = User(
-        email=email,
-        password_hash=hash_password(password),
-        fname="First",
-        lname="Last",
-        active=True,
-        force_password_reset=False,
-    )
-    return user, password
+    def _create_user() -> Tuple[User, str]:
+        email = f"{secrets.token_urlsafe(10)}@{secrets.token_urlsafe(10)}.com"
+        password = secrets.token_urlsafe(16)
+        user = User(
+            email=email,
+            password_hash=hash_password(password),
+            fname="First",
+            lname="Last",
+            active=True,
+            force_password_reset=False,
+        )
+        return user, password
+    return _create_user
 
 @pytest.fixture(scope="function", name="userpass")
-def user_fixture(db_session: Session):
+def user_fixture(db_session: Session, create_user):
     user, password = create_user()
 
     db_session.add(user)
@@ -92,7 +96,7 @@ def user_fixture(db_session: Session):
     db_session.commit()
 
 @pytest.fixture(scope="function", name="admin")
-def admin_fixture(db_session: Session):
+def admin_fixture(db_session: Session, create_user):
     user, password = create_user()
     db_session.add(user)
     db_session.commit()
