@@ -2,7 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from src.models import Permissions, Permission, CallingProposal
+from src.models import (
+    CallingProposal, CallingInterview, Calling, UserCalling,
+    KanbanStages,
+)
+from src.utils.calling_kanban import get_current_proposal_status
 
 
 def login_client(client: TestClient, email: str, password: str) -> str:
@@ -135,11 +139,6 @@ def test_kanban_flow_call(
         auth_headers,
         db_session: Session,
         create_user):
-    # Create stake presidency users
-    from src.models import User, Calling, UserCalling
-    from src.utils import hash_password
-    import secrets
-
     # Create stake president
     stake_president, sp_pass = create_user()
     db_session.add(stake_president)
@@ -190,8 +189,6 @@ def test_kanban_flow_call(
     proposal_id = proposal["id"]
 
     # Check initial stage is SP_APPROVAL
-    from src.utils.calling_kanban import get_current_proposal_status
-    from src.models import KanbanStages
     current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
     assert current_stage == KanbanStages.SP_APPROVAL
 
@@ -252,5 +249,62 @@ def test_kanban_flow_call(
     assert r.status_code == 200
 
     # Should now be at DONE
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.DONE
+
+
+def test_kanban_flow_release_call(
+        client: TestClient,
+        auth_headers,
+        db_session: Session,
+        create_user):
+    # Create a release proposal
+    payload = create_proposal_payload()
+    payload["is_release"] = True
+
+    r = client.post("/calling-kanban/proposals", json=payload, headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Release proposals start at INTERVIEW
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.INTERVIEW
+
+    # Ensure a CallingInterview row exists for the proposal (route will now create if missing, but we assert stage correctness first)
+    interview = db_session.exec(select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)).first()
+    assert interview is not None, "CallingInterview row should be automatically created for release proposal upon creation if it does not exist"
+
+    # Setup an interviewer user
+    stake_president, sp_pass = create_user()
+    db_session.add(stake_president)
+    db_session.commit()
+    db_session.refresh(stake_president)
+
+    # Assign a known calling, not required for this endpoint but keeps domain logic consistent
+    sp_calling = db_session.exec(select(Calling).where(Calling.name == "Stake President")).first()
+    assert sp_calling is not None
+    db_session.add(UserCalling(user_id=stake_president.id, calling_id=sp_calling.id, slot_number=1))
+    db_session.commit()
+
+    # Schedule and complete interview
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/interview?interviewer_id={stake_president.id}", headers=auth_headers)
+    assert r.status_code == 200
+
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/interview/complete", headers=auth_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.SUSTAIN
+
+    # Continue through remaining manual kanban states
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/sustain", headers=auth_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.LCR_UPDATE
+
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/lcr", headers=auth_headers)
+    assert r.status_code == 200
+
     current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
     assert current_stage == KanbanStages.DONE

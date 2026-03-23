@@ -51,6 +51,14 @@ def create_proposal(
         from_stage=None,  # No previous stage
         to_stage=to_stage
     )
+    if proposal.is_release:
+        # We need to create the interview record immediately for release proposals since they skip directly to interview stage
+        interview = CallingInterview(
+                proposal_id=proposal.id,
+                interviewer_id = None,
+            )
+        session.add(interview)
+
     session.add(initial_update)
     session.commit()
     logger.debug(f"Created new proposal with ID {proposal.id} and initial kanban stage {to_stage}")
@@ -260,7 +268,7 @@ def schedule_interview(
     proposal_id: int,
     interviewer_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Schedule an interview for a calling proposal"""
     statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
@@ -312,7 +320,7 @@ def complete_interview(
 def get_interview(
     proposal_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+    _: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Get interview for a calling proposal"""
     statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
@@ -334,13 +342,23 @@ def sustain_proposal(
     if get_current_proposal_status(proposal, session) != KanbanStages.SUSTAIN:
         raise HTTPException(status_code=400, detail="Proposal is not at sustaining stage")
     # Create kanban update
-    create_kanban_update(
-        session=session,
-        proposal_id=proposal_id,
-        updater_id=current_user.id,
-        from_stage=KanbanStages.SUSTAIN,
-        to_stage=KanbanStages.SET_APART
-    )
+    if proposal.is_release:
+        # For release proposals, there is no set apart stage, so we move directly to LCR update after sustaining
+        create_kanban_update(
+            session=session,
+            proposal_id=proposal_id,
+            updater_id=current_user.id,
+            from_stage=KanbanStages.SUSTAIN,
+            to_stage=KanbanStages.LCR_UPDATE
+        )
+    else:
+        create_kanban_update(
+            session=session,
+            proposal_id=proposal_id,
+            updater_id=current_user.id,
+            from_stage=KanbanStages.SUSTAIN,
+            to_stage=KanbanStages.SET_APART
+        )
     return proposal
 
 @router.post("/proposals/{proposal_id}/set-apart", response_model=CallingProposal)
