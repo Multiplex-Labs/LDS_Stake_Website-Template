@@ -23,6 +23,26 @@ class User(BaseModel, table=True):
         back_populates="user",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
+    proposals_submitted: List["CallingProposal"] = Relationship(
+        back_populates="submitter_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    kanban_updates: List["KanbanUpdate"] = Relationship(
+        back_populates="updater_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    comments_made: List["CallingComment"] = Relationship(
+        back_populates="commenter_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    approvals_made: List["CallingApproval"] = Relationship(
+        back_populates="approver_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    interviews_conducted: List["CallingInterview"] = Relationship(
+        back_populates="interviewer_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
     
     @classmethod
     def from_request_safe_user(cls, request_safe_user: "RequestSafeUser", password_hash: str) -> "User":

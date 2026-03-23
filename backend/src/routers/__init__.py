@@ -4,3 +4,4 @@ from .users import router as users_router
 from .callings import router as callings_router
 from .assignments import router as assignments_router
 from .speaking import router as speaking_router
+from .calling_kanban import router as calling_kanban_router

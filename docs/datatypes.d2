@@ -84,6 +84,58 @@ SpeakingTopic: {
   month: datetime
 }
 
+
+# Calling Kanban related datatypes
+KanbanUpdate: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  updater_id: str {constraint: foreign_key}
+  from_stage: str
+  to_stage: str
+  updated_at: datetime {constraint: default=current_timestamp}
+}
+
+CallingProposal: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  fname: str
+  lname: str
+  spouse_name: str {constraint: nullable}
+  proposed_calling: str
+  ward_id: int {constraint: foreign_key}
+  is_release: bool {constraint: default=false}
+  submitted_at: datetime {constraint: default=current_timestamp}
+  updated_at: datetime {constraint: default=current_timestamp}
+}
+
+CallingComment: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  commenter_id: str {constraint: foreign_key}
+  comment: str
+  created_at: datetime {constraint: default=current_timestamp}
+  edited_at: datetime {constraint: nullable}
+}
+
+CallingApproval: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  approver_id: str {constraint: foreign_key}
+  approved: bool
+  decision_at: datetime {constraint: default=current_timestamp}
+}
+
+CallingInterview: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  proposal_id: int {constraint: foreign_key}
+  interviewer_id: str {constraint: foreign_key}
+  interview_date: datetime
+}
+
 # Relationships based on common fields
 UserCalling -> User : "joins"
 UserCalling -> Calling : "joins"
@@ -93,3 +145,14 @@ UserSession.user_id -> User.id : "references"
 Assignment.high_councilor_id -> UserCalling.id : "references"
 SpeakingAssignment.high_councilor_id -> UserCalling.id : "references"
 SpeakingAssignment.ward_id -> Ward.id : "references"
+
+# Calling Kanban relationships
+KanbanUpdate.proposal_id -> CallingProposal.id : "references"
+KanbanUpdate.updater_id -> User.id : "references"
+CallingComment.proposal_id -> CallingProposal.id : "references"
+CallingComment.commenter_id -> User.id : "references"
+CallingApproval.proposal_id -> CallingProposal.id : "references"
+CallingApproval.approver_id -> User.id : "references"
+CallingInterview.proposal_id -> CallingProposal.id : "references"
+CallingInterview.interviewer_id -> User.id : "references"
+CallingProposal.submitter -> User.id : "references"
