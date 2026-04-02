@@ -34,3 +34,5 @@ from .calling_kanban import (
     create_kanban_update,
     update_proposal_status
 )
+
+from .ward import load_wards

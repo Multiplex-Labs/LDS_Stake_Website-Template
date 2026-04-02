@@ -146,6 +146,19 @@ def _create_calling_if_not_exists(
         session.add(calling)
         session.commit()
         session.refresh(calling)
+    else:
+        # Let's update any existing fields if need-be
+        updated = False
+        if calling.max_slots != max_slots:
+            calling.max_slots = max_slots
+            updated = True
+        if calling.is_public != is_public:
+            calling.is_public = is_public
+            updated = True
+        if updated:
+            session.add(calling)
+            session.commit()
+            session.refresh(calling)
     if len(permissions) > 0:
         # Assign permissions to the calling
         permFlag = Permission.NONE

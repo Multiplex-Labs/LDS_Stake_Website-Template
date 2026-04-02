@@ -10,7 +10,8 @@ from .utils import (
     session_cleanup_loop,
     create_default_admin_user,
     load_speaking_schedule,
-    speaking_assignment_cleanup_loop
+    speaking_assignment_cleanup_loop,
+    load_wards
 )
 import os
 import asyncio
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     create_default_admin_user()
     ## Create system callings and assignments if they don't exist
     create_system_callings_and_assignments()
+    ## Load wards from file and create bishop callings and slots for each ward
+    load_wards()
     ## Start background task for session cleanup
     session_cleanup_task = asyncio.create_task(session_cleanup_loop())
     ## Start background task for speaking assignment cleanup
@@ -72,7 +75,8 @@ from .routers import (
     callings_router,
     assignments_router,
     speaking_router,
-    calling_kanban_router
+    calling_kanban_router,
+    ward_router
 )
 
 app.include_router(health_router)
@@ -82,3 +86,4 @@ app.include_router(callings_router)
 app.include_router(assignments_router)
 app.include_router(speaking_router)
 app.include_router(calling_kanban_router)
+app.include_router(ward_router)
