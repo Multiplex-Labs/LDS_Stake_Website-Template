@@ -13,7 +13,7 @@ os.environ["DEBUG"] = "true"
 from src.app import app
 from src.db.orm import ORM, get_session
 from src.models import *
-from src.utils import hash_password, create_system_callings_and_assignments
+from src.utils import hash_password, create_system_callings_and_assignments, load_wards
 
 import pytest
 
@@ -27,6 +27,7 @@ def db_engine():
     orm = ORM(engine_kind="sqlite")
     BaseModel.metadata.create_all(orm.engine)
     create_system_callings_and_assignments()
+    load_wards()
     yield orm.engine
     # Teardown: close file descriptor and remove temp file
     os.close(fd)
