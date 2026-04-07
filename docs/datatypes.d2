@@ -136,6 +136,15 @@ CallingInterview: {
   interview_date: datetime
 }
 
+# Ward
+
+Ward: {
+  shape: sql_table
+  id: str {constraint: primary_key}
+  name: str
+  bishop_id: int {constraint: foreign_key}
+}
+
 # Relationships based on common fields
 UserCalling -> User : "joins"
 UserCalling -> Calling : "joins"

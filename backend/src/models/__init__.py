@@ -19,3 +19,4 @@ from .calling_kanban import (
     CallingApproval,
     CallingInterview
 )
+from .ward import Ward
