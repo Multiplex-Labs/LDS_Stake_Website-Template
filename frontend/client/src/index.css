@@ -43,67 +43,77 @@
   --radius: 0.5rem;
 }
 
-/* DARK MODE DEFAULT */
-:root {
-  /* Neutral Dark Grey Theme */
-  --background: 240 4% 9%; /* #161618 Very dark grey */
+/* ─── THEMES ────────────────────────────────────────────────────────────────
+   Each theme is an explicit CSS class on <html>.
+   :root provides the fallback (dark) so the page never flashes unstyled.
+   To add a new theme: add a new class below following the same variable set.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root,
+.dark {
+  --background: 240 4% 9%;
   --foreground: 0 0% 98%;
-
-  --card: 240 4% 11%; /* #1c1c1f */
+  --card: 240 4% 11%;
   --card-foreground: 0 0% 98%;
-
   --popover: 240 4% 11%;
   --popover-foreground: 0 0% 98%;
-
   --primary: 0 0% 98%;
   --primary-foreground: 240 5.9% 10%;
-
   --secondary: 240 3.7% 15.9%;
   --secondary-foreground: 0 0% 98%;
-
   --muted: 240 3.7% 15.9%;
   --muted-foreground: 240 5% 64.9%;
-
-  --accent: 43 74% 49%; /* Keep Gold Accent */
+  --accent: 43 74% 49%;
   --accent-foreground: 0 0% 98%;
-
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-
   --border: 240 3.7% 15.9%;
   --input: 240 3.7% 15.9%;
   --ring: 240 4.9% 83.9%;
 }
 
 .light {
-  /* Slate/Blue based palette with Warm Gold accents */
-  --background: 210 20% 98%; /* Soft cool white */
-  --foreground: 222 47% 11%; /* Deep slate blue */
-
+  --background: 210 20% 98%;
+  --foreground: 222 47% 11%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-
-  --primary: 222 47% 20%; /* Deep authoritative blue */
+  --primary: 222 47% 20%;
   --primary-foreground: 210 40% 98%;
-
-  --secondary: 210 40% 96%; /* Very light blue/gray */
+  --secondary: 210 40% 96%;
   --secondary-foreground: 222 47% 11%;
-
   --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
-
-  --accent: 43 74% 49%; /* Warm Gold */
+  --accent: 43 74% 49%;
   --accent-foreground: 222 47% 11%;
-
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
-
   --border: 214 32% 91%;
   --input: 214 32% 91%;
   --ring: 222 47% 20%;
+}
+
+.high-contrast {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 0%;
+  --primary: 220 100% 30%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 88%;
+  --secondary-foreground: 0 0% 0%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 0 0% 15%;
+  --accent: 43 100% 38%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 100% 38%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 0%;
+  --input: 0 0% 88%;
+  --ring: 220 100% 30%;
 }
 
 @layer base {

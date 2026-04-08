@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut, User } from "lucide-react";
 import logoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
-import { apiRequest } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -106,8 +106,9 @@ export function Navbar() {
             </NavigationMenu>
           </div>
 
-          {/* Right side: Auth + Mobile Hamburger */}
-          <div className="flex items-center gap-2">
+          {/* Right side: Theme + Auth + Mobile Hamburger */}
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
             {user ? (
               <>
                 <span className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
