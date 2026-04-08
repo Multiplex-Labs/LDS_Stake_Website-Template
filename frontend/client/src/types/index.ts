@@ -19,3 +19,85 @@ export interface ActiveCalling {
   hpInterviewer?: string;
   notes?: string;
 }
+
+export interface Ward {
+  id: number;
+  name: string;
+  bishop_id: number | null;
+}
+
+export interface ApiCalling {
+  id: number;
+  name: string;
+  max_slots: number;
+  is_public: boolean;
+  system_defined: boolean;
+}
+
+export interface ApiUserCalling {
+  id: number;
+  user_id: number;
+  calling_id: number;
+  slot_number: number;
+  calling: ApiCalling;
+}
+
+export interface ApiUser {
+  id: number;
+  email: string;
+  fname: string;
+  lname: string;
+  active: boolean;
+  force_password_reset: boolean;
+  phone: string | null;
+  bio: string | null;
+  profile_image: string | null;
+  callings: ApiUserCalling[] | null;
+}
+
+export interface CallingProposal {
+  id: number;
+  fname: string;
+  lname: string;
+  spouse_name: string;
+  proposed_calling: string;
+  ward_id: number;
+  is_release: boolean;
+  submitted_at: string;
+  updated_at: string;
+  submitter: number;
+}
+
+// Keys are KanbanStages enum values serialized as numeric strings:
+// "0"=SP_APPROVAL, "1"=HC_APPROVAL, "2"=INTERVIEW, "3"=SUSTAIN,
+// "4"=SET_APART, "5"=LCR_UPDATE, "6"=DONE
+export type KanbanBoard = Record<string, CallingProposal[]>;
+
+export interface HcAssignment {
+  id: number;
+  high_councilor_id: number | null;
+  responsibility: string | null;
+  committee: string | null;
+}
+
+export interface SpeakingAssignmentEntry {
+  ward_id: number | null;
+  speaker2: string | null;
+}
+
+export interface SpeakerSchedule {
+  high_councilor_id: number; // UserCalling.id
+  assignments: SpeakingAssignmentEntry[]; // 12 entries, index = month-1
+}
+
+export interface SpeakingCalendar {
+  year: number;
+  speakers: SpeakerSchedule[];
+}
+
+export interface SpeakingTopic {
+  id: number;
+  topic: string;
+  reference_material: string | null;
+  month: string; // ISO datetime: "2026-01-01T00:00:00"
+}

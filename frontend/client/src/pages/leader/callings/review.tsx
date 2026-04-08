@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, User, Check, X } from "lucide-react";
 import { Link } from "wouter";
+import { useWardMap } from "@/lib/hooks";
 import {
   Table,
   TableBody,
@@ -19,81 +21,60 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { KanbanBoard, CallingProposal, Ward } from "@/types";
 
-interface PendingCalling {
-  id: string;
-  firstName: string;
-  lastName: string;
-  spouseName?: string;
-  ward: string;
-  proposedCalling: string;
-  dateSubmitted: string;
-  notes?: string;
-  previousHolderName?: string;
-  previousHolderWard?: string;
-}
-
-const PENDING_CALLINGS: PendingCalling[] = [
-  {
-    id: "1",
-    firstName: "Michael",
-    lastName: "Brown",
-    spouseName: "Sarah Brown",
-    ward: "14th Ward",
-    proposedCalling: "Elders Quorum President",
-    dateSubmitted: "2025-08-15",
-    notes: "Has served as counselor previously. Strong leader.",
-    previousHolderName: "Joshua Thompson",
-    previousHolderWard: "14th Ward"
-  },
-  {
-    id: "2",
-    firstName: "Christopher",
-    lastName: "Martinez",
-    spouseName: "Ashley Martinez",
-    ward: "11th Ward",
-    proposedCalling: "Sunday School President",
-    dateSubmitted: "2025-08-16",
-    notes: "Great teacher, very organized.",
-    previousHolderName: "Daniel Lee",
-    previousHolderWard: "11th Ward"
-  },
-  {
-    id: "3",
-    firstName: "Andrew",
-    lastName: "Garcia",
-    spouseName: "Megan Garcia",
-    ward: "17th Ward",
-    proposedCalling: "Relief Society Teacher",
-    dateSubmitted: "2025-08-14",
-    notes: "Willing to serve.",
-    previousHolderName: "None (New Class)",
-    previousHolderWard: "17th Ward"
-  }
-];
+// SP_APPROVAL = "0" in the board response
+const SP_APPROVAL_KEY = "0";
 
 export default function ReviewCallings() {
-  const [selectedCalling, setSelectedCalling] = useState<PendingCalling | null>(null);
-  const [reviewerNotes, setReviewerNotes] = useState("");
-  const handleApprove = () => {
-    toast.success("Calling Approved", {
-      description: `${selectedCalling?.firstName} ${selectedCalling?.lastName} has been approved for ${selectedCalling?.proposedCalling}.`,
-    });
-    setSelectedCalling(null);
-    setReviewerNotes("");
-  };
+  const [selectedProposal, setSelectedProposal] = useState<CallingProposal | null>(null);
 
-  const handleDeny = () => {
-    toast.error("Calling Denied", {
-      description: `${selectedCalling?.firstName} ${selectedCalling?.lastName}'s recommendation has been denied.`,
-    });
-    setSelectedCalling(null);
-    setReviewerNotes("");
-  };
+  const { data: board = {}, isLoading, isError } = useQuery<KanbanBoard>({
+    queryKey: ["/api/calling-kanban/board"],
+  });
+  const { data: wards = [] } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+
+  const wardMap = useWardMap(wards);
+
+  const pendingProposals: CallingProposal[] = board[SP_APPROVAL_KEY] ?? [];
+
+  const approveMutation = useMutation({
+    mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/approvals?approved=${approved}`),
+    onSuccess: (_, { approved }) => {
+      const p = selectedProposal!;
+      if (approved) {
+        toast.success("Calling Approved", {
+          description: `${p.fname} ${p.lname} has been approved for ${p.proposed_calling}.`,
+        });
+      } else {
+        toast.error("Calling Denied", {
+          description: `${p.fname} ${p.lname}'s recommendation has been denied.`,
+        });
+      }
+      setSelectedProposal(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+    },
+    onError: () => {
+      toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
+    },
+  });
+
+  if (isError) {
+    return (
+      <Layout>
+        <div className="text-center py-16">
+          <p className="text-destructive">Failed to load. Please refresh.</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -120,20 +101,23 @@ export default function ReviewCallings() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {PENDING_CALLINGS.length > 0 ? (
-                  PENDING_CALLINGS.map((calling) => (
-                    <TableRow 
-                      key={calling.id} 
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                      Loading…
+                    </TableCell>
+                  </TableRow>
+                ) : pendingProposals.length > 0 ? (
+                  pendingProposals.map((proposal) => (
+                    <TableRow
+                      key={proposal.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => {
-                        setSelectedCalling(calling);
-                        setReviewerNotes("");
-                      }}
+                      onClick={() => setSelectedProposal(proposal)}
                     >
-                      <TableCell className="font-medium">{calling.firstName} {calling.lastName}</TableCell>
-                      <TableCell>{calling.proposedCalling}</TableCell>
-                      <TableCell>{calling.ward}</TableCell>
-                      <TableCell>{calling.dateSubmitted}</TableCell>
+                      <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
+                      <TableCell>{proposal.proposed_calling}</TableCell>
+                      <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
+                      <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))
                 ) : (
@@ -148,87 +132,73 @@ export default function ReviewCallings() {
           </div>
         </div>
 
-        <Dialog open={!!selectedCalling} onOpenChange={(open) => !open && setSelectedCalling(null)}>
+        <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && setSelectedProposal(null)}>
           <DialogContent className="max-w-[90vw] sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl">Review Recommendation</DialogTitle>
               <DialogDescription>
-                Review details for {selectedCalling?.firstName} {selectedCalling?.lastName}
+                Review details for {selectedProposal?.fname} {selectedProposal?.lname}
               </DialogDescription>
             </DialogHeader>
 
-            {selectedCalling && (
+            {selectedProposal && (
               <div className="grid gap-6 py-4">
                 <Card className="border-0 shadow-none bg-muted/30">
                   <CardContent className="p-4 grid gap-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Name</Label>
-                        <div className="font-medium">{selectedCalling.firstName} {selectedCalling.lastName}</div>
+                        <div className="font-medium">{selectedProposal.fname} {selectedProposal.lname}</div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Spouse</Label>
                         <div className="flex items-center gap-2">
                           <User className="h-3 w-3 text-muted-foreground" />
-                          <span>{selectedCalling.spouseName || "N/A"}</span>
+                          <span>{selectedProposal.spouse_name || "N/A"}</span>
                         </div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Ward</Label>
-                        <div>{selectedCalling.ward}</div>
+                        <div>{wardMap.get(selectedProposal.ward_id) ?? `Ward ${selectedProposal.ward_id}`}</div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Proposed Calling</Label>
-                        <div className="font-semibold text-primary">{selectedCalling.proposedCalling}</div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Notes</Label>
-                      <div className="text-sm">{selectedCalling.notes || "No notes provided."}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-none bg-muted/30">
-                  <CardContent className="p-4 grid gap-4">
-                    <h4 className="font-semibold text-sm">Previous Holder Information</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Name</Label>
-                        <div>{selectedCalling.previousHolderName || "N/A"}</div>
+                        <div className="font-semibold text-primary">{selectedProposal.proposed_calling}</div>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Ward</Label>
-                        <div>{selectedCalling.previousHolderWard || "N/A"}</div>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Type</Label>
+                        <div>{selectedProposal.is_release ? "Release" : "New Calling"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Submitted</Label>
+                        <div>{new Date(selectedProposal.submitted_at).toLocaleDateString()}</div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-
-                <div className="space-y-2">
-                  <Label htmlFor="reviewer-notes">Add Notes (Optional)</Label>
-                  <Textarea 
-                    id="reviewer-notes" 
-                    placeholder="Enter your notes or comments here..." 
-                    value={reviewerNotes}
-                    onChange={(e) => setReviewerNotes(e.target.value)}
-                  />
-                </div>
               </div>
             )}
 
             <DialogFooter className="gap-2 sm:gap-0">
               <div className="flex w-full justify-between items-center">
-                <Button variant="outline" onClick={() => setSelectedCalling(null)}>
+                <Button variant="outline" onClick={() => setSelectedProposal(null)}>
                   Close
                 </Button>
                 <div className="flex gap-2">
-                  <Button variant="destructive" onClick={handleDeny} className="gap-2">
+                  <Button
+                    variant="destructive"
+                    className="gap-2"
+                    disabled={approveMutation.isPending}
+                    onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: false })}
+                  >
                     <X className="h-4 w-4" />
                     Deny
                   </Button>
-                  <Button onClick={handleApprove} className="gap-2 bg-green-600 hover:bg-green-700">
+                  <Button
+                    className="gap-2 bg-green-600 hover:bg-green-700"
+                    disabled={approveMutation.isPending}
+                    onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: true })}
+                  >
                     <Check className="h-4 w-4" />
                     Approve
                   </Button>

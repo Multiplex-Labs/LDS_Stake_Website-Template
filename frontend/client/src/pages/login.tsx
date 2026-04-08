@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/queryClient";
+import { setAccessToken } from "@/lib/queryClient";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
 export default function Login() {
@@ -26,13 +26,43 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/login", formData);
-      const user: AuthUser = await res.json();
+      // Backend uses OAuth2PasswordRequestForm — must be form-encoded
+      const body = new URLSearchParams({
+        username: formData.username,
+        password: formData.password,
+      });
+      const loginRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        credentials: "include",
+      });
+      if (!loginRes.ok) {
+        throw new Error("Invalid credentials");
+      }
+      const { access_token } = await loginRes.json();
+      setAccessToken(access_token);
+
+      // Fetch full user profile
+      const meRes = await fetch("/api/auth/me", {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      if (!meRes.ok) {
+        throw new Error("Failed to fetch user");
+      }
+      const user: AuthUser = await meRes.json();
       setUser(user);
-      toast.success("Login Successful", { description: `Welcome back, ${user.username}!` });
-      setLocation("/leader/assignments");
+
+      toast.success("Login Successful", { description: `Welcome back, ${user.fname}!` });
+
+      if (user.force_password_reset) {
+        setLocation("/change-password");
+      } else {
+        setLocation("/leader/assignments");
+      }
     } catch {
-      toast.error("Login Failed", { description: "Invalid username or password." });
+      toast.error("Login Failed", { description: "Invalid email or password." });
     } finally {
       setIsLoading(false);
     }
@@ -51,14 +81,14 @@ export default function Login() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">Email</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="username"
                     name="username"
-                    type="text"
-                    placeholder="jdoe"
+                    type="email"
+                    placeholder="you@example.com"
                     className="pl-9"
                     value={formData.username}
                     onChange={handleChange}

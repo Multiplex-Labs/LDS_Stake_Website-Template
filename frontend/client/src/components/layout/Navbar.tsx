@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut, User } from "lucide-react";
 import logoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, setAccessToken, queryClient } from "@/lib/queryClient";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export function Navbar() {
@@ -23,10 +23,14 @@ export function Navbar() {
   const { user, setUser } = useAuthStore();
 
   async function handleLogout() {
-    await apiRequest("POST", "/api/logout");
-    setUser(null);
-    queryClient.clear();
-    setLocation("/");
+    try {
+      await apiRequest("POST", "/api/auth/logout", { all_devices: false });
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+      queryClient.clear();
+      setLocation("/");
+    }
   }
 
   return (
@@ -113,7 +117,7 @@ export function Navbar() {
               <>
                 <span className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
                   <User className="h-4 w-4" />
-                  {user.username}
+                  {user.fname} {user.lname}
                 </span>
                 <Button
                   variant="outline"

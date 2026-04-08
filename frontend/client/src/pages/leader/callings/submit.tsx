@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Save } from "lucide-react";
@@ -23,23 +24,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { WARDS } from "@/lib/constants";
-
-const formSchema = z.object({
-  memberFirstName: z.string().min(1, "First name is required"),
-  memberLastName: z.string().min(1, "Last name is required"),
-  spouseName: z.string().optional(),
-  ward: z.string().min(1, "Ward is required"),
-  proposedCalling: z.string().min(1, "Proposed calling is required"),
-  notes: z.string().optional(),
-  previousHolderFirstName: z.string().optional(),
-  previousHolderLastName: z.string().optional(),
-  previousHolderWard: z.string().optional(),
-});
-
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Ward } from "@/types";
 
 const CALLINGS = [
   "Stake High Councilor",
@@ -66,12 +55,26 @@ const CALLINGS = [
   "Elders Quorum President",
   "Elders Quorum First Counselor",
   "Elders Quorum Second Counselor",
-  "Other"
+  "Other",
 ];
+
+const formSchema = z.object({
+  memberFirstName: z.string().min(1, "First name is required"),
+  memberLastName: z.string().min(1, "Last name is required"),
+  spouseName: z.string().optional(),
+  wardId: z.number({ required_error: "Ward is required" }).int().positive("Ward is required"),
+  proposedCalling: z.string().min(1, "Proposed calling is required"),
+  isRelease: z.boolean().default(false),
+  notes: z.string().optional(),
+});
 
 export default function SubmitCalling() {
   const [, setLocation] = useLocation();
   const [showOtherCalling, setShowOtherCalling] = useState(false);
+
+  const { data: wards = [] } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -79,22 +82,37 @@ export default function SubmitCalling() {
       memberFirstName: "",
       memberLastName: "",
       spouseName: "",
-      ward: "",
+      wardId: undefined,
       proposedCalling: "",
+      isRelease: false,
       notes: "",
-      previousHolderFirstName: "",
-      previousHolderLastName: "",
-      previousHolderWard: "",
+    },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: (values: z.infer<typeof formSchema>) =>
+      apiRequest("POST", "/api/calling-kanban/proposals", {
+        fname: values.memberFirstName,
+        lname: values.memberLastName,
+        spouse_name: values.spouseName ?? "",
+        proposed_calling: values.proposedCalling,
+        ward_id: values.wardId,
+        is_release: values.isRelease,
+      }),
+    onSuccess: (_, values) => {
+      toast.success("Calling Submitted", {
+        description: `Recommendation for ${values.memberFirstName} ${values.memberLastName} has been submitted.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+      setLocation("/leader/calling-system");
+    },
+    onError: () => {
+      toast.error("Submission Failed", { description: "Could not submit the calling. Please try again." });
     },
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    toast.success("Calling Submitted", {
-      description: `Recommendation for ${values.memberFirstName} ${values.memberLastName} has been submitted.`,
-    });
-    // In a real app, this would submit to API
-    // For prototype, navigate back to calling system
-    setTimeout(() => setLocation("/leader/calling-system"), 1000);
+    submitMutation.mutate(values);
   }
 
   return (
@@ -106,7 +124,7 @@ export default function SubmitCalling() {
             Back to Calling System
           </Button>
         </Link>
-        
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Submit a Calling</h1>
           <p className="text-muted-foreground mt-2">
@@ -166,20 +184,23 @@ export default function SubmitCalling() {
                   />
                   <FormField
                     control={form.control}
-                    name="ward"
+                    name="wardId"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Ward</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={(val) => field.onChange(Number(val))}
+                          value={field.value?.toString() ?? ""}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a ward" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {WARDS.map((ward) => (
-                              <SelectItem key={ward} value={ward}>
-                                {ward}
+                            {wards.map((ward) => (
+                              <SelectItem key={ward.id} value={ward.id.toString()}>
+                                {ward.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -201,9 +222,9 @@ export default function SubmitCalling() {
                           <FormControl>
                             <Input placeholder="Enter custom calling" {...field} />
                           </FormControl>
-                          <Button 
-                            type="button" 
-                            variant="ghost" 
+                          <Button
+                            type="button"
+                            variant="ghost"
                             size="sm"
                             onClick={() => {
                               setShowOtherCalling(false);
@@ -214,7 +235,7 @@ export default function SubmitCalling() {
                           </Button>
                         </div>
                       ) : (
-                        <Select 
+                        <Select
                           onValueChange={(value) => {
                             if (value === "Other") {
                               setShowOtherCalling(true);
@@ -222,8 +243,8 @@ export default function SubmitCalling() {
                             } else {
                               field.onChange(value);
                             }
-                          }} 
-                          defaultValue={field.value}
+                          }}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -246,15 +267,31 @@ export default function SubmitCalling() {
 
                 <FormField
                   control={form.control}
+                  name="isRelease"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormLabel className="!mt-0">This is a release (not a new calling)</FormLabel>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="notes"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Notes (Optional)</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Add any additional context or notes about this recommendation..." 
+                        <Textarea
+                          placeholder="Add any additional context or notes about this recommendation..."
                           className="min-h-[100px]"
-                          {...field} 
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -264,76 +301,13 @@ export default function SubmitCalling() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Previous Holder Information</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="previousHolderFirstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Previous Holder First Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Jane" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="previousHolderLastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Previous Holder Last Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Smith" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="previousHolderWard"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Previous Holder Ward</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a ward" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {WARDS.map((ward) => (
-                              <SelectItem key={ward} value={ward}>
-                                {ward}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
             <div className="flex justify-end gap-4">
               <Link href="/leader/calling-system">
                 <Button type="button" variant="outline">Cancel</Button>
               </Link>
-              <Button type="submit" className="gap-2">
+              <Button type="submit" className="gap-2" disabled={submitMutation.isPending}>
                 <Save className="h-4 w-4" />
-                Submit Recommendation
+                {submitMutation.isPending ? "Submitting…" : "Submit Recommendation"}
               </Button>
             </div>
           </form>

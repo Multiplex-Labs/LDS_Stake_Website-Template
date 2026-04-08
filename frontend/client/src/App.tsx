@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getQueryFn } from "@/lib/queryClient";
+import { setAccessToken } from "@/lib/queryClient";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 import NotFound from "@/pages/not-found";
 
@@ -70,21 +70,37 @@ function Router() {
   );
 }
 
-// Fetches /api/me once and syncs the result to the Zustand auth store.
-// Lives inside QueryClientProvider so it can use useQuery.
+// On mount: try to restore session via HttpOnly refresh cookie,
+// then fetch /auth/me to populate the auth store.
 function AuthSync() {
   const { setUser, setLoading } = useAuthStore();
-  const { data, isLoading } = useQuery<AuthUser | null>({
-    queryKey: ["/api/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
 
   useEffect(() => {
-    setLoading(isLoading);
-    if (!isLoading) {
-      setUser(data ?? null);
+    async function init() {
+      try {
+        const refreshRes = await fetch("/api/auth/refresh", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!refreshRes.ok) return;
+        const { access_token } = await refreshRes.json();
+        setAccessToken(access_token);
+
+        const meRes = await fetch("/api/auth/me", {
+          credentials: "include",
+          headers: { Authorization: `Bearer ${access_token}` },
+        });
+        if (meRes.ok) {
+          setUser((await meRes.json()) as AuthUser);
+        }
+      } catch {
+        // Network error — treat as unauthenticated
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [data, isLoading, setUser, setLoading]);
+    init();
+  }, [setUser, setLoading]);
 
   return null;
 }
