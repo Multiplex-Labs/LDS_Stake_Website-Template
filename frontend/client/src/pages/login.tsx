@@ -1,0 +1,113 @@
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Layout } from "@/components/layout/Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { toast } from "sonner";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuthStore, type AuthUser } from "@/stores/auth";
+
+export default function Login() {
+  const [, setLocation] = useLocation();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({ username: "", password: "" });
+  const { setUser } = useAuthStore();
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/login", formData);
+      const user: AuthUser = await res.json();
+      setUser(user);
+      toast.success("Login Successful", { description: `Welcome back, ${user.username}!` });
+      setLocation("/leader/assignments");
+    } catch {
+      toast.error("Login Failed", { description: "Invalid username or password." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Layout>
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)] py-12 px-4 bg-muted/30">
+        <Card className="w-full max-w-md border-t-4 border-t-primary shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="text-2xl font-serif font-bold">Welcome Back</CardTitle>
+            <CardDescription>
+              Enter your credentials to access the leader portal
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="username"
+                    name="username"
+                    type="text"
+                    placeholder="jdoe"
+                    className="pl-9"
+                    value={formData.username}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    className="pl-9 pr-9"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                    <span className="sr-only">Toggle password visibility</span>
+                  </Button>
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </Layout>
+  );
+}
