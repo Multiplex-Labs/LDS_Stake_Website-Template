@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import heroImage from "@assets/logan-utah-temple-40550-main_1767460892873.jpg";
+import heroImage from "@assets/temple-hero.jpg";
 import { motion } from "framer-motion";
 import { Users, Landmark, Megaphone, BookOpen } from "lucide-react";
 import { Link } from "wouter";
