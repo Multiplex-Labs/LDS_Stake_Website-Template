@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ActiveCalling } from "@/types";
+import { WARDS, CALLING_STAGES } from "@/lib/constants";
 
 const CallingEditSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -57,20 +58,7 @@ const CallingEditSchema = z.object({
 
 type CallingEdit = z.infer<typeof CallingEditSchema>;
 
-const STAGES = [
-  { id: "pending-stake-approval", label: "Pending Stake Presidency Approval" },
-  { id: "pending-hc-approval", label: "Pending High Council Approval" },
-  { id: "pending-interview", label: "Pending Interview" },
-  { id: "pending-hp-interview", label: "Pending High Priest Interview" },
-  { id: "pending-sustainment", label: "Pending Sustainment / Release" },
-  { id: "pending-setting-apart", label: "Pending Setting Apart" },
-  { id: "pending-lcr", label: "Pending LCR Update" },
-];
-
-const WARDS = [
-  "9th Ward", "10th Ward", "11th Ward", "12th Ward",
-  "13th Ward", "14th Ward", "15th Ward", "16th Ward", "17th Ward"
-];
+const STAGES = CALLING_STAGES;
 
 const ACTIVE_DATA: ActiveCalling[] = [
   {
@@ -215,12 +203,12 @@ export default function ManageCallings() {
     }
   }, [selectedItem, form]);
 
-  const filteredData = data.filter(item => {
+  const filteredData = useMemo(() => data.filter(item => {
     const fullName = `${item.firstName} ${item.lastName}`.toLowerCase();
     const matchesSearch = !searchTerm || fullName.includes(searchTerm.toLowerCase()) || item.calling.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesWard = wardFilter === "all" || item.ward === wardFilter;
     return matchesSearch && matchesWard;
-  });
+  }), [data, searchTerm, wardFilter]);
 
   function onSubmit(values: CallingEdit) {
     if (!selectedItem) return;

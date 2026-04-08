@@ -23,6 +23,13 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+const geoJsonStyle = {
+  color: "#ff7f0e",
+  weight: 3,
+  opacity: 0.8,
+  fill: false,
+};
+
 // Component to handle map view updates
 function MapUpdater({ center, zoom }: { center: [number, number], zoom: number }) {
   const map = useMap();
@@ -39,7 +46,6 @@ export default function WardMap() {
   const [result, setResult] = useState<{ ward: string; message: string } | null>(null);
   const [showSearchModal, setShowSearchModal] = useState(true);
 
-  // Default view (Logan, UT)
   const [viewState, setViewState] = useState({
     center: [41.7370, -111.8338] as [number, number],
     zoom: 13
@@ -51,30 +57,19 @@ export default function WardMap() {
 
     setLoading(true);
 
-    // Simulate API delay
     setTimeout(() => {
       setLoading(false);
       setHasSearched(true);
-
-      // Mock logic - simply for demonstration
       setResult({
         ward: "9th Ward",
         message: "You are within the 9th Ward boundaries."
       });
 
-      // Zoom in to a location
       setViewState({
         center: [41.7370, -111.8338],
         zoom: 15
       });
     }, 1500);
-  };
-
-  const geoJsonStyle = {
-    color: "#ff7f0e", // Orange/Gold color typical for boundaries
-    weight: 3,
-    opacity: 0.8,
-    fill: false // No fill as requested
   };
 
   return (

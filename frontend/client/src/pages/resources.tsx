@@ -103,38 +103,38 @@ const POSTS: BlogPost[] = [
 
 const CATEGORIES = ["All", "Announcements", "Spiritual", "Welfare", "Youth", "YSA"];
 
+function getCategoryIcon(category: string) {
+  switch (category) {
+    case "Announcements": return <Megaphone className="h-4 w-4" />;
+    case "Spiritual": return <BookOpen className="h-4 w-4" />;
+    case "Welfare": return <Heart className="h-4 w-4" />;
+    case "Youth":
+    case "YSA": return <Users className="h-4 w-4" />;
+    default: return <Tag className="h-4 w-4" />;
+  }
+}
+
+function getCategoryColor(category: string) {
+  switch (category) {
+    case "Announcements": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    case "Spiritual": return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
+    case "Welfare": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+    case "Youth": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "YSA": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+    default: return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+  }
+}
+
 export default function Resources() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
   const filteredPosts = POSTS.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           post.excerpt.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "All" || post.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case "Announcements": return <Megaphone className="h-4 w-4" />;
-      case "Spiritual": return <BookOpen className="h-4 w-4" />;
-      case "Welfare": return <Heart className="h-4 w-4" />;
-      case "Youth": 
-      case "YSA": return <Users className="h-4 w-4" />;
-      default: return <Tag className="h-4 w-4" />;
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case "Announcements": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "Spiritual": return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
-      case "Welfare": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
-      case "Youth": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-      case "YSA": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
-      default: return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-    }
-  };
 
   return (
     <Layout>

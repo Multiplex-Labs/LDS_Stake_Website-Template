@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// Mock Data
 interface UserData {
   id: string;
   firstName: string;
@@ -192,11 +191,8 @@ export default function UserAdmin() {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   
-  // Dialog States
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
-  
-  // New User State
   const [newUser, setNewUser] = useState<Partial<UserData>>({
     firstName: "",
     lastName: "",
@@ -209,15 +205,12 @@ export default function UserAdmin() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Filter States
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [permissionFilters, setPermissionFilters] = useState<string[]>([]);
 
-  // Derived filter options
   const allStatuses = Array.from(new Set(users.map(u => u.status)));
   const allPermissions = Array.from(new Set(users.map(u => u.permissionGroup)));
 
-  // Sorting Handler
   const handleSort = (key: keyof UserData | "name") => {
     let direction: "asc" | "desc" = "asc";
     if (sortConfig && sortConfig.key === key && sortConfig.direction === "asc") {
@@ -226,20 +219,15 @@ export default function UserAdmin() {
     setSortConfig({ key, direction });
   };
 
-  // Filter & Sort Logic
   const filteredUsers = users.filter(user => {
     const fullName = `${user.firstName} ${user.lastName}`;
-    // Search
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
       fullName.toLowerCase().includes(searchLower) ||
       user.username.toLowerCase().includes(searchLower) ||
       user.role.toLowerCase().includes(searchLower);
 
-    // Status Filter
     const matchesStatus = statusFilters.length === 0 || statusFilters.includes(user.status);
-    
-    // Permission Filter
     const matchesPermission = permissionFilters.length === 0 || permissionFilters.includes(user.permissionGroup);
 
     return matchesSearch && matchesStatus && matchesPermission;
@@ -303,12 +291,12 @@ export default function UserAdmin() {
     }
 
     const createdUser: UserData = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       firstName: newUser.firstName!,
       lastName: newUser.lastName!,
       username: newUser.username!,
       role: newUser.role!,
-      permissionGroup: newUser.permissionGroup as any || "Stake Officer",
+      permissionGroup: (newUser.permissionGroup ?? "Stake Officer") as UserData["permissionGroup"],
       status: "Active",
       bio: newUser.bio,
       avatar: undefined
@@ -359,12 +347,10 @@ export default function UserAdmin() {
     <Layout>
       <div className="container mx-auto px-6 py-8 max-w-[1400px]">
         
-        {/* Page Title */}
         <div className="mb-8 flex justify-between items-center">
           <h1 className="text-xl font-bold text-foreground">User Administration</h1>
         </div>
 
-        {/* Toolbar */}
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-2xl">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -376,7 +362,6 @@ export default function UserAdmin() {
             />
           </div>
           <div className="flex items-center gap-3">
-            {/* Sort Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-10 gap-2 border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground">
@@ -394,7 +379,6 @@ export default function UserAdmin() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Filter Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className={`h-10 gap-2 border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground ${(statusFilters.length > 0 || permissionFilters.length > 0) ? "border-primary text-primary" : ""}`}>
@@ -462,7 +446,6 @@ export default function UserAdmin() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden">
           <Table>
             <TableHeader>
@@ -587,7 +570,6 @@ export default function UserAdmin() {
             </TableBody>
           </Table>
           
-          {/* Pagination */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-card">
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-foreground border-input hover:bg-accent">1</Button>
@@ -608,7 +590,6 @@ export default function UserAdmin() {
           </div>
         </div>
 
-        {/* Edit User Dialog */}
         <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
           <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -679,7 +660,7 @@ export default function UserAdmin() {
                     <Label>Permission Group</Label>
                     <Select 
                       value={editingUser.permissionGroup} 
-                      onValueChange={(val) => setEditingUser({ ...editingUser, permissionGroup: val as any })}
+                      onValueChange={(val) => setEditingUser({ ...editingUser, permissionGroup: val as UserData["permissionGroup"] })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -713,7 +694,6 @@ export default function UserAdmin() {
           </DialogContent>
         </Dialog>
 
-        {/* Add User Dialog */}
         <Dialog open={isAddingUser} onOpenChange={setIsAddingUser}>
           <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>

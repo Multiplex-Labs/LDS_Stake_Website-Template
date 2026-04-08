@@ -34,6 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { WARDS } from "@/lib/constants";
 
 interface ArchivedItem {
   id: string;
@@ -122,10 +123,6 @@ const ARCHIVED_DATA: ArchivedItem[] = [
   }
 ];
 
-const WARDS = [
-  "9th Ward", "10th Ward", "11th Ward", "12th Ward", 
-  "13th Ward", "14th Ward", "15th Ward", "16th Ward", "17th Ward"
-];
 
 export default function ArchiveCallings() {
   const [selectedItem, setSelectedItem] = useState<ArchivedItem | null>(null);

@@ -125,7 +125,6 @@ export default function ReserveBuilding() {
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-    // Simulate API call
     setTimeout(() => {
       setIsSubmitting(false);
       toast.success("Reservation Request Submitted", {

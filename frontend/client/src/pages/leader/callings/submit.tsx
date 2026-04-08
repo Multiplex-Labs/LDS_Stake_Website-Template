@@ -26,6 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { WARDS } from "@/lib/constants";
 
 const formSchema = z.object({
   memberFirstName: z.string().min(1, "First name is required"),
@@ -39,17 +40,6 @@ const formSchema = z.object({
   previousHolderWard: z.string().optional(),
 });
 
-const WARDS = [
-  "9th Ward",
-  "10th Ward",
-  "11th Ward",
-  "12th Ward",
-  "13th Ward",
-  "14th Ward",
-  "15th Ward",
-  "16th Ward",
-  "17th Ward",
-];
 
 const CALLINGS = [
   "Stake High Councilor",
