@@ -26,6 +26,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('bishop_id', sa.Integer(), nullable=True),
+    sa.Column('start_time', sa.Float(), nullable=False),
     sa.ForeignKeyConstraint(['bishop_id'], ['usercalling.id'], name=op.f('fk_ward_bishop_id_usercalling')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_ward'))
     )

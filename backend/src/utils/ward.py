@@ -10,14 +10,14 @@ from ..models import Ward
 logger = getLogger("application")
 
 def load_wards():
-    """Loads wards from wards.txt file."""
+    """Loads wards from wards.csv file."""
 
-    ward_definition_file = os.getenv("WARD_DEFINITION_FILE", "wards.txt")
+    ward_definition_file = os.getenv("WARD_DEFINITION_FILE", "wards.csv")
 
     if not os.path.isfile(ward_definition_file):
         logger.warning(
             f"Ward definition file '{ward_definition_file}' not found. No wards will be loaded. "
-            "To fix this, create a wards.txt file with the correct format and set the WARD_DEFINITION_FILE environment variable to the path of the file."
+            "To fix this, create a wards.csv file with the correct format and set the WARD_DEFINITION_FILE environment variable to the path of the file."
         )
         return
     
@@ -41,12 +41,13 @@ def load_wards():
         )
 
         for w in wards:
+            name,start_time = w.split(",")
             bishop_slot = get_or_make_user_calling(
                 calling_id=bishop_calling.id,
                 slot_id=wards.index(w) + 1,
                 session=session
             )
             logger.info(f"Creating ward '{w}'.")
-            ward = Ward(name=w, bishop_calling_id=bishop_slot.id)
+            ward = Ward(name=name, start_time=float(start_time), bishop_calling_id=bishop_slot.id)
             session.add(ward)
             session.commit()

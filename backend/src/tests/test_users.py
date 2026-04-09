@@ -1,8 +1,9 @@
 from typing import Tuple
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from src.models import User
+from src.models import User, UserCalling, Calling
 
 
 def login_client(client: TestClient, email: str, password: str) -> str:
@@ -93,11 +94,24 @@ def test_get_users(client: TestClient, userpass: Tuple[User, str]):
     assert isinstance(j, list)
     assert any(u["id"] == user.id for u in j)
 
-def test_get_users_noauth(client: TestClient):
+def test_get_users_noauth(client: TestClient, db_session):
     r = client.get("/users/")
     # This will get all users that have public callings.
-    # We haven't set up any test users, so we should get an empty list
     assert r.status_code == 200
     j = r.json()
     assert isinstance(j, list)
-    assert len(j) == 0
+    for u in j:
+        # All returned users should have at least one public calling
+        has_public_calling = False
+        for calling_data in u["callings"]:
+            calling = db_session.exec(
+                select(Calling).where(Calling.id == calling_data["calling_id"])
+            ).first()
+            # For some reason this is returning a tuple, idk why.
+            print(calling[0])
+            if calling[0] and calling[0].is_public:
+                has_public_calling = True
+                break
+        assert has_public_calling
+        
+

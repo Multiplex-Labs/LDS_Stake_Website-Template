@@ -7,7 +7,7 @@ from src.models import Ward
 
 
 def test_list_wards_returns_created_ward(client: TestClient, db_session: Session):
-    ward = Ward(name="Test Ward", bishop_id=None)
+    ward = Ward(name="Test Ward", bishop_id=None, start_time=9.0)
     db_session.add(ward)
     db_session.commit()
     db_session.refresh(ward)
@@ -21,7 +21,7 @@ def test_list_wards_returns_created_ward(client: TestClient, db_session: Session
 
 
 def test_get_ward_by_id_returns_ward(client: TestClient, db_session: Session):
-    ward = Ward(name="View Ward", bishop_id=None)
+    ward = Ward(name="View Ward", bishop_id=None, start_time=9.0)
     db_session.add(ward)
     db_session.commit()
     db_session.refresh(ward)

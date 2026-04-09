@@ -1,0 +1,8 @@
+# Here is an example wards.csv
+# The first column is the name of the ward
+# The second column is the meeting time (start hour, represented as a float)
+# ward1,9 (so this is a ward called ward1 that starts at 9 am) 
+# ward2,10.5 (this is a ward called ward2 that starts at 10:30am)
+# ward3,13 (this is a ward that starts at 1pm)
+ward1,9
+ward2,10.5

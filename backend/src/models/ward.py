@@ -9,6 +9,7 @@ class Ward(BaseModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     bishop_id: int = Field(default=None, foreign_key="usercalling.id", nullable=True)
+    start_time: float
 
     # Relationships
     bishop: UserCalling = Relationship()
