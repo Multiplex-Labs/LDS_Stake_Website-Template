@@ -7,26 +7,17 @@ import { PlusCircle, FileCheck, Settings, Archive } from "lucide-react";
 import { Link } from "wouter";
 import { useWardMap } from "@/lib/hooks";
 import type { KanbanBoard, CallingProposal, Ward } from "@/types";
+import { KANBAN_STAGES } from "@/lib/constants";
 
-// Enum value → column id mapping (KanbanStages: SP_APPROVAL=0, HC_APPROVAL=1, ...)
-const STAGE_KEY_TO_COLUMN_ID: Record<string, string> = {
-  "0": "pending-stake-approval",
-  "1": "pending-hc-approval",
-  "2": "pending-interview",
-  "3": "pending-sustainment",
-  "4": "pending-setting-apart",
-  "5": "pending-lcr",
-  // "6" = DONE, not shown on board
-};
+const STAGE_KEY_TO_COLUMN_ID: Record<string, string> = Object.fromEntries(
+  KANBAN_STAGES.map((s) => [s.key, s.id]),
+);
 
-const COLUMNS = [
-  { id: "pending-stake-approval",  title: "Pending Stake Presidency Approval", color: "bg-yellow-500/10 border-yellow-500/20" },
-  { id: "pending-hc-approval",     title: "Pending High Council Approval",     color: "bg-orange-500/10 border-orange-500/20" },
-  { id: "pending-interview",       title: "Pending Interview",                  color: "bg-blue-500/10 border-blue-500/20" },
-  { id: "pending-sustainment",     title: "Pending Sustainment / Release",      color: "bg-purple-500/10 border-purple-500/20" },
-  { id: "pending-setting-apart",   title: "Pending Setting Apart",              color: "bg-pink-500/10 border-pink-500/20" },
-  { id: "pending-lcr",             title: "Pending LCR Update",                color: "bg-green-500/10 border-green-500/20" },
-];
+const COLUMNS = KANBAN_STAGES.map((s) => ({
+  id: s.id,
+  title: `Pending ${s.label}`,
+  cssClass: s.cssClass,
+}));
 
 export default function CallingSystem() {
   const { data: board = {}, isLoading: boardLoading } = useQuery<KanbanBoard>({
@@ -78,14 +69,16 @@ export default function CallingSystem() {
           {COLUMNS.map((column) => {
             const items = boardLoading ? [] : (columnItems.get(column.id) ?? []);
             return (
-              <div key={column.id} className="min-w-[280px] w-[280px] flex flex-col">
-                <div className={`p-3 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm ${column.color.replace('bg-', 'border-b-').split(' ')[1]}`}>
+              <div key={column.id} className={`min-w-[280px] w-[280px] flex flex-col ${column.cssClass}`}>
+                <div className="p-3 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm"
+                  style={{ borderBottomColor: "var(--stage-border)" }}>
                   <span className="line-clamp-2">{column.title}</span>
                   <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border shrink-0 ml-2">
                     {boardLoading ? "…" : items.length}
                   </span>
                 </div>
-                <div className={`flex-1 rounded-b-lg border border-t-0 p-2 space-y-2 ${column.color}`}>
+                <div className="flex-1 rounded-b-lg border border-t-0 p-2 space-y-2"
+                  style={{ backgroundColor: "var(--stage-bg)", borderColor: "var(--stage-border)" }}>
                   {boardLoading ? (
                     <div className="h-24 flex items-center justify-center text-muted-foreground/40 text-sm">
                       Loading…
@@ -95,7 +88,7 @@ export default function CallingSystem() {
                       <Card
                         key={item.id}
                         className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-4 ${
-                          item.is_release ? "border-l-red-500" : "border-l-cyan-500"
+                          item.is_release ? "border-l-destructive" : "border-l-primary"
                         }`}
                       >
                         <CardContent className="p-3 space-y-2">

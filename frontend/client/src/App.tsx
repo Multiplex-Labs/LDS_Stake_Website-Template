@@ -40,7 +40,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
-      <Route path="/change-password" component={ChangePassword} />
+      <Route path="/change-password">{() => <ProtectedRoute><ChangePassword /></ProtectedRoute>}</Route>
       <Route path="/license" component={License} />
       <Route path="/stake-leadership" component={StakeLeadership} />
 
@@ -96,9 +96,14 @@ function AuthSync() {
         });
         if (meRes.ok) {
           setUser((await meRes.json()) as AuthUser);
+        } else {
+          console.error("[AuthSync] /auth/me returned", meRes.status);
+          setAccessToken(null);
         }
-      } catch {
-        // Network error — treat as unauthenticated
+      } catch (err) {
+        if (!(err instanceof TypeError)) {
+          console.error("[AuthSync] unexpected error during session restore:", err);
+        }
       } finally {
         setLoading(false);
       }

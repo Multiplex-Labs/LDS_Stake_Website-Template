@@ -36,24 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
-
-const STAGE_LABELS: Record<string, string> = {
-  "0": "Pending SP Approval",
-  "1": "Pending HC Approval",
-  "2": "Pending Interview",
-  "3": "Pending Sustainment",
-  "4": "Pending Setting Apart",
-  "5": "Pending LCR Update",
-};
-
-const STAGE_BADGE_CLASS: Record<string, string> = {
-  "0": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  "1": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-  "2": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  "3": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  "4": "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
-  "5": "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400",
-};
+import { STAGE_LABELS, STAGE_BADGE_CLASS } from "@/lib/constants";
 
 interface ProposalWithStage extends CallingProposal {
   stageKey: string;
@@ -164,8 +147,26 @@ export default function ManageCallings() {
       invalidateBoard();
       setSelectedProposal(null);
     },
-    onError: () => toast.error("Failed", { description: "Ensure an interviewer has been assigned first." }),
+    onError: (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("400") || raw.startsWith("409")) {
+        toast.error("Cannot complete interview", { description: "Ensure an interviewer has been assigned first." });
+      } else {
+        toast.error("Failed to complete interview", { description: "Please refresh and try again." });
+      }
+    },
   });
+
+  function stageAdvanceOnError(err: unknown) {
+    const raw = err instanceof Error ? err.message : "";
+    if (raw.startsWith("401")) {
+      toast.error("Session expired", { description: "Please log in again." });
+    } else if (raw.startsWith("400") || raw.startsWith("409")) {
+      toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+    } else {
+      toast.error("Failed to advance stage", { description: "Please refresh and try again." });
+    }
+  }
 
   const sustainMutation = useMutation({
     mutationFn: (id: number) =>
@@ -175,7 +176,7 @@ export default function ManageCallings() {
       invalidateBoard();
       setSelectedProposal(null);
     },
-    onError: () => toast.error("Failed to advance stage"),
+    onError: stageAdvanceOnError,
   });
 
   const setApartMutation = useMutation({
@@ -186,7 +187,7 @@ export default function ManageCallings() {
       invalidateBoard();
       setSelectedProposal(null);
     },
-    onError: () => toast.error("Failed to advance stage"),
+    onError: stageAdvanceOnError,
   });
 
   const lcrMutation = useMutation({
@@ -197,7 +198,7 @@ export default function ManageCallings() {
       invalidateBoard();
       setSelectedProposal(null);
     },
-    onError: () => toast.error("Failed to advance stage"),
+    onError: stageAdvanceOnError,
   });
 
   const anyMutating = updateMutation.isPending || scheduleInterviewMutation.isPending || completeInterviewMutation.isPending || sustainMutation.isPending || setApartMutation.isPending || lcrMutation.isPending;

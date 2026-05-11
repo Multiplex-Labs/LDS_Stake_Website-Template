@@ -47,17 +47,22 @@ export default function ChangePassword() {
       setAccessToken(null);
       setUser(null);
       setLocation("/login");
-    } catch (err: any) {
-      const raw = err?.message ?? "";
-      if (raw.includes("401")) {
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("401")) {
         toast.error("Session expired", { description: "Please log in again to change your password." });
         setAccessToken(null);
         setUser(null);
         setLocation("/login");
         return;
+      } else if (raw.startsWith("400")) {
+        toast.error("Error", { description: "Current password is incorrect." });
+      } else if (raw.startsWith("403")) {
+        toast.error("Not Authorized", { description: "You are not authorized to change this password." });
+      } else {
+        console.error("[change-password] unexpected error:", err);
+        toast.error("Error", { description: "Failed to change password. Please try again." });
       }
-      const msg = raw.includes("400") ? "Current password is incorrect." : "Failed to change password.";
-      toast.error("Error", { description: msg });
     } finally {
       setIsLoading(false);
     }

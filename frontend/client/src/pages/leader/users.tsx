@@ -200,10 +200,7 @@ export default function UserAdmin() {
     createUserMutation.mutate(addForm);
   };
 
-  const getStatusBadge = (active: boolean) =>
-    active
-      ? "bg-green-100 text-green-700 border-transparent dark:bg-green-900/30 dark:text-green-400"
-      : "bg-red-100 text-red-700 border-transparent dark:bg-red-900/30 dark:text-red-400";
+  const getStatusBadge = (active: boolean) => (active ? "badge-success" : "badge-error");
 
   if (isError) {
     return (
@@ -321,9 +318,9 @@ export default function UserAdmin() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={`font-medium rounded-md px-2.5 py-0.5 text-xs ${getStatusBadge(user.active)}`}>
+                    <span className={`badge text-xs ${getStatusBadge(user.active)}`}>
                       {user.active ? "Active" : "Disabled"}
-                    </Badge>
+                    </span>
                   </TableCell>
                   <TableCell className="text-sm text-foreground">
                     {user.callings?.map((c) => c.calling.name).join(", ") || "—"}

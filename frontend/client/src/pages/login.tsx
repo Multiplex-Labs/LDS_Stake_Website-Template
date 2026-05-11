@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { setAccessToken } from "@/lib/queryClient";
+import { setAccessToken, apiRequest } from "@/lib/queryClient";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
 export default function Login() {
@@ -43,14 +43,7 @@ export default function Login() {
       const { access_token } = await loginRes.json();
       setAccessToken(access_token);
 
-      // Fetch full user profile
-      const meRes = await fetch("/api/auth/me", {
-        credentials: "include",
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-      if (!meRes.ok) {
-        throw new Error("Failed to fetch user");
-      }
+      const meRes = await apiRequest("GET", "/api/auth/me");
       const user: AuthUser = await meRes.json();
       setUser(user);
 
@@ -61,8 +54,16 @@ export default function Login() {
       } else {
         setLocation("/leader/assignments");
       }
-    } catch {
-      toast.error("Login Failed", { description: "Invalid email or password." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("401") || msg === "Invalid credentials") {
+        toast.error("Login Failed", { description: "Invalid email or password." });
+      } else if (msg.startsWith("5")) {
+        toast.error("Service Unavailable", { description: "The login service is temporarily unavailable. Please try again." });
+      } else {
+        console.error("[login] unexpected error:", err);
+        toast.error("Login Failed", { description: "A network error occurred. Please check your connection." });
+      }
     } finally {
       setIsLoading(false);
     }

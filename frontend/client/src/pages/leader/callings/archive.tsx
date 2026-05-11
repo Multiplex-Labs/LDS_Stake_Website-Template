@@ -52,7 +52,7 @@ function estimatedRelease(completedIso: string, callingName: string): string {
 }
 
 export default function ArchiveCallings() {
-  const { data: board, isLoading } = useQuery<KanbanBoard>({
+  const { data: board, isLoading, isError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
   const { data: wards = [] } = useQuery<Ward[]>({
@@ -109,6 +109,16 @@ export default function ArchiveCallings() {
     setReleaseDateStart("");
     setReleaseDateEnd("");
   };
+
+  if (isError) {
+    return (
+      <Layout>
+        <div className="text-center py-16">
+          <p className="text-destructive">Failed to load the calling archive. Please refresh.</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -265,9 +275,7 @@ export default function ArchiveCallings() {
                       <TableRow
                         key={item.id}
                         className={`cursor-pointer transition-colors hover:bg-muted/50 ${
-                          item.is_release
-                            ? "bg-red-50/50 dark:bg-red-950/10"
-                            : "bg-cyan-50/50 dark:bg-cyan-950/10"
+                          item.is_release ? "bg-destructive/5" : "bg-primary/5"
                         }`}
                         onClick={() => setSelectedItem(item)}
                       >
@@ -278,10 +286,7 @@ export default function ArchiveCallings() {
                         <TableCell>{formatDate(completedDate)}</TableCell>
                         <TableCell>{releaseDate ? formatDate(releaseDate) : "—"}</TableCell>
                         <TableCell className="text-right">
-                          <Badge
-                            variant={item.is_release ? "destructive" : "default"}
-                            className={!item.is_release ? "bg-cyan-600 hover:bg-cyan-700" : ""}
-                          >
+                          <Badge variant={item.is_release ? "destructive" : "default"}>
                             {item.is_release ? "Release" : "Calling"}
                           </Badge>
                         </TableCell>
@@ -307,10 +312,7 @@ export default function ArchiveCallings() {
               <DialogTitle className="text-2xl flex items-center gap-3">
                 {selectedItem && (
                   <>
-                    <Badge
-                      variant={selectedItem.is_release ? "destructive" : "default"}
-                      className={!selectedItem.is_release ? "bg-cyan-600" : ""}
-                    >
+                    <Badge variant={selectedItem.is_release ? "destructive" : "default"}>
                       {selectedItem.is_release ? "RELEASE" : "CALLING"}
                     </Badge>
                     <span>{selectedItem.fname} {selectedItem.lname}</span>

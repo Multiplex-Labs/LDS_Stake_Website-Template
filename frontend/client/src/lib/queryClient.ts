@@ -29,6 +29,11 @@ async function refreshAccessToken(): Promise<string | null> {
       setAccessToken(data.access_token);
       return data.access_token as string;
     })
+    .catch((err) => {
+      console.error("[auth] token refresh network error:", err);
+      setAccessToken(null);
+      return null;
+    })
     .finally(() => {
       _refreshPromise = null;
     });
@@ -102,17 +107,16 @@ export const getQueryFn: <T>(options: {
     let res = await doFetch(_accessToken);
 
     if (res.status === 401) {
-      if (unauthorizedBehavior === "returnNull") return null;
       const newToken = await refreshAccessToken();
       if (!newToken) {
+        if (unauthorizedBehavior === "returnNull") return null;
         await throwIfResNotOk(res);
-        return null;
       }
       res = await doFetch(newToken);
-    }
-
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      if (res.status === 401) {
+        if (unauthorizedBehavior === "returnNull") return null;
+        await throwIfResNotOk(res);
+      }
     }
 
     await throwIfResNotOk(res);

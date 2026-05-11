@@ -127,3 +127,10 @@
     @apply font-serif;
   }
 }
+
+.stage-sp-approval  { --stage-bg: hsl(45 80% 50% / 0.10); --stage-border: hsl(45 80% 50% / 0.20); }
+.stage-hc-approval  { --stage-bg: hsl(25 80% 55% / 0.10); --stage-border: hsl(25 80% 55% / 0.20); }
+.stage-interview    { --stage-bg: hsl(220 80% 55% / 0.10); --stage-border: hsl(220 80% 55% / 0.20); }
+.stage-sustain      { --stage-bg: hsl(270 60% 55% / 0.10); --stage-border: hsl(270 60% 55% / 0.20); }
+.stage-set-apart    { --stage-bg: hsl(320 60% 55% / 0.10); --stage-border: hsl(320 60% 55% / 0.20); }
+.stage-lcr-update   { --stage-bg: hsl(145 60% 40% / 0.10); --stage-border: hsl(145 60% 40% / 0.20); }
