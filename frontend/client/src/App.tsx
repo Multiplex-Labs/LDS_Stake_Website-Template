@@ -30,6 +30,7 @@ import UserAdmin from "@/pages/leader/users";
 
 import Resources from "@/pages/resources";
 import Login from "@/pages/login";
+import ChangePassword from "@/pages/change-password";
 import License from "@/pages/license";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 
@@ -38,6 +39,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/change-password" component={ChangePassword} />
       <Route path="/license" component={License} />
       <Route path="/stake-leadership" component={StakeLeadership} />
 

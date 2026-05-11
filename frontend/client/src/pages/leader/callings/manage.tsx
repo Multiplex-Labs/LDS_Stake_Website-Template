@@ -1,11 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Search, Save } from "lucide-react";
+import { ChevronLeft, Search, Save, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import {
   Table,
@@ -32,199 +30,187 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { ActiveCalling } from "@/types";
-import { WARDS, CALLING_STAGES } from "@/lib/constants";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
 
-const CallingEditSchema = z.object({
-  firstName: z.string().min(1, "Required"),
-  lastName: z.string().min(1, "Required"),
-  calling: z.string().min(1, "Required"),
-  ward: z.string().min(1, "Required"),
-  stage: z.string().min(1, "Required"),
-  spouseName: z.string().optional(),
-  dateSubmitted: z.string().optional(),
-  stakePresApprovalDate: z.string().optional(),
-  hcApprovalDate: z.string().optional(),
-  interviewDate: z.string().optional(),
-  interviewer: z.string().optional(),
-  sustainedReleasedDate: z.string().optional(),
-  setApartDate: z.string().optional(),
-  lcrUpdatedDate: z.string().optional(),
-  notes: z.string().optional(),
-});
+const STAGE_LABELS: Record<string, string> = {
+  "0": "Pending SP Approval",
+  "1": "Pending HC Approval",
+  "2": "Pending Interview",
+  "3": "Pending Sustainment",
+  "4": "Pending Setting Apart",
+  "5": "Pending LCR Update",
+};
 
-type CallingEdit = z.infer<typeof CallingEditSchema>;
+const STAGE_BADGE_CLASS: Record<string, string> = {
+  "0": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  "1": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  "2": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  "3": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  "4": "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+  "5": "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400",
+};
 
-const STAGES = CALLING_STAGES;
+interface ProposalWithStage extends CallingProposal {
+  stageKey: string;
+}
 
-const ACTIVE_DATA: ActiveCalling[] = [
-  {
-    id: "1",
-    firstName: "Michael",
-    lastName: "Brown",
-    spouseName: "Sarah Brown",
-    calling: "Elders Quorum President",
-    ward: "14th Ward",
-    stage: "pending-stake-approval",
-    dateSubmitted: "2025-08-15",
-    dateLastModified: "2025-08-15",
-    notes: "Has served as counselor previously. Strong leader."
-  },
-  {
-    id: "2",
-    firstName: "Christopher",
-    lastName: "Martinez",
-    spouseName: "Ashley Martinez",
-    calling: "Sunday School President",
-    ward: "11th Ward",
-    stage: "pending-stake-approval",
-    dateSubmitted: "2025-08-16",
-    dateLastModified: "2025-08-16",
-    notes: "Great teacher, very organized."
-  },
-  {
-    id: "3",
-    firstName: "Andrew",
-    lastName: "Garcia",
-    spouseName: "Megan Garcia",
-    calling: "Relief Society Teacher",
-    ward: "17th Ward",
-    stage: "pending-stake-approval",
-    dateSubmitted: "2025-08-14",
-    dateLastModified: "2025-08-14"
-  },
-  {
-    id: "4",
-    firstName: "James",
-    lastName: "Wilson",
-    spouseName: "Emily Wilson",
-    calling: "Bishopric 2nd Counselor",
-    ward: "10th Ward",
-    stage: "pending-hc-approval",
-    dateSubmitted: "2025-08-10",
-    dateLastModified: "2025-08-12",
-    stakePresApprovalDate: "2025-08-12"
-  },
-  {
-    id: "5",
-    firstName: "David",
-    lastName: "Clark",
-    spouseName: "Jennifer Clark",
-    calling: "Relief Society President",
-    ward: "12th Ward",
-    stage: "pending-interview",
-    dateSubmitted: "2025-08-05",
-    dateLastModified: "2025-08-14",
-    stakePresApprovalDate: "2025-08-08",
-    hcApprovalDate: "2025-08-14"
-  },
-  {
-    id: "6",
-    firstName: "Robert",
-    lastName: "Taylor",
-    spouseName: "Jessica Taylor",
-    calling: "Ward Clerk",
-    ward: "9th Ward",
-    stage: "pending-sustainment",
-    dateSubmitted: "2025-08-01",
-    dateLastModified: "2025-08-13",
-    stakePresApprovalDate: "2025-08-03",
-    hcApprovalDate: "2025-08-06",
-    interviewDate: "2025-08-10",
-    interviewer: "President Jones"
-  },
-  {
-    id: "7",
-    firstName: "Ryan",
-    lastName: "Robinson",
-    spouseName: "Lauren Robinson",
-    calling: "Ward Mission Leader",
-    ward: "10th Ward",
-    stage: "pending-setting-apart",
-    dateSubmitted: "2025-07-28",
-    dateLastModified: "2025-08-15",
-    stakePresApprovalDate: "2025-07-30",
-    hcApprovalDate: "2025-08-03",
-    interviewDate: "2025-08-05",
-    interviewer: "President Jones",
-    sustainedReleasedDate: "2025-08-11"
-  },
-  {
-    id: "8",
-    firstName: "Matthew",
-    lastName: "White",
-    spouseName: "Elizabeth White",
-    calling: "Primary President",
-    ward: "13th Ward",
-    stage: "pending-lcr",
-    dateSubmitted: "2025-07-25",
-    dateLastModified: "2025-08-14",
-    stakePresApprovalDate: "2025-07-27",
-    hcApprovalDate: "2025-07-31",
-    interviewDate: "2025-08-03",
-    interviewer: "President Jones",
-    sustainedReleasedDate: "2025-08-11",
-    setApartDate: "2025-08-11"
-  }
-];
+interface EditForm {
+  fname: string;
+  lname: string;
+  spouse_name: string;
+  proposed_calling: string;
+  ward_id: number | "";
+  is_release: boolean;
+}
 
 export default function ManageCallings() {
-  const [data, setData] = useState<ActiveCalling[]>(ACTIVE_DATA);
-  const [selectedItem, setSelectedItem] = useState<ActiveCalling | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [wardFilter, setWardFilter] = useState("all");
-
-  const form = useForm<CallingEdit>({
-    resolver: zodResolver(CallingEditSchema),
+  const { data: board = {}, isLoading, isError } = useQuery<KanbanBoard>({
+    queryKey: ["/api/calling-kanban/board"],
+  });
+  const { data: wards = [] } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+  const { data: users = [] } = useQuery<ApiUser[]>({
+    queryKey: ["/api/users/"],
   });
 
-  useEffect(() => {
-    if (selectedItem) {
-      form.reset({
-        firstName: selectedItem.firstName,
-        lastName: selectedItem.lastName,
-        calling: selectedItem.calling,
-        ward: selectedItem.ward,
-        stage: selectedItem.stage,
-        spouseName: selectedItem.spouseName ?? "",
-        dateSubmitted: selectedItem.dateSubmitted ?? "",
-        stakePresApprovalDate: selectedItem.stakePresApprovalDate ?? "",
-        hcApprovalDate: selectedItem.hcApprovalDate ?? "",
-        interviewDate: selectedItem.interviewDate ?? "",
-        interviewer: selectedItem.interviewer ?? "",
-        sustainedReleasedDate: selectedItem.sustainedReleasedDate ?? "",
-        setApartDate: selectedItem.setApartDate ?? "",
-        lcrUpdatedDate: selectedItem.lcrUpdatedDate ?? "",
-        notes: selectedItem.notes ?? "",
-      });
-    }
-  }, [selectedItem, form]);
+  const [selectedProposal, setSelectedProposal] = useState<ProposalWithStage | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [interviewerId, setInterviewerId] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [wardFilter, setWardFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
 
-  const filteredData = useMemo(() => data.filter(item => {
-    const fullName = `${item.firstName} ${item.lastName}`.toLowerCase();
-    const matchesSearch = !searchTerm || fullName.includes(searchTerm.toLowerCase()) || item.calling.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesWard = wardFilter === "all" || item.ward === wardFilter;
-    return matchesSearch && matchesWard;
-  }), [data, searchTerm, wardFilter]);
+  const wardMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const w of wards) m.set(w.id, w.name);
+    return m;
+  }, [wards]);
 
-  function onSubmit(values: CallingEdit) {
-    if (!selectedItem) return;
-    setData(prev => prev.map(item =>
-      item.id === selectedItem.id
-        ? { ...item, ...values, dateLastModified: new Date().toISOString().split("T")[0] }
-        : item
-    ));
-    toast.success("Record Updated", {
-      description: `Updates for ${values.firstName} ${values.lastName} have been saved.`,
+  // Flatten board into list, excluding DONE (stage "6")
+  const proposals = useMemo<ProposalWithStage[]>(() => {
+    return Object.entries(board)
+      .filter(([stage]) => stage !== "6")
+      .flatMap(([stage, items]) => items.map((p) => ({ ...p, stageKey: stage })));
+  }, [board]);
+
+  const filtered = useMemo(() => {
+    return proposals.filter((p) => {
+      const name = `${p.fname} ${p.lname}`.toLowerCase();
+      const matchSearch = !searchTerm || name.includes(searchTerm.toLowerCase()) || p.proposed_calling.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchWard = wardFilter === "all" || String(p.ward_id) === wardFilter;
+      const matchStage = stageFilter === "all" || p.stageKey === stageFilter;
+      return matchSearch && matchWard && matchStage;
     });
-    setSelectedItem(null);
+  }, [proposals, searchTerm, wardFilter, stageFilter]);
+
+  function openEdit(p: ProposalWithStage) {
+    setSelectedProposal(p);
+    setInterviewerId("");
+    setEditForm({
+      fname: p.fname,
+      lname: p.lname,
+      spouse_name: p.spouse_name,
+      proposed_calling: p.proposed_calling,
+      ward_id: p.ward_id,
+      is_release: p.is_release,
+    });
   }
 
-  const getStageLabel = (id: string) => STAGES.find(s => s.id === id)?.label || id;
-  const { errors } = form.formState;
+  const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, form, original }: { id: number; form: EditForm; original: ProposalWithStage }) =>
+      apiRequest("PUT", `/api/calling-kanban/proposals/${id}`, {
+        id,
+        fname: form.fname,
+        lname: form.lname,
+        spouse_name: form.spouse_name,
+        proposed_calling: form.proposed_calling,
+        ward_id: form.ward_id === "" ? original.ward_id : form.ward_id,
+        is_release: form.is_release,
+        submitter: original.submitter,
+        submitted_at: original.submitted_at,
+        updated_at: original.updated_at,
+      }),
+    onSuccess: () => {
+      toast.success("Proposal updated");
+      invalidateBoard();
+      setSelectedProposal(null);
+    },
+    onError: () => toast.error("Update failed", { description: "Could not save changes." }),
+  });
+
+  const scheduleInterviewMutation = useMutation({
+    mutationFn: ({ id, interviewerId }: { id: number; interviewerId: number }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/interview?interviewer_id=${interviewerId}`),
+    onSuccess: () => {
+      toast.success("Interviewer assigned");
+      invalidateBoard();
+    },
+    onError: () => toast.error("Failed to assign interviewer"),
+  });
+
+  const completeInterviewMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/interview/complete`),
+    onSuccess: () => {
+      toast.success("Interview marked complete — proposal moved to Sustainment");
+      invalidateBoard();
+      setSelectedProposal(null);
+    },
+    onError: () => toast.error("Failed", { description: "Ensure an interviewer has been assigned first." }),
+  });
+
+  const sustainMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/sustain`),
+    onSuccess: () => {
+      toast.success("Marked as sustained");
+      invalidateBoard();
+      setSelectedProposal(null);
+    },
+    onError: () => toast.error("Failed to advance stage"),
+  });
+
+  const setApartMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/set-apart`),
+    onSuccess: () => {
+      toast.success("Marked as set apart");
+      invalidateBoard();
+      setSelectedProposal(null);
+    },
+    onError: () => toast.error("Failed to advance stage"),
+  });
+
+  const lcrMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/lcr`),
+    onSuccess: () => {
+      toast.success("LCR marked as updated — proposal archived");
+      invalidateBoard();
+      setSelectedProposal(null);
+    },
+    onError: () => toast.error("Failed to advance stage"),
+  });
+
+  const anyMutating = updateMutation.isPending || scheduleInterviewMutation.isPending || completeInterviewMutation.isPending || sustainMutation.isPending || setApartMutation.isPending || lcrMutation.isPending;
+
+  if (isError) {
+    return (
+      <Layout>
+        <div className="text-center py-16">
+          <p className="text-destructive">Failed to load calling proposals. Please refresh.</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -237,35 +223,46 @@ export default function ManageCallings() {
         </Link>
 
         <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Manage Callings</h1>
-              <p className="text-muted-foreground mt-1">View and edit active callings in the pipeline.</p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold">Manage Callings</h1>
+            <p className="text-muted-foreground mt-1">View and advance active calling proposals through the pipeline.</p>
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col md:flex-row gap-4 bg-muted/30 p-4 rounded-lg border">
+          <div className="flex flex-col md:flex-row gap-3 bg-muted/30 p-4 rounded-lg border">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or calling..."
+                placeholder="Search by name or calling…"
                 className="pl-8"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Select value={wardFilter} onValueChange={setWardFilter}>
-              <SelectTrigger className="w-full md:w-[200px]">
-                <SelectValue placeholder="Filter by Ward" />
+            <Select value={stageFilter} onValueChange={setStageFilter}>
+              <SelectTrigger className="w-full md:w-[220px]">
+                <SelectValue placeholder="Filter by Stage" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Wards</SelectItem>
-                {WARDS.map(ward => (
-                  <SelectItem key={ward} value={ward}>{ward}</SelectItem>
+                <SelectItem value="all">All Stages</SelectItem>
+                {Object.entries(STAGE_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {wards.length > 0 && (
+              <Select value={wardFilter} onValueChange={setWardFilter}>
+                <SelectTrigger className="w-full md:w-[180px]">
+                  <SelectValue placeholder="Filter by Ward" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Wards</SelectItem>
+                  {wards.map((w) => (
+                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Table */}
@@ -273,38 +270,59 @@ export default function ManageCallings() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Member Name</TableHead>
-                  <TableHead>Calling</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Proposed Calling</TableHead>
                   <TableHead>Ward</TableHead>
-                  <TableHead>Current Stage</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Stage</TableHead>
                   <TableHead>Submitted</TableHead>
-                  <TableHead>Last Modified</TableHead>
+                  <TableHead>Updated</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.length > 0 ? (
-                  filteredData.map((item) => (
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 7 }).map((_, j) => (
+                        <TableCell key={j}><div className="skeleton h-4 w-24 rounded" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : filtered.length > 0 ? (
+                  filtered.map((p) => (
                     <TableRow
-                      key={item.id}
+                      key={p.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => openEdit(p)}
                     >
-                      <TableCell className="font-medium">{item.firstName} {item.lastName}</TableCell>
-                      <TableCell>{item.calling}</TableCell>
-                      <TableCell>{item.ward}</TableCell>
+                      <TableCell className="font-medium">{p.fname} {p.lname}</TableCell>
+                      <TableCell>{p.proposed_calling}</TableCell>
+                      <TableCell>{wardMap.get(p.ward_id) ?? `Ward ${p.ward_id}`}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="font-normal truncate max-w-[200px] block">
-                          {getStageLabel(item.stage)}
+                        <Badge variant={p.is_release ? "destructive" : "secondary"} className="text-xs">
+                          {p.is_release ? "Release" : "New Calling"}
                         </Badge>
                       </TableCell>
-                      <TableCell>{item.dateSubmitted}</TableCell>
-                      <TableCell>{item.dateLastModified}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          className={`font-normal text-xs ${STAGE_BADGE_CLASS[p.stageKey] ?? ""}`}
+                        >
+                          {STAGE_LABELS[p.stageKey] ?? `Stage ${p.stageKey}`}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(p.submitted_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(p.updated_at).toLocaleDateString()}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No active callings found.
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      No active calling proposals found.
                     </TableCell>
                   </TableRow>
                 )}
@@ -313,144 +331,208 @@ export default function ManageCallings() {
           </div>
         </div>
 
-        {/* Edit Dialog */}
-        <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-          <DialogContent className="max-w-[90vw] sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+        {/* Edit / Advance Dialog */}
+        <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && setSelectedProposal(null)}>
+          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
             <DialogHeader className="p-6 pb-4">
-              <DialogTitle className="text-2xl">Edit Record</DialogTitle>
+              <DialogTitle className="text-xl">
+                {selectedProposal && `${selectedProposal.fname} ${selectedProposal.lname}`}
+              </DialogTitle>
               <DialogDescription>
-                Modify details and pipeline status for this calling.
+                Edit proposal details or advance the pipeline stage.
               </DialogDescription>
             </DialogHeader>
 
-            {selectedItem && (
-              <ScrollArea className="flex-1 px-6">
-                <form id="edit-form" onSubmit={form.handleSubmit(onSubmit)}>
-                  <div className="grid gap-6 py-4">
-                    {/* Pipeline Status */}
-                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
-                      <Label className="text-primary font-semibold mb-2 block">Pipeline Status</Label>
-                      <Controller
-                        control={form.control}
-                        name="stage"
-                        render={({ field }) => (
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger className="bg-background">
+            {selectedProposal && editForm && (
+              <ScrollArea className="flex-1 px-6 pb-2">
+                <div className="space-y-6 py-2">
+                  {/* Current Stage */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Current stage:</span>
+                    <Badge
+                      variant="secondary"
+                      className={STAGE_BADGE_CLASS[selectedProposal.stageKey] ?? ""}
+                    >
+                      {STAGE_LABELS[selectedProposal.stageKey] ?? `Stage ${selectedProposal.stageKey}`}
+                    </Badge>
+                  </div>
+
+                  {/* Stage Actions */}
+                  {selectedProposal.stageKey === "0" || selectedProposal.stageKey === "1" ? (
+                    <div className="rounded-md bg-muted/50 border p-4 text-sm text-muted-foreground">
+                      Approval at this stage is handled on the <strong>Review Callings</strong> page.
+                    </div>
+                  ) : (
+                    <div className="rounded-md bg-primary/5 border border-primary/10 p-4 space-y-3">
+                      <p className="text-sm font-semibold text-primary">Advance Stage</p>
+
+                      {selectedProposal.stageKey === "2" && (
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Assign Interviewer</Label>
+                            <div className="flex gap-2">
+                              <Select value={interviewerId} onValueChange={setInterviewerId}>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder="Select a user…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {users.map((u) => (
+                                    <SelectItem key={u.id} value={String(u.id)}>
+                                      {u.fname} {u.lname}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!interviewerId || anyMutating}
+                                onClick={() =>
+                                  scheduleInterviewMutation.mutate({
+                                    id: selectedProposal.id,
+                                    interviewerId: Number(interviewerId),
+                                  })
+                                }
+                              >
+                                Assign
+                              </Button>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="gap-2 w-full"
+                            disabled={anyMutating}
+                            onClick={() => completeInterviewMutation.mutate(selectedProposal.id)}
+                          >
+                            <ArrowRight className="h-3.5 w-3.5" />
+                            Mark Interview Complete → Sustainment
+                          </Button>
+                        </div>
+                      )}
+
+                      {selectedProposal.stageKey === "3" && (
+                        <Button
+                          size="sm"
+                          className="gap-2 w-full"
+                          disabled={anyMutating}
+                          onClick={() => sustainMutation.mutate(selectedProposal.id)}
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                          Mark as Sustained → {selectedProposal.is_release ? "LCR Update" : "Setting Apart"}
+                        </Button>
+                      )}
+
+                      {selectedProposal.stageKey === "4" && (
+                        <Button
+                          size="sm"
+                          className="gap-2 w-full"
+                          disabled={anyMutating}
+                          onClick={() => setApartMutation.mutate(selectedProposal.id)}
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                          Mark as Set Apart → LCR Update
+                        </Button>
+                      )}
+
+                      {selectedProposal.stageKey === "5" && (
+                        <Button
+                          size="sm"
+                          className="gap-2 w-full"
+                          disabled={anyMutating}
+                          onClick={() => lcrMutation.mutate(selectedProposal.id)}
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                          Mark LCR Updated → Archive
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* Editable Fields */}
+                  <div className="space-y-4">
+                    <p className="text-sm font-semibold">Proposal Details</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>First Name</Label>
+                        <Input
+                          value={editForm.fname}
+                          onChange={(e) => setEditForm({ ...editForm, fname: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Last Name</Label>
+                        <Input
+                          value={editForm.lname}
+                          onChange={(e) => setEditForm({ ...editForm, lname: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Spouse Name</Label>
+                        <Input
+                          value={editForm.spouse_name}
+                          onChange={(e) => setEditForm({ ...editForm, spouse_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Ward</Label>
+                        {wards.length > 0 ? (
+                          <Select
+                            value={String(editForm.ward_id)}
+                            onValueChange={(v) => setEditForm({ ...editForm, ward_id: Number(v) })}
+                          >
+                            <SelectTrigger>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {STAGES.map(stage => (
-                                <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+                              {wards.map((w) => (
+                                <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                        ) : (
+                          <Input
+                            type="number"
+                            value={editForm.ward_id}
+                            onChange={(e) => setEditForm({ ...editForm, ward_id: Number(e.target.value) })}
+                          />
                         )}
-                      />
-                      {errors.stage && <p className="text-xs text-destructive mt-1">{errors.stage.message}</p>}
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Warning: Changing status manually bypasses standard approval workflows.
-                      </p>
-                    </div>
-
-                    {/* Personal Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>First Name</Label>
-                        <Input {...form.register("firstName")} />
-                        {errors.firstName && <p className="text-xs text-destructive">{errors.firstName.message}</p>}
                       </div>
-                      <div className="space-y-2">
-                        <Label>Last Name</Label>
-                        <Input {...form.register("lastName")} />
-                        {errors.lastName && <p className="text-xs text-destructive">{errors.lastName.message}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Spouse Name</Label>
-                        <Input {...form.register("spouseName")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Ward</Label>
-                        <Controller
-                          control={form.control}
-                          name="ward"
-                          render={({ field }) => (
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {WARDS.map(ward => (
-                                  <SelectItem key={ward} value={ward}>{ward}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
+                      <div className="col-span-2 space-y-1.5">
+                        <Label>Proposed Calling</Label>
+                        <Input
+                          value={editForm.proposed_calling}
+                          onChange={(e) => setEditForm({ ...editForm, proposed_calling: e.target.value })}
                         />
-                        {errors.ward && <p className="text-xs text-destructive">{errors.ward.message}</p>}
                       </div>
-                      <div className="col-span-2 space-y-2">
-                        <Label>Calling</Label>
-                        <Input {...form.register("calling")} />
-                        {errors.calling && <p className="text-xs text-destructive">{errors.calling.message}</p>}
+                      <div className="col-span-2 flex items-center gap-3">
+                        <Checkbox
+                          id="is_release"
+                          checked={editForm.is_release}
+                          onCheckedChange={(v) => setEditForm({ ...editForm, is_release: !!v })}
+                        />
+                        <Label htmlFor="is_release" className="cursor-pointer">This is a release (not a new calling)</Label>
                       </div>
-                    </div>
-
-                    <div className="border-t my-2" />
-
-                    {/* Tracking Dates */}
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Tracking Dates</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Date Submitted</Label>
-                        <Input type="date" {...form.register("dateSubmitted")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Presidency Approval</Label>
-                        <Input type="date" {...form.register("stakePresApprovalDate")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>High Council Approval</Label>
-                        <Input type="date" {...form.register("hcApprovalDate")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Interview Date</Label>
-                        <Input type="date" {...form.register("interviewDate")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Interviewer</Label>
-                        <Input {...form.register("interviewer")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Sustained Date</Label>
-                        <Input type="date" {...form.register("sustainedReleasedDate")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Set Apart Date</Label>
-                        <Input type="date" {...form.register("setApartDate")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>LCR Updated Date</Label>
-                        <Input type="date" {...form.register("lcrUpdatedDate")} />
-                      </div>
-                    </div>
-
-                    <div className="border-t my-2" />
-
-                    {/* Notes */}
-                    <div className="space-y-2">
-                      <Label>Notes</Label>
-                      <Textarea className="min-h-[100px]" {...form.register("notes")} />
                     </div>
                   </div>
-                </form>
+                </div>
               </ScrollArea>
             )}
 
-            <DialogFooter className="p-6 pt-4 border-t mt-auto">
-              <Button variant="outline" onClick={() => setSelectedItem(null)}>Cancel</Button>
-              <Button type="submit" form="edit-form" className="gap-2">
+            <DialogFooter className="p-6 pt-4 border-t">
+              <Button variant="outline" onClick={() => setSelectedProposal(null)}>Cancel</Button>
+              <Button
+                className="gap-2"
+                disabled={anyMutating || !editForm}
+                onClick={() =>
+                  selectedProposal &&
+                  editForm &&
+                  updateMutation.mutate({ id: selectedProposal.id, form: editForm, original: selectedProposal })
+                }
+              >
                 <Save className="h-4 w-4" />
-                Save Changes
+                {updateMutation.isPending ? "Saving…" : "Save Changes"}
               </Button>
             </DialogFooter>
           </DialogContent>
