@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Calendar, User, ClipboardList, Search, Filter, X } from "lucide-react";
+import { ChevronLeft, Calendar, User, Search } from "lucide-react";
 import { Link } from "wouter";
 import {
   Table,
@@ -34,145 +35,69 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { WARDS } from "@/lib/constants";
+import type { KanbanBoard, CallingProposal, Ward } from "@/types";
 
-interface ArchivedItem {
-  id: string;
-  type: 'calling' | 'release';
-  firstName: string;
-  lastName: string;
-  spouseName?: string;
-  calling: string;
-  ward: string;
-  dateSubmitted: string;
-  stakePresApprovalDate?: string;
-  hcApprovalDate?: string;
-  interviewDate?: string;
-  interviewer?: string;
-  sustainedReleasedDate?: string;
-  setApartDate?: string;
-  lcrUpdatedDate?: string;
-  hpInterviewDate?: string;
-  hpInterviewer?: string;
-  notes?: string;
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-const ARCHIVED_DATA: ArchivedItem[] = [
-  {
-    id: "1",
-    type: "calling",
-    firstName: "Thomas",
-    lastName: "Anderson",
-    spouseName: "Amanda Anderson",
-    calling: "Executive Secretary",
-    ward: "16th Ward",
-    dateSubmitted: "2025-01-15",
-    stakePresApprovalDate: "2025-01-16",
-    hcApprovalDate: "2025-01-19",
-    interviewDate: "2025-01-20",
-    interviewer: "President Jones",
-    sustainedReleasedDate: "2025-01-26",
-    setApartDate: "2025-01-26",
-    lcrUpdatedDate: "2025-01-27",
-    notes: "Replaced Brother Smith who graduated."
-  },
-  {
-    id: "2",
-    type: "release",
-    firstName: "Joshua",
-    lastName: "Thompson",
-    spouseName: "Brittany Thompson",
-    calling: "Elders Quorum Instructor",
-    ward: "15th Ward",
-    dateSubmitted: "2025-01-10",
-    stakePresApprovalDate: "2025-01-12",
-    hcApprovalDate: "2025-01-15",
-    sustainedReleasedDate: "2025-01-19",
-    lcrUpdatedDate: "2025-01-20",
-    notes: "Moved to 10th Ward."
-  },
-  {
-    id: "3",
-    type: "calling",
-    firstName: "Rachel",
-    lastName: "Green",
-    spouseName: "Ross Green",
-    calling: "Relief Society Counselor",
-    ward: "14th Ward",
-    dateSubmitted: "2024-12-01",
-    stakePresApprovalDate: "2024-12-05",
-    interviewDate: "2024-12-08",
-    interviewer: "President Jones",
-    sustainedReleasedDate: "2024-12-15",
-    setApartDate: "2024-12-15",
-    lcrUpdatedDate: "2024-12-16",
-  },
-  {
-    id: "4",
-    type: "release",
-    firstName: "Daniel",
-    lastName: "Lee",
-    spouseName: "Jennifer Lee",
-    calling: "Ward Clerk",
-    ward: "11th Ward",
-    dateSubmitted: "2024-11-15",
-    stakePresApprovalDate: "2024-11-18",
-    sustainedReleasedDate: "2024-11-25",
-    lcrUpdatedDate: "2024-11-26",
-    notes: "Graduated."
-  }
-];
-
+function estimatedRelease(completedIso: string, callingName: string): string {
+  const isLongTerm =
+    callingName.toLowerCase().includes("bishop") ||
+    callingName.toLowerCase().includes("high council");
+  const d = new Date(completedIso);
+  d.setFullYear(d.getFullYear() + (isLongTerm ? 3 : 1));
+  return d.toISOString().split("T")[0];
+}
 
 export default function ArchiveCallings() {
-  const [selectedItem, setSelectedItem] = useState<ArchivedItem | null>(null);
+  const { data: board, isLoading } = useQuery<KanbanBoard>({
+    queryKey: ["/api/calling-kanban/board"],
+  });
+  const { data: wards = [] } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+
+  const wardMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const w of wards) m.set(w.id, w.name);
+    return m;
+  }, [wards]);
+
+  const archived: CallingProposal[] = board?.["6"] ?? [];
+
+  const [selectedItem, setSelectedItem] = useState<CallingProposal | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [wardFilter, setWardFilter] = useState<string>("all");
-  const [callingFilter, setCallingFilter] = useState<string>("");
-  
-  // Date Filters
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [wardFilter, setWardFilter] = useState("all");
+  const [callingFilter, setCallingFilter] = useState("");
   const [completedDateStart, setCompletedDateStart] = useState("");
   const [completedDateEnd, setCompletedDateEnd] = useState("");
   const [releaseDateStart, setReleaseDateStart] = useState("");
   const [releaseDateEnd, setReleaseDateEnd] = useState("");
 
-  const filteredData = ARCHIVED_DATA.filter(item => {
-    // Name Search
-    const fullName = `${item.firstName} ${item.lastName}`.toLowerCase();
-    if (searchTerm && !fullName.includes(searchTerm.toLowerCase())) return false;
+  const filteredData = useMemo(() => {
+    return archived.filter((item) => {
+      const fullName = `${item.fname} ${item.lname}`.toLowerCase();
+      if (searchTerm && !fullName.includes(searchTerm.toLowerCase())) return false;
+      if (typeFilter !== "all" && (typeFilter === "release") !== item.is_release) return false;
+      if (wardFilter !== "all" && item.ward_id !== Number(wardFilter)) return false;
+      if (callingFilter && !item.proposed_calling.toLowerCase().includes(callingFilter.toLowerCase())) return false;
 
-    // Type Filter
-    if (typeFilter !== "all" && item.type !== typeFilter) return false;
+      const completedDate = item.updated_at?.split("T")[0];
+      if (completedDateStart && (!completedDate || completedDate < completedDateStart)) return false;
+      if (completedDateEnd && (!completedDate || completedDate > completedDateEnd)) return false;
 
-    // Ward Filter
-    if (wardFilter !== "all" && item.ward !== wardFilter) return false;
+      if (completedDate && !item.is_release) {
+        const rel = estimatedRelease(item.updated_at, item.proposed_calling);
+        if (releaseDateStart && rel < releaseDateStart) return false;
+        if (releaseDateEnd && rel > releaseDateEnd) return false;
+      }
 
-    // Calling Filter
-    if (callingFilter && !item.calling.toLowerCase().includes(callingFilter.toLowerCase())) return false;
-
-    const completedDate = item.lcrUpdatedDate || item.sustainedReleasedDate;
-    
-    // Date Completed Filter
-    if (completedDateStart && (!completedDate || completedDate < completedDateStart)) return false;
-    if (completedDateEnd && (!completedDate || completedDate > completedDateEnd)) return false;
-
-    // Release Date Filter
-    let releaseDate = "";
-    if (completedDate && item.type === 'calling') {
-       const isThreeYearTerm = item.calling.toLowerCase().includes('bishop') || 
-                              item.calling.toLowerCase().includes('high council');
-       
-       const date = new Date(completedDate);
-       date.setFullYear(date.getFullYear() + (isThreeYearTerm ? 3 : 1));
-       releaseDate = date.toISOString().split('T')[0];
-    }
-
-    if (releaseDateStart && (!releaseDate || releaseDate < releaseDateStart)) return false;
-    if (releaseDateEnd && (!releaseDate || releaseDate > releaseDateEnd)) return false;
-
-    return true;
-  });
+      return true;
+    });
+  }, [archived, searchTerm, typeFilter, wardFilter, callingFilter, completedDateStart, completedDateEnd, releaseDateStart, releaseDateEnd]);
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -194,13 +119,11 @@ export default function ArchiveCallings() {
             Back to Calling System
           </Button>
         </Link>
-        
+
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-primary">Calling Archive</h1>
-            </div>
-            <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2 hover:bg-accent/80 hover:text-accent-foreground border-dashed">
+            <h1 className="text-3xl font-bold text-primary">Calling Archive</h1>
+            <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2 border-dashed">
               Clear Filters
             </Button>
           </div>
@@ -217,7 +140,7 @@ export default function ArchiveCallings() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
+
               <Input
                 placeholder="Filter by calling..."
                 value={callingFilter}
@@ -230,8 +153,8 @@ export default function ArchiveCallings() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Wards</SelectItem>
-                  {WARDS.map(ward => (
-                    <SelectItem key={ward} value={ward}>{ward}</SelectItem>
+                  {wards.map((w) => (
+                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -253,37 +176,25 @@ export default function ArchiveCallings() {
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="justify-start text-left font-normal w-full">
                     <Calendar className="mr-2 h-4 w-4" />
-                    {completedDateStart || completedDateEnd ? (
-                      <span>{completedDateStart || "Start"} - {completedDateEnd || "End"} (Completed)</span>
-                    ) : (
-                      <span>Date Completed Range</span>
-                    )}
+                    {completedDateStart || completedDateEnd
+                      ? `${completedDateStart || "Start"} – ${completedDateEnd || "End"} (Completed)`
+                      : "Date Completed Range"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-4" align="start">
                   <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium leading-none">Date Completed Range</h4>
+                    <div className="space-y-1">
+                      <h4 className="font-medium">Date Completed Range</h4>
                       <p className="text-sm text-muted-foreground">Filter by when the calling was finalized.</p>
                     </div>
                     <div className="grid gap-2">
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm">Start</span>
-                        <Input 
-                          type="date" 
-                          className="col-span-2 h-8" 
-                          value={completedDateStart}
-                          onChange={(e) => setCompletedDateStart(e.target.value)}
-                        />
+                        <Input type="date" className="col-span-2 h-8" value={completedDateStart} onChange={(e) => setCompletedDateStart(e.target.value)} />
                       </div>
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm">End</span>
-                        <Input 
-                          type="date" 
-                          className="col-span-2 h-8"
-                          value={completedDateEnd}
-                          onChange={(e) => setCompletedDateEnd(e.target.value)}
-                        />
+                        <Input type="date" className="col-span-2 h-8" value={completedDateEnd} onChange={(e) => setCompletedDateEnd(e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -294,37 +205,25 @@ export default function ArchiveCallings() {
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="justify-start text-left font-normal w-full">
                     <Calendar className="mr-2 h-4 w-4" />
-                    {releaseDateStart || releaseDateEnd ? (
-                      <span>{releaseDateStart || "Start"} - {releaseDateEnd || "End"} (Release)</span>
-                    ) : (
-                      <span>Expected Release Range</span>
-                    )}
+                    {releaseDateStart || releaseDateEnd
+                      ? `${releaseDateStart || "Start"} – ${releaseDateEnd || "End"} (Release)`
+                      : "Expected Release Range"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-4" align="start">
                   <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium leading-none">Expected Release Range</h4>
-                      <p className="text-sm text-muted-foreground">Filter by expected release date.</p>
+                    <div className="space-y-1">
+                      <h4 className="font-medium">Expected Release Range</h4>
+                      <p className="text-sm text-muted-foreground">Filter by estimated release date.</p>
                     </div>
                     <div className="grid gap-2">
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm">Start</span>
-                        <Input 
-                          type="date" 
-                          className="col-span-2 h-8" 
-                          value={releaseDateStart}
-                          onChange={(e) => setReleaseDateStart(e.target.value)}
-                        />
+                        <Input type="date" className="col-span-2 h-8" value={releaseDateStart} onChange={(e) => setReleaseDateStart(e.target.value)} />
                       </div>
                       <div className="grid grid-cols-3 items-center gap-4">
                         <span className="text-sm">End</span>
-                        <Input 
-                          type="date" 
-                          className="col-span-2 h-8"
-                          value={releaseDateEnd}
-                          onChange={(e) => setReleaseDateEnd(e.target.value)}
-                        />
+                        <Input type="date" className="col-span-2 h-8" value={releaseDateEnd} onChange={(e) => setReleaseDateEnd(e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -340,165 +239,134 @@ export default function ArchiveCallings() {
                   <TableHead>Member Name</TableHead>
                   <TableHead>Calling</TableHead>
                   <TableHead>Ward</TableHead>
+                  <TableHead>Date Submitted</TableHead>
                   <TableHead>Date Completed</TableHead>
-                  <TableHead>Release Date</TableHead>
+                  <TableHead>Est. Release</TableHead>
                   <TableHead className="text-right">Type</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.length > 0 ? (
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 7 }).map((__, j) => (
+                        <TableCell key={j}><div className="skeleton h-4 w-24 rounded" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : filteredData.length > 0 ? (
                   filteredData.map((item) => {
-                   const completedDate = item.lcrUpdatedDate || item.sustainedReleasedDate;
-                   let releaseDate = "N/A";
-                   
-                   if (completedDate && item.type === 'calling') {
-                     const isThreeYearTerm = item.calling.toLowerCase().includes('bishop') || 
-                                            item.calling.toLowerCase().includes('high council');
-                     
-                     const date = new Date(completedDate);
-                     date.setFullYear(date.getFullYear() + (isThreeYearTerm ? 3 : 1));
-                     releaseDate = date.toISOString().split('T')[0];
-                   }
+                    const completedDate = item.updated_at;
+                    const releaseDate = !item.is_release && completedDate
+                      ? estimatedRelease(completedDate, item.proposed_calling)
+                      : null;
 
-                   return (
-                  <TableRow 
-                    key={item.id}
-                    className={`cursor-pointer transition-colors hover:bg-muted/50 ${
-                      item.type === 'calling' ? 'bg-cyan-50/50 hover:bg-cyan-100/50 dark:bg-cyan-950/10 dark:hover:bg-cyan-950/20' : 'bg-red-50/50 hover:bg-red-100/50 dark:bg-red-950/10 dark:hover:bg-red-950/20'
-                    }`}
-                    onClick={() => setSelectedItem(item)}
-                  >
-                    <TableCell className="font-medium">{item.firstName} {item.lastName}</TableCell>
-                    <TableCell>{item.calling}</TableCell>
-                    <TableCell>{item.ward}</TableCell>
-                    <TableCell>{completedDate || "N/A"}</TableCell>
-                    <TableCell>{releaseDate}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={item.type === 'calling' ? 'default' : 'destructive'} className={item.type === 'calling' ? 'bg-cyan-600 hover:bg-cyan-700' : ''}>
-                        {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )})
+                    return (
+                      <TableRow
+                        key={item.id}
+                        className={`cursor-pointer transition-colors hover:bg-muted/50 ${
+                          item.is_release
+                            ? "bg-red-50/50 dark:bg-red-950/10"
+                            : "bg-cyan-50/50 dark:bg-cyan-950/10"
+                        }`}
+                        onClick={() => setSelectedItem(item)}
+                      >
+                        <TableCell className="font-medium">{item.fname} {item.lname}</TableCell>
+                        <TableCell>{item.proposed_calling}</TableCell>
+                        <TableCell>{wardMap.get(item.ward_id) ?? "—"}</TableCell>
+                        <TableCell>{formatDate(item.submitted_at)}</TableCell>
+                        <TableCell>{formatDate(completedDate)}</TableCell>
+                        <TableCell>{releaseDate ? formatDate(releaseDate) : "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge
+                            variant={item.is_release ? "destructive" : "default"}
+                            className={!item.is_release ? "bg-cyan-600 hover:bg-cyan-700" : ""}
+                          >
+                            {item.is_release ? "Release" : "Calling"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      No results found.
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      {archived.length === 0 ? "No completed callings in the archive yet." : "No results match your filters."}
                     </TableCell>
                   </TableRow>
-                )} 
+                )}
               </TableBody>
             </Table>
           </div>
         </div>
 
+        {/* Detail Dialog */}
         <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-          <DialogContent className="max-w-[90vw] sm:max-w-2xl">
+          <DialogContent className="max-w-[90vw] sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-3">
                 {selectedItem && (
                   <>
-                    <Badge variant={selectedItem.type === 'calling' ? 'default' : 'destructive'} className={selectedItem.type === 'calling' ? 'bg-cyan-600' : ''}>
-                      {selectedItem.type.toUpperCase()}
+                    <Badge
+                      variant={selectedItem.is_release ? "destructive" : "default"}
+                      className={!selectedItem.is_release ? "bg-cyan-600" : ""}
+                    >
+                      {selectedItem.is_release ? "RELEASE" : "CALLING"}
                     </Badge>
-                    <span>{selectedItem.firstName} {selectedItem.lastName}</span>
+                    <span>{selectedItem.fname} {selectedItem.lname}</span>
                   </>
                 )}
               </DialogTitle>
-              <DialogDescription>
-                Detailed record information
-              </DialogDescription>
+              <DialogDescription>Archived record</DialogDescription>
             </DialogHeader>
-            
+
             {selectedItem && (
-              <ScrollArea className="max-h-[80vh]">
+              <ScrollArea className="max-h-[70vh]">
                 <div className="grid gap-6 py-4">
-                  {/* Basic Info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <h4 className="text-sm font-medium text-muted-foreground">Calling</h4>
-                      <p className="font-semibold text-lg">{selectedItem.calling}</p>
+                      <p className="font-semibold">{selectedItem.proposed_calling}</p>
                     </div>
                     <div className="space-y-1">
                       <h4 className="text-sm font-medium text-muted-foreground">Ward</h4>
-                      <p className="font-semibold text-lg">{selectedItem.ward}</p>
+                      <p className="font-semibold">{wardMap.get(selectedItem.ward_id) ?? "—"}</p>
                     </div>
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-medium text-muted-foreground">Spouse Name</h4>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span>{selectedItem.spouseName || "N/A"}</span>
+                    {selectedItem.spouse_name && (
+                      <div className="space-y-1 col-span-2">
+                        <h4 className="text-sm font-medium text-muted-foreground">Spouse</h4>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span>{selectedItem.spouse_name}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   <Separator />
 
-                  {/* Timeline Dates */}
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <h3 className="font-semibold flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       Timeline
                     </h3>
-                    <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                    <div className="grid gap-2 text-sm">
                       <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">Date Submitted</span>
-                        <span className="font-medium">{selectedItem.dateSubmitted}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">Presidency Approval</span>
-                        <span className="font-medium">{selectedItem.stakePresApprovalDate || "-"}</span>
+                        <span className="text-muted-foreground">Submitted</span>
+                        <span className="font-medium">{formatDate(selectedItem.submitted_at)}</span>
                       </div>
                       <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">High Council Approval</span>
-                        <span className="font-medium">{selectedItem.hcApprovalDate || "-"}</span>
+                        <span className="text-muted-foreground">Completed</span>
+                        <span className="font-medium">{formatDate(selectedItem.updated_at)}</span>
                       </div>
-                      <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">Interview Date</span>
-                        <span className="font-medium">{selectedItem.interviewDate || "-"}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-1">
-                         <span className="text-muted-foreground">Interviewer</span>
-                         <span className="font-medium">{selectedItem.interviewer || "-"}</span>
-                      </div>
-                       <div className="flex justify-between border-b pb-1">
-                         <span className="text-muted-foreground">High Priest Interview</span>
-                         <span className="font-medium">{selectedItem.hpInterviewDate || "-"}</span>
-                      </div>
-                       <div className="flex justify-between border-b pb-1">
-                         <span className="text-muted-foreground">HP Interviewer</span>
-                         <span className="font-medium">{selectedItem.hpInterviewer || "-"}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">Sustained/Released</span>
-                        <span className="font-medium">{selectedItem.sustainedReleasedDate || "-"}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">Set Apart</span>
-                        <span className="font-medium">{selectedItem.setApartDate || "-"}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-1">
-                        <span className="text-muted-foreground">LCR Updated</span>
-                        <span className="font-medium">{selectedItem.lcrUpdatedDate || "-"}</span>
-                      </div>
+                      {!selectedItem.is_release && (
+                        <div className="flex justify-between border-b pb-1">
+                          <span className="text-muted-foreground">Est. Release</span>
+                          <span className="font-medium">{formatDate(estimatedRelease(selectedItem.updated_at, selectedItem.proposed_calling))}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {/* Notes */}
-                  {selectedItem.notes && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <h3 className="font-semibold flex items-center gap-2">
-                          <ClipboardList className="h-4 w-4" />
-                          Notes
-                        </h3>
-                        <div className="bg-muted p-3 rounded-md text-sm">
-                          {selectedItem.notes}
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
               </ScrollArea>
             )}

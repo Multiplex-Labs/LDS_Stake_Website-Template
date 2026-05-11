@@ -26,6 +26,7 @@ import SubmitCalling from "@/pages/leader/callings/submit";
 import ReviewCallings from "@/pages/leader/callings/review";
 import ManageCallings from "@/pages/leader/callings/manage";
 import ArchiveCallings from "@/pages/leader/callings/archive";
+import ReleasesAndSustainings from "@/pages/leader/sustainings";
 import UserAdmin from "@/pages/leader/users";
 
 import Resources from "@/pages/resources";
@@ -65,6 +66,7 @@ function Router() {
       <Route path="/leader/callings/review">{() => <ProtectedRoute><ReviewCallings /></ProtectedRoute>}</Route>
       <Route path="/leader/callings/manage">{() => <ProtectedRoute><ManageCallings /></ProtectedRoute>}</Route>
       <Route path="/leader/callings/archive">{() => <ProtectedRoute><ArchiveCallings /></ProtectedRoute>}</Route>
+      <Route path="/leader/sustainings">{() => <ProtectedRoute><ReleasesAndSustainings /></ProtectedRoute>}</Route>
       <Route path="/leader/user-admin">{() => <ProtectedRoute><UserAdmin /></ProtectedRoute>}</Route>
 
       <Route component={NotFound} />

@@ -29,7 +29,7 @@ function applyTheme(theme: Theme) {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      theme: "dark",
+      theme: (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") as Theme,
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });

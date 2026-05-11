@@ -10,15 +10,37 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Menu, X, LogOut, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Menu, X, LogOut, User, KeyRound } from "lucide-react";
 import logoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest, setAccessToken, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+
+interface ProfileForm {
+  fname: string;
+  lname: string;
+  email: string;
+  phone: string;
+  bio: string;
+}
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
   const [, setLocation] = useLocation();
   const { user, setUser } = useAuthStore();
 
@@ -32,6 +54,39 @@ export function Navbar() {
       setLocation("/");
     }
   }
+
+  function handleOpenProfile() {
+    if (!user) return;
+    setProfileForm({
+      fname: user.fname,
+      lname: user.lname,
+      email: user.email,
+      phone: user.phone ?? "",
+      bio: user.bio ?? "",
+    });
+    setProfileOpen(true);
+  }
+
+  const saveProfileMutation = useMutation({
+    mutationFn: (form: ProfileForm) =>
+      apiRequest("PUT", `/api/users/${user!.id}`, {
+        email: form.email,
+        fname: form.fname,
+        lname: form.lname,
+        active: user!.active,
+        force_password_reset: user!.force_password_reset,
+        phone: form.phone || null,
+        bio: form.bio || null,
+        profile_image: user!.profile_image,
+      }),
+    onSuccess: async (_, form) => {
+      setUser({ ...user!, fname: form.fname, lname: form.lname, email: form.email, phone: form.phone || null, bio: form.bio || null });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
+      toast.success("Profile updated");
+      setProfileOpen(false);
+    },
+    onError: () => toast.error("Update failed", { description: "Could not save your profile." }),
+  });
 
   return (
     <>
@@ -94,18 +149,21 @@ export function Navbar() {
                   </NavigationMenuLink>
                 </NavigationMenuItem>
 
-                <NavigationMenuItem>
-                  <NavigationMenuTrigger className="bg-transparent font-medium">Leader Portal</NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[400px] gap-3 p-4">
-                      <ListItem href="/leader/assignments" title="High Council Assignments" />
-                      <ListItem href="/leader/speaking" title="Speaking Schedule" />
-                      <ListItem href="/leader/presidency" title="Presidency Assignments" />
-                      <ListItem href="/leader/calling-system" title="Stake Calling System" />
-                      <ListItem href="/leader/user-admin" title="User Administration" />
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
+                {user && (
+                  <NavigationMenuItem>
+                    <NavigationMenuTrigger className="bg-transparent font-medium">Leader Portal</NavigationMenuTrigger>
+                    <NavigationMenuContent>
+                      <ul className="grid w-[400px] gap-3 p-4">
+                        <ListItem href="/leader/assignments" title="High Council Assignments" />
+                        <ListItem href="/leader/speaking" title="Speaking Schedule" />
+                        <ListItem href="/leader/presidency" title="Presidency Assignments" />
+                        <ListItem href="/leader/calling-system" title="Stake Calling System" />
+                        <ListItem href="/leader/sustainings" title="Releases & Sustainings" />
+                        <ListItem href="/leader/user-admin" title="User Administration" />
+                      </ul>
+                    </NavigationMenuContent>
+                  </NavigationMenuItem>
+                )}
               </NavigationMenuList>
             </NavigationMenu>
           </div>
@@ -115,10 +173,15 @@ export function Navbar() {
             <ThemeToggle />
             {user ? (
               <>
-                <span className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                  onClick={handleOpenProfile}
+                >
                   <User className="h-4 w-4" />
-                  {user.fname} {user.lname}
-                </span>
+                  {user.fname}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -146,6 +209,63 @@ export function Navbar() {
           </div>
         </div>
       </nav>
+
+      {/* Profile Edit Dialog */}
+      <Dialog open={profileOpen} onOpenChange={(open) => { if (!open) setProfileOpen(false); }}>
+        <DialogContent className="max-w-[90vw] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Edit Profile</DialogTitle>
+          </DialogHeader>
+          {profileForm && (
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>First Name</Label>
+                  <Input value={profileForm.fname} onChange={(e) => setProfileForm({ ...profileForm, fname: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last Name</Label>
+                  <Input value={profileForm.lname} onChange={(e) => setProfileForm({ ...profileForm, lname: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="Optional" />
+              </div>
+              <div className="space-y-2">
+                <Label>Bio</Label>
+                <Textarea
+                  value={profileForm.bio}
+                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                  placeholder="Brief description or notes..."
+                  className="min-h-[100px]"
+                />
+              </div>
+              <div className="border-t pt-4">
+                <Link href="/change-password" onClick={() => setProfileOpen(false)}>
+                  <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground px-0">
+                    <KeyRound className="h-4 w-4" />
+                    Change Password
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancel</Button>
+            <Button
+              disabled={saveProfileMutation.isPending}
+              onClick={() => profileForm && saveProfileMutation.mutate(profileForm)}
+            >
+              {saveProfileMutation.isPending ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Mobile Drawer */}
       {mobileOpen && (
@@ -186,14 +306,19 @@ export function Navbar() {
                 <MobileLink href="/ward-info/meeting-times" onClick={() => setMobileOpen(false)}>Meeting Times</MobileLink>
                 <MobileLink href="/ward-info/bishops" onClick={() => setMobileOpen(false)}>Meet our Bishops</MobileLink>
 
-                <li className="pt-3 pb-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Leader Portal</span>
-                </li>
-                <MobileLink href="/leader/assignments" onClick={() => setMobileOpen(false)}>High Council Assignments</MobileLink>
-                <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>
-                <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
-                <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
-                <MobileLink href="/leader/user-admin" onClick={() => setMobileOpen(false)}>User Administration</MobileLink>
+                {user && (
+                  <>
+                    <li className="pt-3 pb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Leader Portal</span>
+                    </li>
+                    <MobileLink href="/leader/assignments" onClick={() => setMobileOpen(false)}>High Council Assignments</MobileLink>
+                    <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>
+                    <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
+                    <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
+                    <MobileLink href="/leader/sustainings" onClick={() => setMobileOpen(false)}>Releases & Sustainings</MobileLink>
+                    <MobileLink href="/leader/user-admin" onClick={() => setMobileOpen(false)}>User Administration</MobileLink>
+                  </>
+                )}
 
                 <li className="pt-3">
                   <MobileLink href="/resources" onClick={() => setMobileOpen(false)}>Resources</MobileLink>
