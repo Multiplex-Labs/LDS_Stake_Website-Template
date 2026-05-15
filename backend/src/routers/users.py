@@ -1,8 +1,14 @@
+import os
+import time
+import secrets
+import mimetypes
+
 from logging import getLogger
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlmodel import Field, SQLModel, Session, delete, select
+
 
 from ..models import (
     ResponseSafeUser,
@@ -235,3 +241,59 @@ def create_user(
     session.refresh(db_user)
     return ResponseSafeUser.from_user(db_user)
 
+@router.post("/photo")
+async def upload_user_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(CallingUser()),
+    session: Session = Depends(get_session),
+):
+    """
+    Endpoint to upload a photo for a user.
+
+    Accepts a single image file upload, validates the content-type, saves the
+    file under the backend static/profile_images directory and updates the
+    user's `profile_image` to the proxied URL (`/api/static/profile_images/<file>`).
+    """
+    # Basic validation
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+
+    # Determine extension
+    _, ext = os.path.splitext(file.filename or "")
+    if not ext:
+        ext = mimetypes.guess_extension(file.content_type) or ".bin"
+    if ext.lower() not in [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"]:
+        raise HTTPException(status_code=400, detail="Unsupported image format.")
+
+    # Storage directory (mirror of app mount)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "profile_images"))
+    os.makedirs(base_dir, exist_ok=True)
+
+    # Unique filename
+    fname = f"{current_user.id}_{int(time.time())}_{secrets.token_hex(8)}{ext}"
+    dest_path = os.path.join(base_dir, fname)
+
+    # Save file
+    contents = await file.read()
+
+    # Ensure file size is reasonable (e.g. <5MB)
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit.")
+    try:
+        with open(dest_path, "wb") as fh:
+            fh.write(contents)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
+
+    # Update user profile_image to a proxied path so frontend can request via /api
+    public_path = f"/api/static/profile_images/{fname}"
+    db_user = session.get(User, current_user.id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db_user.profile_image = public_path
+    session.add(db_user)
+    session.commit()
+    session.refresh(db_user)
+
+    return ResponseSafeUser.from_user(db_user)
+    

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from logging import getLogger
@@ -66,6 +67,12 @@ def configure_app(application: FastAPI) -> None:
     )
 
 configure_app(app)
+
+# Ensure a static directory exists and mount it so uploaded assets can be served
+import os
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+os.makedirs(os.path.join(static_dir, "profile_images"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Import and include routers here to avoid import cycles
 from .routers import (
