@@ -98,7 +98,7 @@ export default function ArchiveCallings() {
   const [releaseDateEnd, setReleaseDateEnd] = useState("");
 
   // Comments query — only fires when an archived item is selected
-  const { data: comments = [], isLoading: commentsLoading } = useQuery<CallingComment[]>({
+  const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
     queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "comments"],
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem!.id}/comments`).then((r) => r.json()),
     enabled: !!selectedItem,
@@ -409,7 +409,9 @@ export default function ArchiveCallings() {
                       )}
                     </h3>
 
-                    {commentsLoading ? (
+                    {commentsError ? (
+                      <p className="text-sm text-destructive">Failed to load comments.</p>
+                    ) : commentsLoading ? (
                       <div className="space-y-2">
                         {Array.from({ length: 2 }).map((_, i) => (
                           <div key={i} className="skeleton h-14 w-full rounded-md" />

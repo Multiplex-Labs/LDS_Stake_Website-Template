@@ -118,7 +118,7 @@ export default function ManageCallings() {
   }, [proposals, searchTerm, wardFilter, stageFilter]);
 
   // Comments query — only fires when a proposal is selected
-  const { data: comments = [], isLoading: commentsLoading } = useQuery<CallingComment[]>({
+  const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
     queryKey: ["/api/calling-kanban/proposals", selectedProposal?.id, "comments"],
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedProposal!.id}/comments`).then((r) => r.json()),
     enabled: !!selectedProposal,
@@ -148,9 +148,9 @@ export default function ManageCallings() {
   }
 
   const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
-  const invalidateComments = () =>
+  const invalidateComments = (proposalId: number) =>
     queryClient.invalidateQueries({
-      queryKey: ["/api/calling-kanban/proposals", selectedProposal?.id, "comments"],
+      queryKey: ["/api/calling-kanban/proposals", proposalId, "comments"],
     });
 
   const updateMutation = useMutation({
@@ -251,32 +251,50 @@ export default function ManageCallings() {
   const addCommentMutation = useMutation({
     mutationFn: ({ id, text }: { id: number; text: string }) =>
       apiRequest("POST", `/api/calling-kanban/proposals/${id}/comments`, { comment_text: text }),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       setNewComment("");
-      invalidateComments();
+      invalidateComments(id);
     },
-    onError: () => toast.error("Failed to post comment"),
+    onError: (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You don't have permission to comment on this proposal." });
+      else toast.error("Failed to post comment");
+    },
   });
 
   const editCommentMutation = useMutation({
     mutationFn: ({ proposalId, commentId, text }: { proposalId: number; commentId: number; text: string }) =>
       apiRequest("PUT", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`, { comment_text: text }),
-    onSuccess: () => {
+    onSuccess: (_, { proposalId }) => {
       setEditingCommentId(null);
       setEditDraft("");
-      invalidateComments();
+      invalidateComments(proposalId);
     },
-    onError: () => toast.error("Failed to save comment"),
+    onError: (err: unknown, { proposalId }) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only edit your own comments." });
+      else if (raw.startsWith("404")) {
+        toast.error("Comment not found", { description: "It may have already been deleted." });
+        invalidateComments(proposalId);
+      } else {
+        toast.error("Failed to save comment");
+      }
+    },
   });
 
   const deleteCommentMutation = useMutation({
     mutationFn: ({ proposalId, commentId }: { proposalId: number; commentId: number }) =>
       apiRequest("DELETE", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`),
-    onSuccess: () => {
+    onSuccess: (_, { proposalId }) => {
       toast.success("Comment deleted");
-      invalidateComments();
+      invalidateComments(proposalId);
     },
-    onError: () => toast.error("Failed to delete comment"),
+    onError: (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only delete your own comments." });
+      else if (raw.startsWith("404")) toast.error("Comment not found", { description: "It may have already been deleted." });
+      else toast.error("Failed to delete comment");
+    },
   });
 
   const anyMutating =
@@ -285,7 +303,10 @@ export default function ManageCallings() {
     completeInterviewMutation.isPending ||
     sustainMutation.isPending ||
     setApartMutation.isPending ||
-    lcrMutation.isPending;
+    lcrMutation.isPending ||
+    addCommentMutation.isPending ||
+    editCommentMutation.isPending ||
+    deleteCommentMutation.isPending;
 
   if (isError) {
     return (
@@ -616,7 +637,9 @@ export default function ManageCallings() {
                       </p>
                     </div>
 
-                    {commentsLoading ? (
+                    {commentsError ? (
+                      <p className="text-sm text-destructive py-2">Failed to load comments.</p>
+                    ) : commentsLoading ? (
                       <div className="space-y-2">
                         {Array.from({ length: 2 }).map((_, i) => (
                           <div key={i} className="skeleton h-14 w-full rounded-md" />
