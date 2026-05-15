@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Calendar, User, Search } from "lucide-react";
+import { ChevronLeft, Calendar, User, Search, MessageSquare } from "lucide-react";
 import { Link } from "wouter";
 import {
   Table,
@@ -35,11 +35,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import type { KanbanBoard, CallingProposal, Ward } from "@/types";
+import { apiRequest } from "@/lib/queryClient";
+import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatCommentDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function estimatedRelease(completedIso: string, callingName: string): string {
@@ -58,12 +69,21 @@ export default function ArchiveCallings() {
   const { data: wards = [] } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+  const { data: users = [] } = useQuery<ApiUser[]>({
+    queryKey: ["/api/users/"],
+  });
 
   const wardMap = useMemo(() => {
     const m = new Map<number, string>();
     for (const w of wards) m.set(w.id, w.name);
     return m;
   }, [wards]);
+
+  const userMap = useMemo(() => {
+    const m = new Map<number, ApiUser>();
+    for (const u of users) m.set(u.id, u);
+    return m;
+  }, [users]);
 
   const archived: CallingProposal[] = board?.["6"] ?? [];
 
@@ -76,6 +96,13 @@ export default function ArchiveCallings() {
   const [completedDateEnd, setCompletedDateEnd] = useState("");
   const [releaseDateStart, setReleaseDateStart] = useState("");
   const [releaseDateEnd, setReleaseDateEnd] = useState("");
+
+  // Comments query — only fires when an archived item is selected
+  const { data: comments = [], isLoading: commentsLoading } = useQuery<CallingComment[]>({
+    queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "comments"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem!.id}/comments`).then((r) => r.json()),
+    enabled: !!selectedItem,
+  });
 
   const filteredData = useMemo(() => {
     return archived.filter((item) => {
@@ -307,7 +334,7 @@ export default function ArchiveCallings() {
 
         {/* Detail Dialog */}
         <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-          <DialogContent className="max-w-[90vw] sm:max-w-lg">
+          <DialogContent className="max-w-[90vw] sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-3">
                 {selectedItem && (
@@ -368,6 +395,47 @@ export default function ArchiveCallings() {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Read-only Comments */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Comments
+                      {comments.length > 0 && (
+                        <span className="text-muted-foreground font-normal text-sm">({comments.length})</span>
+                      )}
+                    </h3>
+
+                    {commentsLoading ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                          <div key={i} className="skeleton h-14 w-full rounded-md" />
+                        ))}
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No comments on this record.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {comments.map((c) => {
+                          const commenter = userMap.get(c.commenter_id);
+                          const commenterName = commenter ? `${commenter.fname} ${commenter.lname}` : `User ${c.commenter_id}`;
+                          return (
+                            <div key={c.id} className="rounded-md border bg-muted/30 p-3 space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">{commenterName}</span>
+                                <span>·</span>
+                                <span>{formatCommentDate(c.created_at)}</span>
+                                {c.edited_at && <span className="italic">(edited)</span>}
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{c.comment_text}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </ScrollArea>

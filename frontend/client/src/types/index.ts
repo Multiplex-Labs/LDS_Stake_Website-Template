@@ -73,6 +73,15 @@ export interface CallingProposal {
 // "4"=SET_APART, "5"=LCR_UPDATE, "6"=DONE
 export type KanbanBoard = Record<string, CallingProposal[]>;
 
+export interface CallingComment {
+  id: number;
+  proposal_id: number;
+  commenter_id: number;
+  comment_text: string;
+  created_at: string;
+  edited_at: string | null;
+}
+
 export interface HcAssignment {
   id: number;
   high_councilor_id: number | null;
