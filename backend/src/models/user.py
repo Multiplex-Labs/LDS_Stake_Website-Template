@@ -47,7 +47,6 @@ class User(BaseModel, table=True):
     @classmethod
     def from_request_safe_user(cls, request_safe_user: "RequestSafeUser", password_hash: str) -> "User":
         return cls(
-            id=request_safe_user.id,
             email=request_safe_user.email,
             password_hash=password_hash,
             force_password_reset=request_safe_user.force_password_reset,
