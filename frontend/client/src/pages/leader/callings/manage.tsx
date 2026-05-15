@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Search, Save, ArrowRight } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ChevronLeft, Search, Save, ArrowRight, Pencil, Trash2, MessageSquare } from "lucide-react";
 import { Link } from "wouter";
 import {
   Table,
@@ -35,7 +36,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
+import { useAuthStore } from "@/stores/auth";
+import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 import { STAGE_LABELS, STAGE_BADGE_CLASS } from "@/lib/constants";
 
 interface ProposalWithStage extends CallingProposal {
@@ -51,7 +53,19 @@ interface EditForm {
   is_release: boolean;
 }
 
+function formatCommentDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function ManageCallings() {
+  const currentUser = useAuthStore((s) => s.user);
+
   const { data: board = {}, isLoading, isError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
@@ -69,11 +83,22 @@ export default function ManageCallings() {
   const [wardFilter, setWardFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
 
+  // Comment state
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [newComment, setNewComment] = useState("");
+
   const wardMap = useMemo(() => {
     const m = new Map<number, string>();
     for (const w of wards) m.set(w.id, w.name);
     return m;
   }, [wards]);
+
+  const userMap = useMemo(() => {
+    const m = new Map<number, ApiUser>();
+    for (const u of users) m.set(u.id, u);
+    return m;
+  }, [users]);
 
   // Flatten board into list, excluding DONE (stage "6")
   const proposals = useMemo<ProposalWithStage[]>(() => {
@@ -92,9 +117,19 @@ export default function ManageCallings() {
     });
   }, [proposals, searchTerm, wardFilter, stageFilter]);
 
+  // Comments query — only fires when a proposal is selected
+  const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
+    queryKey: ["/api/calling-kanban/proposals", selectedProposal?.id, "comments"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedProposal!.id}/comments`).then((r) => r.json()),
+    enabled: !!selectedProposal,
+  });
+
   function openEdit(p: ProposalWithStage) {
     setSelectedProposal(p);
     setInterviewerId("");
+    setEditingCommentId(null);
+    setEditDraft("");
+    setNewComment("");
     setEditForm({
       fname: p.fname,
       lname: p.lname,
@@ -105,7 +140,18 @@ export default function ManageCallings() {
     });
   }
 
+  function closeDialog() {
+    setSelectedProposal(null);
+    setEditingCommentId(null);
+    setEditDraft("");
+    setNewComment("");
+  }
+
   const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+  const invalidateComments = (proposalId: number) =>
+    queryClient.invalidateQueries({
+      queryKey: ["/api/calling-kanban/proposals", proposalId, "comments"],
+    });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, form, original }: { id: number; form: EditForm; original: ProposalWithStage }) =>
@@ -124,7 +170,7 @@ export default function ManageCallings() {
     onSuccess: () => {
       toast.success("Proposal updated");
       invalidateBoard();
-      setSelectedProposal(null);
+      closeDialog();
     },
     onError: () => toast.error("Update failed", { description: "Could not save changes." }),
   });
@@ -145,7 +191,7 @@ export default function ManageCallings() {
     onSuccess: () => {
       toast.success("Interview marked complete — proposal moved to Sustainment");
       invalidateBoard();
-      setSelectedProposal(null);
+      closeDialog();
     },
     onError: (err: unknown) => {
       const raw = err instanceof Error ? err.message : "";
@@ -174,7 +220,7 @@ export default function ManageCallings() {
     onSuccess: () => {
       toast.success("Marked as sustained");
       invalidateBoard();
-      setSelectedProposal(null);
+      closeDialog();
     },
     onError: stageAdvanceOnError,
   });
@@ -185,7 +231,7 @@ export default function ManageCallings() {
     onSuccess: () => {
       toast.success("Marked as set apart");
       invalidateBoard();
-      setSelectedProposal(null);
+      closeDialog();
     },
     onError: stageAdvanceOnError,
   });
@@ -196,12 +242,71 @@ export default function ManageCallings() {
     onSuccess: () => {
       toast.success("LCR marked as updated — proposal archived");
       invalidateBoard();
-      setSelectedProposal(null);
+      closeDialog();
     },
     onError: stageAdvanceOnError,
   });
 
-  const anyMutating = updateMutation.isPending || scheduleInterviewMutation.isPending || completeInterviewMutation.isPending || sustainMutation.isPending || setApartMutation.isPending || lcrMutation.isPending;
+  // Comment mutations
+  const addCommentMutation = useMutation({
+    mutationFn: ({ id, text }: { id: number; text: string }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/comments`, { comment_text: text }),
+    onSuccess: (_, { id }) => {
+      setNewComment("");
+      invalidateComments(id);
+    },
+    onError: (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You don't have permission to comment on this proposal." });
+      else toast.error("Failed to post comment");
+    },
+  });
+
+  const editCommentMutation = useMutation({
+    mutationFn: ({ proposalId, commentId, text }: { proposalId: number; commentId: number; text: string }) =>
+      apiRequest("PUT", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`, { comment_text: text }),
+    onSuccess: (_, { proposalId }) => {
+      setEditingCommentId(null);
+      setEditDraft("");
+      invalidateComments(proposalId);
+    },
+    onError: (err: unknown, { proposalId }) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only edit your own comments." });
+      else if (raw.startsWith("404")) {
+        toast.error("Comment not found", { description: "It may have already been deleted." });
+        invalidateComments(proposalId);
+      } else {
+        toast.error("Failed to save comment");
+      }
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: ({ proposalId, commentId }: { proposalId: number; commentId: number }) =>
+      apiRequest("DELETE", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`),
+    onSuccess: (_, { proposalId }) => {
+      toast.success("Comment deleted");
+      invalidateComments(proposalId);
+    },
+    onError: (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only delete your own comments." });
+      else if (raw.startsWith("404")) toast.error("Comment not found", { description: "It may have already been deleted." });
+      else toast.error("Failed to delete comment");
+    },
+  });
+
+  const anyMutating =
+    updateMutation.isPending ||
+    scheduleInterviewMutation.isPending ||
+    completeInterviewMutation.isPending ||
+    sustainMutation.isPending ||
+    setApartMutation.isPending ||
+    lcrMutation.isPending ||
+    addCommentMutation.isPending ||
+    editCommentMutation.isPending ||
+    deleteCommentMutation.isPending;
 
   if (isError) {
     return (
@@ -333,7 +438,7 @@ export default function ManageCallings() {
         </div>
 
         {/* Edit / Advance Dialog */}
-        <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && setSelectedProposal(null)}>
+        <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && closeDialog()}>
           <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
             <DialogHeader className="p-6 pb-4">
               <DialogTitle className="text-xl">
@@ -517,12 +622,152 @@ export default function ManageCallings() {
                       </div>
                     </div>
                   </div>
+
+                  <Separator />
+
+                  {/* Comments Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="size-4 text-muted-foreground" />
+                      <p className="text-sm font-semibold">
+                        Comments
+                        {comments.length > 0 && (
+                          <span className="ml-1.5 text-muted-foreground font-normal">({comments.length})</span>
+                        )}
+                      </p>
+                    </div>
+
+                    {commentsError ? (
+                      <p className="text-sm text-destructive py-2">Failed to load comments.</p>
+                    ) : commentsLoading ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                          <div key={i} className="skeleton h-14 w-full rounded-md" />
+                        ))}
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">No comments yet.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {comments.map((c) => {
+                          const commenter = userMap.get(c.commenter_id);
+                          const commenterName = commenter ? `${commenter.fname} ${commenter.lname}` : `User ${c.commenter_id}`;
+                          const isOwn = currentUser?.id === c.commenter_id;
+                          const isEditing = editingCommentId === c.id;
+
+                          return (
+                            <div key={c.id} className="rounded-md border bg-muted/30 p-3 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">{commenterName}</span>
+                                  <span>·</span>
+                                  <span>{formatCommentDate(c.created_at)}</span>
+                                  {c.edited_at && <span className="italic">(edited)</span>}
+                                </div>
+                                {isOwn && !isEditing && (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => {
+                                        setEditingCommentId(c.id);
+                                        setEditDraft(c.comment_text);
+                                      }}
+                                    >
+                                      <Pencil className="size-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-destructive hover:text-destructive"
+                                      disabled={deleteCommentMutation.isPending}
+                                      onClick={() => {
+                                        if (window.confirm("Delete this comment?")) {
+                                          deleteCommentMutation.mutate({
+                                            proposalId: selectedProposal.id,
+                                            commentId: c.id,
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="size-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <Textarea
+                                    value={editDraft}
+                                    onChange={(e) => setEditDraft(e.target.value)}
+                                    className="min-h-[60px] text-sm resize-none"
+                                    autoFocus
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      disabled={!editDraft.trim() || editCommentMutation.isPending}
+                                      onClick={() =>
+                                        editCommentMutation.mutate({
+                                          proposalId: selectedProposal.id,
+                                          commentId: c.id,
+                                          text: editDraft.trim(),
+                                        })
+                                      }
+                                    >
+                                      {editCommentMutation.isPending ? "Saving…" : "Save"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setEditingCommentId(null);
+                                        setEditDraft("");
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-sm whitespace-pre-wrap">{c.comment_text}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add comment */}
+                    <div className="space-y-2 pt-1">
+                      <Textarea
+                        placeholder="Add a comment…"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        className="min-h-[72px] text-sm resize-none"
+                      />
+                      <Button
+                        size="sm"
+                        disabled={!newComment.trim() || addCommentMutation.isPending}
+                        onClick={() =>
+                          addCommentMutation.mutate({
+                            id: selectedProposal.id,
+                            text: newComment.trim(),
+                          })
+                        }
+                      >
+                        {addCommentMutation.isPending ? "Posting…" : "Post"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </ScrollArea>
             )}
 
             <DialogFooter className="p-6 pt-4 border-t">
-              <Button variant="outline" onClick={() => setSelectedProposal(null)}>Cancel</Button>
+              <Button variant="outline" onClick={closeDialog}>Cancel</Button>
               <Button
                 className="gap-2"
                 disabled={anyMutating || !editForm}
