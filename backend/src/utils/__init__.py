@@ -18,7 +18,7 @@ from .time import format_datetime_http
 
 from .permissions import user_has_permission
 
-from .usercalling import get_or_make_user_calling, get_or_make_hc_assignment
+from .usercalling import get_or_make_user_calling, get_or_make_hc_assignment, user_has_calling
 
 from .speaking_assignments import (
     load_speaking_schedule,
@@ -35,4 +35,4 @@ from .calling_kanban import (
     update_proposal_status
 )
 
-from .ward import load_wards
+from .ward import load_wards, get_bishops_ward

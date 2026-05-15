@@ -1,10 +1,11 @@
 import os
 from sqlmodel import Session, select
+from fastapi import HTTPException
 from logging import getLogger
 
-from .usercalling import get_or_make_user_calling
+from .usercalling import get_or_make_user_calling, user_has_calling
 from .db import _create_calling_if_not_exists, ORM
-from ..models import Ward
+from ..models import Ward, Permission, User, UserCalling, Calling
 
 
 logger = getLogger("application")
@@ -37,7 +38,8 @@ def load_wards():
             session=session,
             name="Bishop",
             max_slots=len(wards),
-            is_public=True
+            is_public=True,
+            permissions=[Permission.SUBMIT_CALLING_PROPOSALS]
         )
 
         for w in wards:
@@ -51,3 +53,14 @@ def load_wards():
             ward = Ward(name=name, start_time=float(start_time), bishop_calling_id=bishop_slot.id)
             session.add(ward)
             session.commit()
+
+def get_bishops_ward(session: Session, bishop_user: User) -> Ward:
+    """Helper function to get the ward for a given bishop user calling."""
+    if not user_has_calling(bishop_user, "Bishop"):
+        raise HTTPException(status_code=403, detail="User does not have a Bishop calling.")
+    bishop_calling = session.exec(
+        select(UserCalling).where(UserCalling.user_id == bishop_user.id).join_from(UserCalling.calling).where_by(Calling.name == "Bishop")
+    ).first()
+    ward_statement = select(Ward).where(Ward.bishop_id == bishop_calling.id)
+    ward = session.exec(ward_statement).first()
+    return ward

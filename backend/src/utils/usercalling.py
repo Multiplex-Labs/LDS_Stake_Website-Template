@@ -77,3 +77,10 @@ def get_or_make_hc_assignment(
         session.refresh(assignment)
         session.refresh(assignment)
     return assignment
+
+def user_has_calling(user: User, calling_name: str) -> bool:
+    """Helper function to check if a user has a specific calling by name."""
+    for uc in user.callings:
+        if uc.calling and uc.calling.name == calling_name:
+            return True
+    return False

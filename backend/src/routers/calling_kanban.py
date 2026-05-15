@@ -8,7 +8,9 @@ from ..utils import (
     can_approve_proposal,
     get_current_proposal_status,
     create_kanban_update,
-    update_proposal_status
+    update_proposal_status,
+    user_has_calling,
+    get_bishops_ward
 )
 from ..db import get_session
 from ..models import (
@@ -68,11 +70,21 @@ def create_proposal(
 @router.get("/proposals", response_model=list[CallingProposal])
 def list_proposals(
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+    current_user: User = Depends(CallingUser())
 ):
     """List all calling proposals"""
     # TODO: Who should be allowed to view calling proposals?
-    statement = select(CallingProposal)
+    # User must either be a bishop or have permission to view proposals
+    if current_user.has_permission(Permission.VIEW_CALLING_PROPOSALS):
+        logger.debug(f"User {current_user.id} is listing all calling proposals with permission {Permission.VIEW_CALLING_PROPOSALS}")
+        statement = select(CallingProposal)
+    elif current_user.has_calling("Bishop"):
+        # Bishops can only view proposals from their own ward
+        bishop_ward = get_bishops_ward(session, current_user)
+        logger.debug(f"User {current_user.id} is listing calling proposals for their ward as they have the Bishop calling")
+        statement = select(CallingProposal).where(CallingProposal.ward_id == bishop_ward.id)
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized to view calling proposals")
     proposals = session.exec(statement).all()
     return proposals
 
@@ -81,11 +93,17 @@ def list_proposals(
 def get_proposal(
     proposal_id: int,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+    current_user: User = Depends(CallingUser())
 ):
     """Get a specific calling proposal by ID"""
     proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
+    if user_has_calling(current_user, "Bishop"):
+        # Bishops can only view proposals from their own ward
+        bishop_ward = get_bishops_ward(session, current_user)
+        if not proposal or proposal.ward_id != bishop_ward.ward_id:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        return proposal
+    if not current_user.has_permission(Permission.VIEW_CALLING_PROPOSALS) or not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return proposal
 
