@@ -129,33 +129,34 @@ If you plan to support other database engines later, update `migrations/env.py` 
 
 ## Data files
 
-### Ward Definitions (`wards.txt`)
+### Ward Definitions (`wards.csv`)
 
-The `wards.txt` file defines all wards in the stake. Each ward name appears on its own line. This file is loaded automatically on application startup.
+The `wards.csv` file defines all wards in the stake and their meeting start time. Each non-comment row contains a ward name and a meeting time (hour as a float). This file is loaded automatically on application startup.
 
 **Format:**
-- One ward name per line
+- CSV with two columns: `name,meeting_hour`
+- Example row: `ward1,9` (ward `ward1` starts at 9:00)
+- Example row with half-hour: `ward2,10.5` (starts at 10:30)
 - Lines starting with `#` are treated as comments and ignored
 - Blank lines are ignored
-- Example:
+- Example file:
   ```
-  # Stake wards
-  ward1
-  ward2
-  ward3
+  # Ward name, meeting start hour (float)
+  ward1,9
+  ward2,10.5
   ```
 
 **Behavior:**
 - The application reads this file only if the database has no wards (i.e., on first startup)
-- For each ward name, a `Bishop` calling slot is automatically created
+- For each ward row, a ward record is created and a `Bishop` calling slot is automatically created
 - If wards already exist in the database, the file is ignored and a warning is logged
 
 **Configuration:**
-- Environment variable: `WARD_DEFINITION_FILE` (defaults to `wards.txt`)
+- Environment variable: `WARD_DEFINITION_FILE` (defaults to `wards.csv`)
 - The path can be absolute or relative to the directory where you start the application
 - Example in `.env`:
   ```
-  WARD_DEFINITION_FILE=./wards.txt
+  WARD_DEFINITION_FILE=./wards.csv
   ```
 
 **To reset wards:**

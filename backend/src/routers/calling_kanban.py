@@ -206,6 +206,30 @@ def delete_comment(
     session.commit()
     return {"detail": "Comment deleted successfully"}
 
+@router.post("/proposals/{proposal_id}/advance")
+def force_advance_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS))
+):
+    """Force advance a calling proposal to the next stage (for testing/admin purposes)"""
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    current_stage = get_current_proposal_status(proposal, session)
+    if current_stage == KanbanStages.DONE:
+        raise HTTPException(status_code=400, detail="Proposal is already at final stage")
+    # Create kanban update to next stage
+    next_stage = KanbanStages(current_stage + 1)
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=current_stage,
+        to_stage=next_stage
+    )
+    return {"detail": f"Proposal advanced to {next_stage}"}
+
 # CallingApproval endpoints
 @router.post("/proposals/{proposal_id}/approvals", response_model=CallingApproval)
 def add_approval(
