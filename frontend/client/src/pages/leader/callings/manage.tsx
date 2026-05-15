@@ -30,7 +30,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
@@ -439,7 +438,7 @@ export default function ManageCallings() {
 
         {/* Edit / Advance Dialog */}
         <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && closeDialog()}>
-          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
             <DialogHeader className="p-6 pb-4">
               <DialogTitle className="text-xl">
                 {selectedProposal && `${selectedProposal.fname} ${selectedProposal.lname}`}
@@ -450,7 +449,7 @@ export default function ManageCallings() {
             </DialogHeader>
 
             {selectedProposal && editForm && (
-              <ScrollArea className="flex-1 px-6 pb-2">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2">
                 <div className="space-y-6 py-2">
                   {/* Current Stage */}
                   <div className="flex items-center gap-2">
@@ -763,7 +762,7 @@ export default function ManageCallings() {
                     </div>
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
             )}
 
             <DialogFooter className="p-6 pt-4 border-t">
