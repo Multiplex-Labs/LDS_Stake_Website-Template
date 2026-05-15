@@ -127,6 +127,77 @@ If you use a `.env` file, ensure `DB_ENGINE` and `DATABASE_PATH` are set before 
 
 If you plan to support other database engines later, update `migrations/env.py` to accept connection strings for those engines; currently only `sqlite` is supported and other values will raise a `ValueError`.
 
+## Data files
+
+### Ward Definitions (`wards.txt`)
+
+The `wards.txt` file defines all wards in the stake. Each ward name appears on its own line. This file is loaded automatically on application startup.
+
+**Format:**
+- One ward name per line
+- Lines starting with `#` are treated as comments and ignored
+- Blank lines are ignored
+- Example:
+  ```
+  # Stake wards
+  ward1
+  ward2
+  ward3
+  ```
+
+**Behavior:**
+- The application reads this file only if the database has no wards (i.e., on first startup)
+- For each ward name, a `Bishop` calling slot is automatically created
+- If wards already exist in the database, the file is ignored and a warning is logged
+
+**Configuration:**
+- Environment variable: `WARD_DEFINITION_FILE` (defaults to `wards.txt`)
+- The path can be absolute or relative to the directory where you start the application
+- Example in `.env`:
+  ```
+  WARD_DEFINITION_FILE=./wards.txt
+  ```
+
+**To reset wards:**
+If you need to reload the ward definitions, delete all wards from the database (via SQL or the admin UI) and restart the application.
+
+### Speaking Schedule CSV (`speaking_schedule.csv`)
+
+The `speaking_schedule.csv` file defines the yearly speaking assignments for High Councilors. It maps each High Councilor slot to the wards they speak in each month.
+
+**Format:**
+- **12 columns**, one for each month: January through December
+- **Rows** represent High Councilor slots (one row per slot; number of rows must match `max_slots` for the `High Councilor` calling in the database)
+- **Cell values** are ward IDs (integers) or empty for "not speaking" that month
+- Commas separate columns
+- Example (3 High Councilor slots):
+  ```
+  1,,,,, ,10,9,8,7,6,5
+  2,1,,,,,10,9,8,7,6
+  3,2,1,,,,,10,9,8,7
+  ```
+  This means:
+  - Slot 1: speaks in ward 1 in Jan, ward 10 in Jul, ward 9 in Aug, etc.
+  - Slot 2: speaks in ward 2 in Jan, ward 1 in Feb, etc.
+  - Slot 3: speaks in ward 3 in Jan, ward 2 in Feb, ward 1 in Mar, etc.
+
+**Behavior:**
+- The file is loaded automatically on application startup
+- The number of rows must exactly match the `max_slots` value for the `High Councilor` calling in the database
+- If the file is missing or empty, speaking assignment features are disabled (logged as a warning)
+- If row count doesn't match slot count, the mismatch is logged and speaking assignments are disabled
+
+**Configuration:**
+- Environment variable: `SPEAKING_SCHEDULE_CSV_PATH` (required for speaking assignments to work)
+- The path can be absolute or relative to the directory where you start the application
+- Example in `.env`:
+  ```
+  SPEAKING_SCHEDULE_CSV_PATH=./speaking_schedule.csv
+  ```
+
+**To update speaking assignments:**
+Edit the CSV file directly and restart the application. The speaking calendar is regenerated from the CSV on each startup.
+
 ## Development notes
 - The ASGI application instance is defined in `src.app:app` and the server is started programmatically from `main.py`.
 - Logging configuration is provided by `src/logging_config.py` and integrated into `main.py`.

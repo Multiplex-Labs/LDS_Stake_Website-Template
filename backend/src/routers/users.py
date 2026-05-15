@@ -100,7 +100,12 @@ def update_user(
     db_user = session.get(User, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
-    
+    if db_user.active and not user_update.active:
+        # ensure that user is not the last active user
+        active_users_count = session.exec(select(User).where(User.active == True)).count()
+        if active_users_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot deactivate the last active user.")
+        
     if user_update.email != db_user.email:
         # Ensure email is unique
         validate_unique_field(
@@ -179,7 +184,10 @@ def delete_user(
 ):
     # Check permissions
     can_manage_user_or_throw(user_id, calling_user, session)
-
+    # Do not delete last user
+    total_users = session.exec(select(User)).count()
+    if total_users <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last user in the system.")
     # Fetch existing user
     db_user = session.get(User, user_id)
 
