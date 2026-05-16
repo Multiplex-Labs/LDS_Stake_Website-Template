@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer, Settings } from "lucide-react";
 import { Link } from "wouter";
@@ -121,10 +121,18 @@ export default function ReleasesAndSustainings() {
 
   const {
     data: wards = [],
-    isLoading: wardsLoading,
-    isError: wardsError,
+    isLoading,
+    isError,
+    error,
   } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
+    select: (data) => {
+      if (!Array.isArray(data)) {
+        console.error("[sustainings] /api/wards/ returned unexpected shape:", data);
+        return [];
+      }
+      return data;
+    },
   });
 
   const {
@@ -209,10 +217,18 @@ export default function ReleasesAndSustainings() {
   const allEmpty = visibleTabs.length === 0;
 
   const [activeTab, setActiveTab] = useState(0);
+
+  // Reset to first tab if the previously active index is no longer valid
+  useEffect(() => {
+    if (activeTab >= visibleTabs.length && visibleTabs.length > 0) {
+      setActiveTab(0);
+    }
+  }, [visibleTabs.length, activeTab]);
+
   const safeActive = Math.min(activeTab, Math.max(0, visibleTabs.length - 1));
   const activeTabData = visibleTabs[safeActive] ?? null;
 
-  if (wardsLoading) {
+  if (isLoading) {
     return (
       <Layout>
         <div className="bg-muted/30 py-12 print:hidden">
@@ -230,7 +246,9 @@ export default function ReleasesAndSustainings() {
     );
   }
 
-  if (wardsError || boardError) {
+  if (isError || boardError) {
+    if (isError) console.error("[sustainings] failed to load /api/wards/:", error);
+    const is401 = error instanceof Error && error.message.startsWith("401");
     return (
       <Layout>
         <div className="bg-muted/30 py-12 print:hidden">
@@ -240,7 +258,9 @@ export default function ReleasesAndSustainings() {
         </div>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
           <p className="text-destructive">
-            Failed to load {wardsError ? "ward" : "calling"} data. Please refresh and try again.
+            {is401
+              ? "Your session has expired. Please log out and log in again."
+              : `Failed to load ${isError ? "ward" : "calling"} data. Please refresh and try again.`}
           </p>
         </div>
       </Layout>
@@ -249,7 +269,7 @@ export default function ReleasesAndSustainings() {
 
   return (
     <Layout>
-      {/* Print: hide nav, footer, and print-only-hidden elements */}
+      {/* Print: hide nav and footer */}
       <style>{`@media print { nav, footer { display: none !important; } }`}</style>
 
       {/* Page header — hidden when printing */}
@@ -317,7 +337,7 @@ export default function ReleasesAndSustainings() {
               ))}
             </div>
 
-            {/* Active tab content — shown when printing */}
+            {/* Active tab content */}
             {activeTabData && (
               <div>
                 <h2 className="font-serif text-2xl font-bold mb-6 hidden print:block">
