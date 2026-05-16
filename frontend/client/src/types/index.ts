@@ -110,3 +110,28 @@ export interface SpeakingTopic {
   reference_material: string | null;
   month: string; // ISO datetime: "2026-01-01T00:00:00"
 }
+
+// Sustaining Prep localStorage types
+export interface OrdinationEntry {
+  id: string;
+  fname: string;
+  lname: string;
+  office: "Elder" | "High Priest";
+}
+
+export type SustainingItem =
+  | { type: "proposal"; proposalId: number }
+  | { type: "ordination"; ordinationId: string };
+
+export interface WardAssignment {
+  wardId: number | "stake";
+  items: SustainingItem[];
+}
+
+export interface SustainingPrepState {
+  version: 1;
+  sustainingDate: string | null;
+  unassigned: SustainingItem[];
+  wardAssignments: WardAssignment[];
+  ordinations: OrdinationEntry[];
+}
