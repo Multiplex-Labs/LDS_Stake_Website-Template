@@ -24,5 +24,5 @@ export function useWardMap(wards: Ward[]): Map<number, string> {
 
 export function findByCallingName(users: ApiUser[], name: string): ApiUser | undefined {
   const lower = name.toLowerCase();
-  return users.find((u) => u.callings?.some((c) => c.calling.name.toLowerCase() === lower));
+  return users.find((u) => u.callings?.some((c) => c.calling?.name.toLowerCase() === lower));
 }

@@ -39,7 +39,7 @@ export interface ApiUserCalling {
   user_id: number;
   calling_id: number;
   slot_number: number;
-  calling: ApiCalling;
+  calling?: ApiCalling;
 }
 
 export interface ApiUser {

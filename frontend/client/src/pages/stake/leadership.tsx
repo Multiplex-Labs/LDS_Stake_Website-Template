@@ -12,7 +12,7 @@ function findAllByCallingName(users: ApiUser[], name: string): { user: ApiUser; 
   const results: { user: ApiUser; uc: ApiUserCalling }[] = [];
   for (const user of users) {
     for (const uc of user.callings ?? []) {
-      if (uc.calling.name.toLowerCase() === lower) {
+      if (uc.calling?.name.toLowerCase() === lower) {
         results.push({ user, uc });
       }
     }
