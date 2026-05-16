@@ -1,8 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { Printer, Settings } from "lucide-react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout/Layout";
-import type { Ward } from "@/types";
+import { useAuthStore } from "@/stores/auth";
+import { loadSustainingPrep } from "@/lib/sustainingPrep";
+import type { Ward, KanbanBoard } from "@/types";
 
 // Local types — viewer only, not exported
 interface Release {
@@ -114,6 +117,8 @@ function TabContent({ tab }: { tab: TabData }) {
 }
 
 export default function ReleasesAndSustainings() {
+  const { user } = useAuthStore();
+
   const {
     data: wards = [],
     isLoading,
@@ -130,22 +135,83 @@ export default function ReleasesAndSustainings() {
     },
   });
 
-  // TODO: replace empty arrays with real data from the releases/sustainings API
-  // once the management UI and backing endpoints are built.
+  const {
+    data: board = {},
+    isError: boardError,
+  } = useQuery<KanbanBoard>({
+    queryKey: ["/api/calling-kanban/board"],
+  });
+
+  if (boardError) console.error("[sustainings] Failed to load kanban board");
+
+  // Load prep state once on mount — re-read on every page visit (Wouter remounts on navigation)
+  const prepState = useMemo(() => loadSustainingPrep(), []);
+
+  // Build tab data from localStorage sustaining-prep state
   const allTabs = useMemo<TabData[]>(() => {
+    const proposals = board["3"] ?? [];
+    const proposalMap = new Map(proposals.map((p) => [p.id, p]));
+
     const wardTabs: TabData[] = [...wards]
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((w) => ({
-        label: w.name,
-        releases: [],
-        ordinations: [],
-        sustainings: [],
-      }));
+      .map((w) => {
+        const wa = prepState.wardAssignments.find((x) => x.wardId === w.id);
+        if (!wa) return { label: w.name, releases: [], ordinations: [], sustainings: [] };
+
+        const releases: Release[] = [];
+        const ordinations: Ordination[] = [];
+        const sustainings: Sustaining[] = [];
+
+        for (const item of wa.items) {
+          if (item.type === "proposal") {
+            const p = proposalMap.get(item.proposalId);
+            if (!p) continue;
+            const name = `${p.fname} ${p.lname}`;
+            if (p.is_release) {
+              releases.push({ name, calling: p.proposed_calling });
+            } else {
+              sustainings.push({ name, calling: p.proposed_calling });
+            }
+          } else {
+            const ord = prepState.ordinations.find((o) => o.id === item.ordinationId);
+            if (!ord) continue;
+            ordinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
+          }
+        }
+
+        return { label: w.name, releases, ordinations, sustainings };
+      });
+
+    // Stake tab
+    const stakeWa = prepState.wardAssignments.find((x) => x.wardId === "stake");
+    const stakeReleases: Release[] = [];
+    const stakeOrdinations: Ordination[] = [];
+    const stakeS: Sustaining[] = [];
+
+    if (stakeWa) {
+      for (const item of stakeWa.items) {
+        if (item.type === "proposal") {
+          const p = proposalMap.get(item.proposalId);
+          if (!p) continue;
+          const name = `${p.fname} ${p.lname}`;
+          if (p.is_release) {
+            stakeReleases.push({ name, calling: p.proposed_calling });
+          } else {
+            stakeS.push({ name, calling: p.proposed_calling });
+          }
+        } else {
+          const ord = prepState.ordinations.find((o) => o.id === item.ordinationId);
+          if (!ord) continue;
+          stakeOrdinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
+        }
+      }
+    }
+
     return [
       ...wardTabs,
-      { label: "Stake", releases: [], ordinations: [], sustainings: [] },
+      { label: "Stake", releases: stakeReleases, ordinations: stakeOrdinations, sustainings: stakeS },
     ];
-  }, [wards]);
+  }, [wards, board, prepState]);
 
   const visibleTabs = useMemo(() => allTabs.filter(hasEntries), [allTabs]);
   const allEmpty = visibleTabs.length === 0;
@@ -180,8 +246,8 @@ export default function ReleasesAndSustainings() {
     );
   }
 
-  if (isError) {
-    console.error("[sustainings] failed to load /api/wards/:", error);
+  if (isError || boardError) {
+    if (isError) console.error("[sustainings] failed to load /api/wards/:", error);
     const is401 = error instanceof Error && error.message.startsWith("401");
     return (
       <Layout>
@@ -194,7 +260,7 @@ export default function ReleasesAndSustainings() {
           <p className="text-destructive">
             {is401
               ? "Your session has expired. Please log out and log in again."
-              : "Failed to load ward data. Please refresh and try again."}
+              : `Failed to load ${isError ? "ward" : "calling"} data. Please refresh and try again.`}
           </p>
         </div>
       </Layout>
@@ -208,12 +274,34 @@ export default function ReleasesAndSustainings() {
 
       {/* Page header — hidden when printing */}
       <div className="bg-muted/30 py-12 print:hidden">
-        <div className="container mx-auto px-4 flex items-center justify-between">
-          <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
-          <button className="btn btn-outline gap-2" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            Print
-          </button>
+        <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
+            {prepState.sustainingDate && (
+              <p className="text-muted-foreground mt-1">
+                {new Date(prepState.sustainingDate + "T00:00:00").toLocaleDateString(undefined, {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {user && (
+              <Link href="/leader/callings/sustainings-prep">
+                <button className="btn btn-outline gap-2">
+                  <Settings className="size-4" />
+                  Manage
+                </button>
+              </Link>
+            )}
+            <button className="btn btn-outline gap-2" onClick={() => window.print()}>
+              <Printer className="size-4" />
+              Print
+            </button>
+          </div>
         </div>
       </div>
 
@@ -224,6 +312,14 @@ export default function ReleasesAndSustainings() {
             <p className="text-muted-foreground">
               There are no releases, ordinations, or sustainings scheduled.
             </p>
+            {user && (
+              <Link href="/leader/callings/sustainings-prep">
+                <button className="btn btn-outline mt-6 gap-2">
+                  <Settings className="size-4" />
+                  Set up Sustaining Prep
+                </button>
+              </Link>
+            )}
           </div>
         ) : (
           <>

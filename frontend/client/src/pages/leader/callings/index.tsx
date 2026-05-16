@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PlusCircle, FileCheck, Settings, Archive } from "lucide-react";
+import { PlusCircle, FileCheck, Settings, Archive, ClipboardList } from "lucide-react";
 import { Link } from "wouter";
 import { useWardMap } from "@/lib/hooks";
 import type { KanbanBoard, CallingProposal, Ward } from "@/types";
@@ -57,12 +57,20 @@ export default function CallingSystem() {
               </Button>
             </Link>
           </div>
-          <Link href="/leader/callings/manage">
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-              <Settings className="h-4 w-4" />
-              Manage
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/leader/callings/sustainings-prep">
+              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                <ClipboardList className="h-4 w-4" />
+                Sustaining Prep
+              </Button>
+            </Link>
+            <Link href="/leader/callings/manage">
+              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                <Settings className="h-4 w-4" />
+                Manage
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-6 min-h-[600px]">
