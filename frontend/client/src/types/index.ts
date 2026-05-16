@@ -129,6 +129,7 @@ export interface WardAssignment {
 }
 
 export interface SustainingPrepState {
+  version: 1;
   sustainingDate: string | null;
   unassigned: SustainingItem[];
   wardAssignments: WardAssignment[];

@@ -122,18 +122,25 @@ export default function ReleasesAndSustainings() {
   const {
     data: wards = [],
     isLoading: wardsLoading,
-    isError,
+    isError: wardsError,
   } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
 
-  const { data: board = {} } = useQuery<KanbanBoard>({
+  const {
+    data: board = {},
+    isError: boardError,
+  } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
 
+  if (boardError) console.error("[sustainings] Failed to load kanban board");
+
+  // Load prep state once on mount — re-read on every page visit (Wouter remounts on navigation)
+  const prepState = useMemo(() => loadSustainingPrep(), []);
+
   // Build tab data from localStorage sustaining-prep state
   const allTabs = useMemo<TabData[]>(() => {
-    const prepState = loadSustainingPrep();
     const proposals = board["3"] ?? [];
     const proposalMap = new Map(proposals.map((p) => [p.id, p]));
 
@@ -196,9 +203,7 @@ export default function ReleasesAndSustainings() {
       ...wardTabs,
       { label: "Stake", releases: stakeReleases, ordinations: stakeOrdinations, sustainings: stakeS },
     ];
-  }, [wards, board]);
-
-  const sustainingDate = useMemo(() => loadSustainingPrep().sustainingDate, []);
+  }, [wards, board, prepState]);
 
   const visibleTabs = useMemo(() => allTabs.filter(hasEntries), [allTabs]);
   const allEmpty = visibleTabs.length === 0;
@@ -225,7 +230,7 @@ export default function ReleasesAndSustainings() {
     );
   }
 
-  if (isError) {
+  if (wardsError || boardError) {
     return (
       <Layout>
         <div className="bg-muted/30 py-12 print:hidden">
@@ -235,7 +240,7 @@ export default function ReleasesAndSustainings() {
         </div>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
           <p className="text-destructive">
-            Failed to load ward data. Please refresh and try again.
+            Failed to load {wardsError ? "ward" : "calling"} data. Please refresh and try again.
           </p>
         </div>
       </Layout>
@@ -252,9 +257,9 @@ export default function ReleasesAndSustainings() {
         <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
-            {sustainingDate && (
+            {prepState.sustainingDate && (
               <p className="text-muted-foreground mt-1">
-                {new Date(sustainingDate + "T00:00:00").toLocaleDateString(undefined, {
+                {new Date(prepState.sustainingDate + "T00:00:00").toLocaleDateString(undefined, {
                   weekday: "long",
                   year: "numeric",
                   month: "long",

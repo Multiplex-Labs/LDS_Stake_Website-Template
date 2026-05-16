@@ -37,6 +37,14 @@ function itemsEqual(a: SustainingItem, b: SustainingItem): boolean {
   return itemKey(a) === itemKey(b);
 }
 
+function isSustainingItem(value: unknown): value is SustainingItem {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v.type === "proposal") return typeof v.proposalId === "number";
+  if (v.type === "ordination") return typeof v.ordinationId === "string";
+  return false;
+}
+
 function findItemSource(state: SustainingPrepState, item: SustainingItem): string {
   if (state.unassigned.some((i) => itemsEqual(i, item))) return "pool";
   for (const wa of state.wardAssignments) {
@@ -47,10 +55,14 @@ function findItemSource(state: SustainingPrepState, item: SustainingItem): strin
   return "pool";
 }
 
-function parseDropId(id: string): number | "stake" | "pool" {
-  if (id === "pool") return "pool";
+function parseWardDropId(id: string): number | "stake" | null {
   if (id === "ward-stake") return "stake";
-  return parseInt(id.replace("ward-", ""), 10);
+  const parsed = parseInt(id.replace("ward-", ""), 10);
+  if (isNaN(parsed)) {
+    console.error("[sustainings-prep] parseWardDropId received unexpected droppable ID:", id);
+    return null;
+  }
+  return parsed;
 }
 
 // ---------- PoolCard ----------
@@ -60,13 +72,12 @@ interface PoolCardProps {
   proposals: KanbanBoard;
   ordinations: OrdinationEntry[];
   wardName?: string;
-  isDragging?: boolean;
 }
 
 function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardProps) {
   const borderClass =
     item.type === "ordination"
-      ? "border-l-purple-500"
+      ? "border-l-secondary"
       : (() => {
           const proposal = (proposals["3"] ?? []).find((p) => p.id === item.proposalId);
           return proposal?.is_release ? "border-l-destructive" : "border-l-primary";
@@ -77,12 +88,18 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
 
   if (item.type === "ordination") {
     const ord = ordinations.find((o) => o.id === item.ordinationId);
-    if (!ord) return null;
+    if (!ord) {
+      console.error("[sustainings-prep] Ordination ID in state not found in ordinations list:", item.ordinationId);
+      return null;
+    }
     name = `${ord.fname} ${ord.lname}`;
     subtitle = ord.office;
   } else {
     const proposal = (proposals["3"] ?? []).find((p) => p.id === item.proposalId);
-    if (!proposal) return null;
+    if (!proposal) {
+      console.error("[sustainings-prep] Proposal ID in state not found in board stage 3:", item.proposalId);
+      return null;
+    }
     name = `${proposal.fname} ${proposal.lname}`;
     subtitle = proposal.proposed_calling;
   }
@@ -97,7 +114,7 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
         <div className="text-xs text-muted-foreground/60 mt-1">{wardName}</div>
       )}
       {item.type === "ordination" && (
-        <span className="mt-1 inline-block text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+        <span className="mt-1 inline-block text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
           Ordination
         </span>
       )}
@@ -105,12 +122,7 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
   );
 }
 
-function DraggableCard({
-  item,
-  proposals,
-  ordinations,
-  wardName,
-}: PoolCardProps) {
+function DraggableCard({ item, proposals, ordinations, wardName }: PoolCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: itemKey(item),
     data: { item },
@@ -124,13 +136,7 @@ function DraggableCard({
 
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <PoolCardContent
-        item={item}
-        proposals={proposals}
-        ordinations={ordinations}
-        wardName={wardName}
-        isDragging={isDragging}
-      />
+      <PoolCardContent item={item} proposals={proposals} ordinations={ordinations} wardName={wardName} />
     </div>
   );
 }
@@ -266,7 +272,7 @@ function OrdinationDialog({
                     type="radio"
                     className="radio radio-sm"
                     checked={office === o}
-                    onChange={() => setValue("office", o)}
+                    onChange={() => setValue("office", o, { shouldValidate: true })}
                   />
                   <span className="text-sm">{o}</span>
                 </label>
@@ -294,12 +300,23 @@ export default function SustainingPrep() {
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  const { data: board = {}, isLoading: boardLoading } = useQuery<KanbanBoard>({
+  const {
+    data: board = {},
+    isLoading: boardLoading,
+    isError: boardError,
+  } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const {
+    data: wards = [],
+    isLoading: wardsLoading,
+    isError: wardsError,
+  } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+
+  if (boardError) console.error("[sustainings-prep] Failed to load kanban board");
+  if (wardsError) console.error("[sustainings-prep] Failed to load wards");
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useMemo(() => new Map(wards.map((w) => [w.id, w.name])), [wards]);
@@ -333,6 +350,7 @@ export default function SustainingPrep() {
     clearSustainingPrep();
     setInitialized(false);
     setState({
+      version: 1,
       sustainingDate: null,
       unassigned: sustainProposals.map((p) => ({ type: "proposal" as const, proposalId: p.id })),
       wardAssignments: [],
@@ -354,30 +372,32 @@ export default function SustainingPrep() {
   }, []);
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
-    const item = active.data.current?.item as SustainingItem | undefined;
-    if (item) setActiveItem(item);
+    const raw = active.data.current?.item;
+    if (isSustainingItem(raw)) setActiveItem(raw);
   }, []);
 
-  const handleDragEnd = useCallback(
-    ({ active, over }: DragEndEvent) => {
-      setActiveItem(null);
-      if (!over) return;
+  // All source/target computation happens inside setState so it always reads from `prev`
+  const handleDragEnd = useCallback(({ active, over }: DragEndEvent) => {
+    setActiveItem(null);
+    if (!over) return;
 
-      const item = active.data.current?.item as SustainingItem;
-      if (!item) return;
+    const raw = active.data.current?.item;
+    if (!isSustainingItem(raw)) return;
+    const item = raw;
+    const targetId = over.id as string;
 
-      const sourceId = findItemSource(state, item);
-      const targetId = over.id as string;
-      if (sourceId === targetId) return;
+    setState((prev) => {
+      const sourceId = findItemSource(prev, item);
+      if (sourceId === targetId) return prev;
 
-      setState((prev) => {
-        let next = { ...prev, wardAssignments: prev.wardAssignments.map((wa) => ({ ...wa, items: [...wa.items] })) };
+      let next = { ...prev, wardAssignments: prev.wardAssignments.map((wa) => ({ ...wa, items: [...wa.items] })) };
 
-        // Remove from source
-        if (sourceId === "pool") {
-          next = { ...next, unassigned: next.unassigned.filter((i) => !itemsEqual(i, item)) };
-        } else {
-          const srcWardId = parseDropId(sourceId);
+      // Remove from source
+      if (sourceId === "pool") {
+        next = { ...next, unassigned: next.unassigned.filter((i) => !itemsEqual(i, item)) };
+      } else {
+        const srcWardId = parseWardDropId(sourceId);
+        if (srcWardId !== null) {
           next = {
             ...next,
             wardAssignments: next.wardAssignments.map((wa) =>
@@ -385,36 +405,53 @@ export default function SustainingPrep() {
             ),
           };
         }
+      }
 
-        // Add to target
-        if (targetId === "pool") {
-          next = { ...next, unassigned: [...next.unassigned, item] };
+      // Add to target
+      if (targetId === "pool") {
+        next = { ...next, unassigned: [...next.unassigned, item] };
+      } else {
+        const tgtWardId = parseWardDropId(targetId);
+        if (tgtWardId === null) return next;
+        const exists = next.wardAssignments.find((wa) => wa.wardId === tgtWardId);
+        if (exists) {
+          next = {
+            ...next,
+            wardAssignments: next.wardAssignments.map((wa) =>
+              wa.wardId === tgtWardId ? { ...wa, items: [...wa.items, item] } : wa
+            ),
+          };
         } else {
-          const tgtWardId = parseDropId(targetId);
-          if (tgtWardId === "pool") return next; // shouldn't happen, but guard anyway
-          const exists = next.wardAssignments.find((wa) => wa.wardId === tgtWardId);
-          if (exists) {
-            next = {
-              ...next,
-              wardAssignments: next.wardAssignments.map((wa) =>
-                wa.wardId === tgtWardId ? { ...wa, items: [...wa.items, item] } : wa
-              ),
-            };
-          } else {
-            next = {
-              ...next,
-              wardAssignments: [...next.wardAssignments, { wardId: tgtWardId, items: [item] }],
-            };
-          }
+          next = {
+            ...next,
+            wardAssignments: [...next.wardAssignments, { wardId: tgtWardId, items: [item] }],
+          };
         }
+      }
 
-        return next;
-      });
-    },
-    [state]
-  );
+      // Prune empty ward assignments to keep state clean
+      next = { ...next, wardAssignments: next.wardAssignments.filter((wa) => wa.items.length > 0) };
+
+      return next;
+    });
+  }, []);
 
   const { setNodeRef: poolRef, isOver: isOverPool } = useDroppable({ id: "pool" });
+
+  if (boardError || wardsError) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+          <p className="text-destructive font-medium">Failed to load sustaining data.</p>
+          <p className="text-muted-foreground text-sm mt-2">
+            Please refresh the page. If this continues, contact your administrator.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  const isPageLoading = boardLoading || wardsLoading;
 
   return (
     <Layout>
@@ -471,7 +508,7 @@ export default function SustainingPrep() {
                     isOverPool ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : ""
                   }`}
                 >
-                  {boardLoading ? (
+                  {isPageLoading ? (
                     <>
                       <div className="skeleton h-16 w-full rounded-md" />
                       <div className="skeleton h-16 w-full rounded-md" />
