@@ -6,7 +6,7 @@ import mimetypes
 from logging import getLogger
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlmodel import Field, SQLModel, Session, delete, select
 
 
@@ -244,6 +244,7 @@ def create_user(
 @router.post("/photo")
 async def upload_user_photo(
     file: UploadFile = File(...),
+    user_id: int | None = Query(default=None),
     current_user: User = Depends(CallingUser()),
     session: Session = Depends(get_session),
 ):
@@ -253,7 +254,13 @@ async def upload_user_photo(
     Accepts a single image file upload, validates the content-type, saves the
     file under the backend static/profile_images directory and updates the
     user's `profile_image` to the proxied URL (`/api/static/profile_images/<file>`).
+
+    If `user_id` is provided, uploads for that user (requires MANAGE_USERS permission
+    unless uploading for self). If omitted, uploads for the authenticated user.
     """
+    target_id = user_id or current_user.id
+    can_manage_user_or_throw(target_id, current_user, session)
+
     # Basic validation
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
@@ -270,7 +277,7 @@ async def upload_user_photo(
     os.makedirs(base_dir, exist_ok=True)
 
     # Unique filename
-    fname = f"{current_user.id}_{int(time.time())}_{secrets.token_hex(8)}{ext}"
+    fname = f"{target_id}_{int(time.time())}_{secrets.token_hex(8)}{ext}"
     dest_path = os.path.join(base_dir, fname)
 
     # Save file
@@ -287,7 +294,7 @@ async def upload_user_photo(
 
     # Update user profile_image to a proxied path so frontend can request via /api
     public_path = f"/api/static/profile_images/{fname}"
-    db_user = session.get(User, current_user.id)
+    db_user = session.get(User, target_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     db_user.profile_image = public_path

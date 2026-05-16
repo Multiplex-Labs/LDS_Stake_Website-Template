@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -37,10 +39,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, Plus, ArrowUpDown, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAccessToken } from "@/lib/queryClient";
 import type { ApiUser, ApiCalling } from "@/types";
 
 type SortKey = "name" | "active" | "email";
@@ -65,6 +67,48 @@ interface AddForm {
   confirmPassword: string;
 }
 
+async function getCroppedImageBlob(src: string, pixelCrop: Area): Promise<Blob> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, 400, 400);
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    400,
+    400,
+  );
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Failed to generate image — please try again."));
+          return;
+        }
+        resolve(blob);
+      },
+      "image/jpeg",
+      0.92,
+    );
+  });
+}
+
 export default function UserAdmin() {
   // --- Queries ---
   const { data: users = [], isLoading, isError } = useQuery<ApiUser[]>({
@@ -85,6 +129,14 @@ export default function UserAdmin() {
   const [editCallingId, setEditCallingId] = useState<number | "">("");
   const [editSlotNumber, setEditSlotNumber] = useState<number | "">("");
 
+  // --- Crop state ---
+  const [cropMode, setCropMode] = useState(false);
+  const [imgSrc, setImgSrc] = useState("");
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // --- Add user dialog state ---
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [addForm, setAddForm] = useState<AddForm>({
@@ -95,7 +147,6 @@ export default function UserAdmin() {
 
   // --- Memos ---
 
-  // Map of calling_id → set of occupied slot numbers (built from all users)
   const occupiedSlotsMap = useMemo(() => {
     const map = new Map<number, Set<number>>();
     for (const user of users) {
@@ -107,8 +158,6 @@ export default function UserAdmin() {
     return map;
   }, [users]);
 
-  // Derive live callings for the edit dialog from the users query so they
-  // update automatically after remove/assign mutations invalidate the cache.
   const editingUserCallings = useMemo(
     () => (editingUser ? (users.find((u) => u.id === editingUser.id)?.callings ?? []) : []),
     [editingUser, users],
@@ -140,7 +189,6 @@ export default function UserAdmin() {
     return Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !occupied.has(s));
   }
 
-  // Derived values for the edit dialog calling picker
   const editSelectedCalling = callings.find((c) => c.id === editCallingId);
   const editFreeSlots = editSelectedCalling ? getFreeSlots(editSelectedCalling.id, editSelectedCalling.max_slots) : [];
   const editCanAdd =
@@ -148,9 +196,24 @@ export default function UserAdmin() {
     editFreeSlots.length > 0 &&
     (editSelectedCalling.max_slots === 1 || editSlotNumber !== "");
 
-  // Derived values for the add user calling picker
   const addSelectedCalling = callings.find((c) => c.id === addCallingId);
   const addFreeSlots = addSelectedCalling ? getFreeSlots(addSelectedCalling.id, addSelectedCalling.max_slots) : [];
+
+  // --- Crop helpers ---
+
+  function releaseCropState() {
+    if (imgSrc) URL.revokeObjectURL(imgSrc);
+    setImgSrc("");
+    setCropMode(false);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  const onCropComplete = useCallback((_: Area, pixels: Area) => {
+    setCroppedAreaPixels(pixels);
+  }, []);
 
   // --- Mutations ---
 
@@ -258,6 +321,33 @@ export default function UserAdmin() {
     onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
   });
 
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async ({ blob, userId }: { blob: Blob; userId: number }) => {
+      const formData = new FormData();
+      formData.append("file", blob, "photo.jpg");
+      const token = getAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/users/photo?user_id=${userId}`, {
+        method: "POST",
+        headers,
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`${res.status}: ${text}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
+      toast.success("Photo updated");
+      releaseCropState();
+    },
+    onError: () => toast.error("Upload Failed", { description: "Could not save photo. Please try again." }),
+  });
+
   // --- Handlers ---
 
   const handleSort = (key: SortKey) => {
@@ -289,10 +379,39 @@ export default function UserAdmin() {
   };
 
   const handleCloseEdit = () => {
+    releaseCropState();
     setEditingUser(null);
     setEditForm(null);
     setEditCallingId("");
     setEditSlotNumber("");
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (imgSrc) URL.revokeObjectURL(imgSrc);
+    const url = URL.createObjectURL(file);
+    setImgSrc(url);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setCropMode(true);
+  };
+
+  const handleCancelCrop = () => {
+    releaseCropState();
+  };
+
+  const handleConfirmCrop = async () => {
+    if (!croppedAreaPixels || !editingUser) return;
+    let blob: Blob;
+    try {
+      blob = await getCroppedImageBlob(imgSrc, croppedAreaPixels);
+    } catch {
+      toast.error("Could not process image", { description: "Please try a different photo." });
+      return;
+    }
+    uploadPhotoMutation.mutate({ blob, userId: editingUser.id });
   };
 
   const handleAddUser = () => {
@@ -423,6 +542,7 @@ export default function UserAdmin() {
                   <TableCell>
                     <div className="flex items-center gap-3 py-1">
                       <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
+                        <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
                         <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
                           {user.fname[0]}{user.lname[0]}
                         </AvatarFallback>
@@ -472,137 +592,212 @@ export default function UserAdmin() {
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
           <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-xl">Edit User Profile</DialogTitle>
+              <DialogTitle className="text-xl">
+                {cropMode ? "Crop Photo" : "Edit User Profile"}
+              </DialogTitle>
             </DialogHeader>
 
             {editingUser && editForm && (
-              <div className="grid gap-6 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>First Name</Label>
-                    <Input value={editForm.fname} onChange={(e) => setEditForm({ ...editForm, fname: e.target.value })} />
+              <>
+                {cropMode ? (
+                  <div className="py-4 space-y-4">
+                    <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
+                      <Cropper
+                        image={imgSrc}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={1}
+                        cropShape="round"
+                        showGrid={false}
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={onCropComplete}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 px-1">
+                      <Label className="text-xs text-muted-foreground shrink-0">Zoom</Label>
+                      <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.01}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button variant="outline" onClick={handleCancelCrop} disabled={uploadPhotoMutation.isPending}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleConfirmCrop} disabled={uploadPhotoMutation.isPending}>
+                        {uploadPhotoMutation.isPending ? "Uploading…" : "Use Photo"}
+                      </Button>
+                    </DialogFooter>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Last Name</Label>
-                    <Input value={editForm.lname} onChange={(e) => setEditForm({ ...editForm, lname: e.target.value })} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Optional" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Bio</Label>
-                  <Textarea
-                    value={editForm.bio}
-                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                    placeholder="Brief description or notes..."
-                    className="min-h-[100px]"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Callings Section */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold">Callings</Label>
-
-                  {editingUserCallings.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {editingUserCallings.map((uc) => (
-                        <div key={uc.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/30">
-                          <span className="text-foreground">
-                            {callings.find((c) => c.id === uc.calling_id)?.name ?? "Unknown"}
-                            {(callings.find((c) => c.id === uc.calling_id)?.max_slots ?? 1) > 1 && (
-                              <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>
-                            )}
-                          </span>
+                ) : (
+                  <>
+                    <div className="grid gap-6 py-4">
+                      {/* Photo upload */}
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-16 w-16 bg-primary text-primary-foreground shrink-0">
+                          <AvatarImage src={editingUser.profile_image ?? undefined} alt={`${editingUser.fname} ${editingUser.lname}`} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
+                            {editingUser.fname[0]}{editingUser.lname[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="space-y-1">
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                            disabled={removeCallingMutation.isPending}
-                            onClick={() => removeCallingMutation.mutate({ callingId: uc.calling_id, slotNumber: uc.slot_number })}
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => fileInputRef.current?.click()}
                           >
-                            <X className="size-3" />
+                            <Camera className="size-4" />
+                            Upload Photo
+                          </Button>
+                          <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>First Name</Label>
+                          <Input value={editForm.fname} onChange={(e) => setEditForm({ ...editForm, fname: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Last Name</Label>
+                          <Input value={editForm.lname} onChange={(e) => setEditForm({ ...editForm, lname: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Email</Label>
+                        <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Phone</Label>
+                        <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Optional" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Bio</Label>
+                        <Textarea
+                          value={editForm.bio}
+                          onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                          placeholder="Brief description or notes..."
+                          className="min-h-[100px]"
+                        />
+                      </div>
+
+                      <Separator />
+
+                      {/* Callings Section */}
+                      <div className="space-y-3">
+                        <Label className="text-sm font-semibold">Callings</Label>
+
+                        {editingUserCallings.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {editingUserCallings.map((uc) => (
+                              <div key={uc.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/30">
+                                <span className="text-foreground">
+                                  {callings.find((c) => c.id === uc.calling_id)?.name ?? "Unknown"}
+                                  {(callings.find((c) => c.id === uc.calling_id)?.max_slots ?? 1) > 1 && (
+                                    <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>
+                                  )}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                  disabled={removeCallingMutation.isPending}
+                                  onClick={() => removeCallingMutation.mutate({ callingId: uc.calling_id, slotNumber: uc.slot_number })}
+                                >
+                                  <X className="size-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No callings assigned.</p>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          <Select
+                            value={editCallingId === "" ? "" : String(editCallingId)}
+                            onValueChange={(v) => { setEditCallingId(Number(v)); setEditSlotNumber(""); }}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Add a calling…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {callings.map((c) => (
+                                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {editSelectedCalling && editSelectedCalling.max_slots > 1 && (
+                            <Select
+                              value={editSlotNumber === "" ? "" : String(editSlotNumber)}
+                              onValueChange={(v) => setEditSlotNumber(Number(v))}
+                              disabled={editFreeSlots.length === 0}
+                            >
+                              <SelectTrigger className="w-[110px]">
+                                <SelectValue placeholder={editFreeSlots.length === 0 ? "No slots" : "Slot…"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {editFreeSlots.map((s) => (
+                                  <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!editCanAdd || assignCallingMutation.isPending || removeCallingMutation.isPending}
+                            onClick={() => {
+                              if (!editSelectedCalling || !editingUser) return;
+                              const slot = editSelectedCalling.max_slots === 1 ? 1 : Number(editSlotNumber);
+                              assignCallingMutation.mutate({ callingId: editSelectedCalling.id, slotNumber: slot, userId: editingUser.id });
+                            }}
+                          >
+                            Add
                           </Button>
                         </div>
-                      ))}
+
+                        {editSelectedCalling && editFreeSlots.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {editSelectedCalling.max_slots === 1
+                              ? "This calling is already filled."
+                              : "All slots for this calling are occupied."}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No callings assigned.</p>
-                  )}
 
-                  <div className="flex gap-2 pt-1">
-                    <Select
-                      value={editCallingId === "" ? "" : String(editCallingId)}
-                      onValueChange={(v) => { setEditCallingId(Number(v)); setEditSlotNumber(""); }}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Add a calling…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {callings.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {editSelectedCalling && editSelectedCalling.max_slots > 1 && (
-                      <Select
-                        value={editSlotNumber === "" ? "" : String(editSlotNumber)}
-                        onValueChange={(v) => setEditSlotNumber(Number(v))}
-                        disabled={editFreeSlots.length === 0}
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
+                      <Button
+                        disabled={saveEditMutation.isPending}
+                        onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
                       >
-                        <SelectTrigger className="w-[110px]">
-                          <SelectValue placeholder={editFreeSlots.length === 0 ? "No slots" : "Slot…"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {editFreeSlots.map((s) => (
-                            <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={!editCanAdd || assignCallingMutation.isPending || removeCallingMutation.isPending}
-                      onClick={() => {
-                        if (!editSelectedCalling || !editingUser) return;
-                        const slot = editSelectedCalling.max_slots === 1 ? 1 : Number(editSlotNumber);
-                        assignCallingMutation.mutate({ callingId: editSelectedCalling.id, slotNumber: slot, userId: editingUser.id });
-                      }}
-                    >
-                      Add
-                    </Button>
-                  </div>
-
-                  {editSelectedCalling && editFreeSlots.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {editSelectedCalling.max_slots === 1
-                        ? "This calling is already filled."
-                        : "All slots for this calling are occupied."}
-                    </p>
-                  )}
-                </div>
-              </div>
+                        {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
+                      </Button>
+                    </DialogFooter>
+                  </>
+                )}
+              </>
             )}
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
-              <Button
-                disabled={saveEditMutation.isPending}
-                onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
-              >
-                {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
