@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -65,10 +65,14 @@ export function Navbar() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  function cancelCrop() {
+    revokeAndReset();
+    setMode("form");
+  }
+
   function handleDialogChange(open: boolean) {
     if (!open) {
-      revokeAndReset();
-      setMode("form");
+      cancelCrop();
       setProfileOpen(false);
     }
   }
@@ -100,6 +104,7 @@ export function Navbar() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (imgSrc) URL.revokeObjectURL(imgSrc);
     const url = URL.createObjectURL(file);
     setImgSrc(url);
     setZoom(1);
@@ -145,8 +150,7 @@ export function Navbar() {
     onSuccess: (updated) => {
       setUser({ ...user!, profile_image: updated.profile_image });
       toast.success("Photo updated");
-      revokeAndReset();
-      setMode("form");
+      cancelCrop();
     },
     onError: (err: unknown) => {
       console.error("[Navbar] Photo upload failed:", err);
@@ -154,7 +158,7 @@ export function Navbar() {
     },
   });
 
-  const initials = user ? `${user.fname[0] ?? ""}${user.lname[0] ?? ""}`.toUpperCase() : "";
+  const initials = user ? getInitials(`${user.fname} ${user.lname}`) : "";
 
   return (
     <>
@@ -295,11 +299,11 @@ export function Navbar() {
             onChange={handleFileChange}
           />
 
-          {mode === "crop" && imgSrc ? (
+          {mode === "crop" ? (
             <>
               <div className="relative w-full" style={{ height: 320 }}>
                 <Cropper
-                  image={imgSrc}
+                  image={imgSrc!}
                   crop={crop}
                   zoom={zoom}
                   aspect={1}
@@ -323,13 +327,7 @@ export function Navbar() {
                 />
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    revokeAndReset();
-                    setMode("form");
-                  }}
-                >
+                <Button variant="outline" onClick={cancelCrop}>
                   Cancel
                 </Button>
                 <Button
