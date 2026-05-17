@@ -1,0 +1,27 @@
+{
+  "name": "docs-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3400",
+    "build": "next build",
+    "start": "next start --port 3400",
+    "generate": "node scripts/generate-api-docs.mjs"
+  },
+  "dependencies": {
+    "@scalar/api-client-react": "^2.0.1",
+    "fumadocs-core": "^15.3.4",
+    "fumadocs-mdx": "^11.10.1",
+    "fumadocs-openapi": "^8.1.12",
+    "fumadocs-ui": "^15.3.4",
+    "next": "^15",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

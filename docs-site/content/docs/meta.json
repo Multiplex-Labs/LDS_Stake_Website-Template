@@ -1,0 +1,4 @@
+{
+  "title": "LDS Stake Portal",
+  "pages": ["introduction", "quickstart", "---Deployment---", "...deployment", "---Development---", "...development", "---API Reference---", "...api-reference", "---User Guide---", "...user-guide"]
+}

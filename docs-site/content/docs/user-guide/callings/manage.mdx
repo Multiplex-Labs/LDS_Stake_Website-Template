@@ -1,0 +1,85 @@
+---
+title: "Manage Callings (Kanban)"
+description: "Move calling proposals through the pipeline using the Kanban board on the Manage page."
+---
+
+## Accessing the Page
+
+Navigate to `/leader/callings/manage`. This is the central hub for tracking active calling proposals. All proposals that have not yet reached the Done stage are visible here.
+
+## Kanban Board Layout
+
+Proposals are displayed in columns, one column per stage. Each column shows all proposals currently at that stage. You can scroll horizontally to see all columns.
+
+### Pipeline Stages
+
+| Stage | Description |
+|-------|-------------|
+| **SP Approval** | Newly submitted callings await Stake Presidency approval. Approvals are recorded on the [Review](/user-guide/callings/review) page. |
+| **HC Approval** | Proposal has passed SP approval threshold; High Councilors now review and approve. |
+| **Interview** | The candidate has been interviewed by a member of the Stake Presidency or High Council. |
+| **Sustain** | The candidate has been sustained in sacrament meeting. |
+| **Set Apart** | The person has been set apart in their new calling. |
+| **LCR Update** | The calling has been recorded in Leader and Clerk Resources (LCR). |
+| **Done** | Process is complete. The proposal moves to the [Archive](/user-guide/callings/archive). |
+
+<Callout type="note">
+  The current stage of a proposal is derived from the most recent stage movement recorded for that proposal — it is not a field stored directly on the proposal itself. This means the full history of every stage transition is preserved.
+</Callout>
+
+## Release vs. Calling Flow
+
+The path a proposal takes through the board depends on whether it is a new calling or a release.
+
+**New calling flow:**
+SP Approval → HC Approval → Interview → Sustain → Set Apart → LCR Update → Done
+
+**Release flow:**
+Interview → Sustain → LCR Update → Done
+
+<Callout type="info">
+  Releases skip SP Approval, HC Approval, and Set Apart. They enter the board at Interview and move directly from Sustain to LCR Update.
+</Callout>
+
+## Advancing a Proposal
+
+To move a proposal to the next stage:
+
+1. Locate the proposal card on the board.
+2. Click the **Advance** button (or "Move to Next Stage") on the card.
+3. The card moves to the next column immediately.
+
+<Callout type="warn">
+  Stage advances are permanent in normal operation. There is no "undo" button. If a proposal is advanced by mistake, contact your clerk or system administrator.
+</Callout>
+
+## Viewing Proposal Details
+
+Click a proposal card to expand it or open a detail view. You will see:
+
+- **Candidate name** — first and last name
+- **Proposed calling** — the calling title
+- **Ward** — the ward this calling belongs to
+- **Submitter** — who submitted the proposal
+- **Submission date** — when the proposal was created
+- **Is Release** — whether this is a calling or a release
+- **Spouse name** — if provided at submission
+- **Stage history** — all stage transitions with timestamps
+
+## Comments
+
+Each proposal has a **comments section** that all authorized users can read and write.
+
+<Steps>
+  <Step title="Open comments">
+    Click the **Comments** button or expand the comments section on a proposal card.
+  </Step>
+  <Step title="Read existing comments">
+    All previous comments appear in chronological order with the commenter's name and timestamp.
+  </Step>
+  <Step title="Add a comment">
+    Type your comment in the text field at the bottom of the comments section and click **Submit**.
+  </Step>
+</Steps>
+
+Comments are useful for recording notes about the interview, any concerns raised during the approval process, or coordination notes for the clerk.

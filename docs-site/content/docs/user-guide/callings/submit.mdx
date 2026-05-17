@@ -1,0 +1,52 @@
+---
+title: "Submit a Calling Proposal"
+description: "Start a new calling or release proposal from the Submit page."
+---
+
+## Accessing the Page
+
+Navigate to `/leader/callings/submit`. You must be authenticated and have the appropriate permissions to submit proposals.
+
+## The Submission Form
+
+Fill in the following fields to create a new proposal:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| First Name | Yes | The first name of the person being called or released |
+| Last Name | Yes | The last name of the person being called or released |
+| Proposed Calling | Yes | The title or name of the calling (e.g., "Sunday School Teacher", "Ward Clerk") |
+| Ward | Yes | The ward this calling belongs to — select from the dropdown |
+| Submitter | Yes | The name of the person submitting the proposal |
+| Spouse Name | No | The spouse's name, if relevant to the calling |
+| Is Release | Toggle | When enabled, this is a release (removal from a calling) rather than a new calling |
+
+## Callings vs. Releases
+
+The **Is Release** toggle changes how the proposal enters the pipeline.
+
+<Cards>
+  <Card title="New Calling (Is Release OFF)" icon="circle-plus">
+    The proposal starts at **SP Approval** (stage 0) and progresses through all seven stages: SP Approval → HC Approval → Interview → Sustain → Set Apart → LCR Update → Done.
+  </Card>
+  <Card title="Release (Is Release ON)" icon="circle-minus">
+    The proposal skips SP Approval and HC Approval and enters at **Interview** (stage 2), since releases do not require the same approval process. Releases also skip the Set Apart stage.
+  </Card>
+</Cards>
+
+<Callout type="info">
+  If you are unsure whether to use the Is Release toggle, consider: is this person being *placed into* a calling (new calling) or *removed from* a calling (release)? Releases are common when someone moves wards, is called to a new position, or is honorably released from their current calling.
+</Callout>
+
+## Submitting the Proposal
+
+Once all required fields are filled in, click **Submit**. The proposal is created and immediately appears on the [Manage (Kanban)](/user-guide/callings/manage) page at the appropriate starting stage.
+
+<Callout type="note">
+  You will see a confirmation message after a successful submission. If any required fields are missing, inline validation errors will appear below the relevant fields — correct them and resubmit.
+</Callout>
+
+## What Happens Next
+
+- **New callings** appear in the **SP Approval** column on the Manage board. Stake Presidency members can then open the [Review](/user-guide/callings/review) page to approve the proposal.
+- **Releases** appear in the **Interview** column on the Manage board, ready for the interview step.

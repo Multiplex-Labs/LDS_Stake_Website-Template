@@ -1,0 +1,145 @@
+---
+title: "Manual Deployment"
+description: "Run each Stake Portal service directly on the host without containers."
+---
+
+Manual deployment gives you full control over each process. It is well-suited for local development, constrained environments, or situations where Docker is not available.
+
+<Callout type="warn">
+  Always start the backend before the frontend. The Express proxy requires the FastAPI server to be reachable at `BACKEND_URL` before it can forward requests.
+</Callout>
+
+## Backend
+
+### 1. Install dependencies
+
+```bash
+cd backend
+uv sync
+```
+
+### 2. Create the environment file
+
+Create `backend/.env`:
+
+```bash
+DEV=false
+PORT=8000
+DB_ENGINE=sqlite
+DATABASE_PATH=./database.db
+INITIAL_ADMIN_PASSWORD=change-me-on-first-run
+JWT_SECRET_KEY=replace-with-a-long-random-string
+SSL_ENABLED=false
+SP_APPROVAL_THRESHOLD=2
+HC_APPROVAL_THRESHOLD=3
+```
+
+See [Environment Variables](/deployment/environment) for a full description of every setting.
+
+### 3. Apply database migrations
+
+```bash
+uv run alembic -c alembic.ini upgrade head
+```
+
+Run this every time you upgrade to a new version of the portal. It is safe to run against an already-migrated database.
+
+### 4. Start the backend
+
+**First run only** (seeds the admin account):
+
+```bash
+INITIAL_ADMIN_PASSWORD=your-password uv run python main.py
+```
+
+**All subsequent runs:**
+
+```bash
+uv run python main.py
+```
+
+<Callout type="info">
+  `INITIAL_ADMIN_PASSWORD` is only read when the database is empty. After the first run, removing it from `.env` or leaving it unchanged has no effect — the admin account will not be recreated or overwritten.
+</Callout>
+
+The FastAPI server starts on port 8000. Swagger docs are available at [http://localhost:8000/docs](http://localhost:8000/docs) when `DEV=true`.
+
+---
+
+## Frontend
+
+### 1. Install dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. Configure environment
+
+Set the following before building or starting the Express server. You can export them in your shell, add them to a `.env` file loaded by your process manager, or prefix the start command directly.
+
+```bash
+NODE_ENV=production
+BACKEND_URL=http://localhost:8000   # or your production backend URL
+PORT=3100                           # optional; defaults to 3100
+```
+
+### 3. Build the React client
+
+```bash
+npm run build
+```
+
+### 4. Start the Express server
+
+```bash
+node server/index.js
+```
+
+Or, if a `start` script is defined in `package.json`:
+
+```bash
+npm start
+```
+
+The portal is served at [http://localhost:3100](http://localhost:3100). Every `/api/*` request is proxied to `BACKEND_URL` with the `/api` prefix stripped.
+
+---
+
+## Slackbot (Optional)
+
+### 1. Install dependencies
+
+```bash
+cd slackbot
+uv sync
+```
+
+### 2. Create the environment file
+
+```bash
+# slackbot/.env
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_APP_TOKEN=xapp-your-app-level-token
+```
+
+### 3. Start the Slackbot
+
+```bash
+uv run python main.py
+```
+
+The Slackbot connects to Slack over Socket Mode (no inbound port required). It can be started or stopped independently of the frontend and backend.
+
+---
+
+## Process Management
+
+For long-running production deployments, consider managing each service with a process supervisor such as `systemd`, `pm2` (for Node.js), or `supervisord`. This ensures services restart automatically after a crash or reboot.
+
+Example startup order for a systemd-based host:
+
+1. `stake-backend.service` — starts FastAPI via `uv run python main.py`
+2. `stake-frontend.service` — starts Express via `node server/index.js` (depends on backend)
+3. `stake-slackbot.service` — starts Slackbot via `uv run python main.py` (independent)

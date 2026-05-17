@@ -1,0 +1,48 @@
+---
+title: "Review Calling Proposals"
+description: "Stake Presidency members approve calling proposals from the Review page before they advance in the pipeline."
+---
+
+## Accessing the Page
+
+Navigate to `/leader/callings/review`. This page is primarily used by **Stake Presidency members** to review and approve newly submitted calling proposals.
+
+## What Appears Here
+
+The Review page shows all proposals currently in the **SP Approval** stage — these are new calling proposals that have been submitted but have not yet received enough approvals to advance to the High Council Approval stage.
+
+<Callout type="note">
+  Release proposals do not appear on this page. Because releases skip the SP Approval stage, they enter the pipeline at the Interview stage and are managed directly on the [Manage (Kanban)](/user-guide/callings/manage) page.
+</Callout>
+
+## Approving a Proposal
+
+Each proposal card shows the candidate's name, proposed calling, ward, and submitter. To approve:
+
+1. Locate the proposal you want to approve.
+2. Click the **Approve** button on the proposal card.
+3. Your approval is recorded individually — each Stake Presidency member approves independently.
+
+Your approval is personal and tied to your portal account. The system keeps a running count of approvals per proposal.
+
+## The SP Approval Threshold
+
+When a proposal accumulates enough SP approvals, it **automatically advances** to the HC Approval stage. The required number of approvals is controlled by the `SP_APPROVAL_THRESHOLD` environment variable (default: **2**).
+
+<Callout type="info">
+  The threshold is configured by your system administrator. If you are unsure what the current threshold is, check with your clerk or the person who manages the portal backend.
+</Callout>
+
+Once the threshold is reached, the proposal disappears from this Review page and appears in the **HC Approval** column on the [Manage (Kanban)](/user-guide/callings/manage) board.
+
+## Withdrawing Your Approval
+
+If you approved a proposal in error or change your mind, you can withdraw your approval by clicking the **Withdraw Approval** button (or by clicking the Approve button again to toggle it off). Setting your approval to withdrawn sets your vote to `approved=false` and reduces the approval count.
+
+<Callout type="warn">
+  Withdrawing your approval may cause a proposal to fall back below the threshold if other approvals were also withdrawn, but the system does not automatically move a proposal backward once it has advanced. Stage movements are one-directional in normal operation.
+</Callout>
+
+## Proposal Details
+
+Click the proposal card or its **Details** button to see full information: the candidate's full name, proposed calling, ward, submitter, submission date, and any comments that have been added.

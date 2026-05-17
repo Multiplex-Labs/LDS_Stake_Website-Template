@@ -1,0 +1,45 @@
+---
+title: Introduction
+description: LDS Stake Portal — a self-hosted management system for stake leaders
+---
+
+# LDS Stake Portal
+
+The LDS Stake Portal is an open-source, self-hosted web application for managing the administrative work of an LDS stake. It provides stake leaders with a secure, private portal for tracking callings, High Council assignments, speaking schedules, and sustaining records — all in one place.
+
+## Who is this for?
+
+<Cards>
+  <Card title="Deployers" icon="server" href="/deployment/overview">
+    Stake technology clerks or volunteers setting up and maintaining the portal. Start with the Deployment section.
+  </Card>
+  <Card title="Developers" icon="code" href="/development/architecture">
+    Engineers contributing to or extending the codebase. Start with the Development section to understand the architecture.
+  </Card>
+  <Card title="Stake Leaders" icon="users" href="/user-guide/overview">
+    Stake presidency members, High Councilors, and clerks using the portal day-to-day. Start with the User Guide.
+  </Card>
+</Cards>
+
+## What's included
+
+- **Calling tracker** — Submit, review, and advance calling proposals through a full Kanban pipeline (SP Approval → HC Approval → Interview → Sustain → Set Apart → LCR Update → Done)
+- **High Council assignments** — Manage which ward each High Councilor is assigned to, by slot
+- **Speaking schedule** — Track speaker assignments across wards
+- **Releases & Sustainings** — Auto-generated verbatim sustaining language per ward
+- **User admin** — Add and manage portal users, assign callings, upload profile photos
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite, Express proxy, DaisyUI, shadcn/ui |
+| Backend | FastAPI (Python 3.11+), SQLModel, SQLite / PostgreSQL |
+| Auth | JWT (access token in memory + HttpOnly refresh cookie) |
+| Slackbot | Slack Bolt in Socket Mode |
+
+## Quick links
+
+- [Quickstart](/quickstart) — get the stack running in minutes
+- [Environment variables](/deployment/environment) — full reference for all configuration
+- [API reference](/api-reference/overview) — REST endpoints with request/response schemas

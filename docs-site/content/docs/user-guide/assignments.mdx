@@ -1,0 +1,60 @@
+---
+title: "HC Assignments"
+description: "View and manage High Councilor ward assignments from the Assignments page."
+---
+
+## What This Page Does
+
+The Assignments page (`/leader/assignments`) shows which High Councilor is assigned to each ward in the stake. This gives the Stake Presidency and clerk a single place to see and update ward coverage.
+
+## The Slot Model
+
+Each High Councilor calling has numbered **slots**. A slot represents one assignment relationship between a High Councilor and a ward. Because a High Councilor may cover more than one ward, they can hold multiple slots — for example, slot 1 assigned to Ward A and slot 2 assigned to Ward B.
+
+<Callout type="info">
+  Slots are defined on the calling itself, not on the person. If a new High Councilor is set apart into the same calling and slot, they inherit the assignment automatically.
+</Callout>
+
+## Viewing Assignments
+
+The assignments table displays:
+
+| Column | Description |
+|--------|-------------|
+| Ward | The name of the ward (loaded from the system ward list) |
+| High Councilor | The name of the person currently assigned to that ward |
+| Slot | The slot number used for this assignment |
+
+Wards with no current assignment still appear in the table so you can see at a glance which wards need coverage.
+
+## Adding an Assignment
+
+<Steps>
+  <Step title="Open the Add dialog">
+    Click the **Add Assignment** button above the table.
+  </Step>
+  <Step title="Select a ward">
+    Choose the ward from the dropdown. All system wards are listed.
+  </Step>
+  <Step title="Select a High Councilor">
+    Choose the High Councilor from the dropdown. Only users currently holding the High Councilor calling appear here.
+  </Step>
+  <Step title="Select a slot number">
+    Choose the slot number to assign. Each slot number on a High Councilor represents a distinct ward assignment.
+  </Step>
+  <Step title="Save">
+    Click **Save**. The new assignment appears in the table immediately.
+  </Step>
+</Steps>
+
+## Removing an Assignment
+
+Locate the assignment row in the table and click the **Remove** (trash/delete) button on that row. You will be prompted to confirm before the assignment is deleted.
+
+<Callout type="warn">
+  Removing an assignment does not affect the High Councilor's calling itself — it only removes the ward association for that slot.
+</Callout>
+
+## About the Ward List
+
+Wards displayed in the table and the Add Assignment dropdown come from the system ward list. Wards are loaded from `wards.csv` when the backend starts up. If a ward is missing, contact your system administrator to update the ward configuration file and restart the backend.

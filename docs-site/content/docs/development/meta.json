@@ -1,0 +1,4 @@
+{
+  "title": "Development",
+  "pages": ["architecture", "frontend", "backend", "authentication", "permissions", "database", "slackbot"]
+}
