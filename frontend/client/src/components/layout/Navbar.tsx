@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -17,14 +17,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Menu, X, LogOut, User, KeyRound } from "lucide-react";
+import { Menu, X, LogOut, User, KeyRound, Camera } from "lucide-react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import logoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest, setAccessToken, queryClient } from "@/lib/queryClient";
+import { getCroppedImageBlob } from "@/lib/cropImage";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -37,12 +41,41 @@ interface ProfileForm {
   bio: string;
 }
 
+type DialogMode = "form" | "crop";
+
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
   const [, setLocation] = useLocation();
   const { user, setUser } = useAuthStore();
+  const [mode, setMode] = useState<DialogMode>("form");
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function revokeAndReset() {
+    if (imgSrc) URL.revokeObjectURL(imgSrc);
+    setImgSrc(null);
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+    setCroppedAreaPixels(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function cancelCrop() {
+    revokeAndReset();
+    setMode("form");
+  }
+
+  function handleDialogChange(open: boolean) {
+    if (!open) {
+      cancelCrop();
+      setProfileOpen(false);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -64,8 +97,25 @@ export function Navbar() {
       phone: user.phone ?? "",
       bio: user.bio ?? "",
     });
+    setMode("form");
     setProfileOpen(true);
   }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (imgSrc) URL.revokeObjectURL(imgSrc);
+    const url = URL.createObjectURL(file);
+    setImgSrc(url);
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+    setCroppedAreaPixels(null);
+    setMode("crop");
+  }
+
+  const onCropComplete = useCallback((_: Area, pixels: Area) => {
+    setCroppedAreaPixels(pixels);
+  }, []);
 
   const saveProfileMutation = useMutation({
     mutationFn: (form: ProfileForm) =>
@@ -87,6 +137,28 @@ export function Navbar() {
     },
     onError: () => toast.error("Update failed", { description: "Could not save your profile." }),
   });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async () => {
+      if (!imgSrc || !croppedAreaPixels || !user) throw new Error("No image selected");
+      const blob = await getCroppedImageBlob(imgSrc, croppedAreaPixels);
+      const formData = new FormData();
+      formData.append("file", blob, "photo.jpg");
+      const res = await apiRequest("POST", `/api/users/photo?user_id=${user.id}`, formData);
+      return res.json() as Promise<{ profile_image: string | null }>;
+    },
+    onSuccess: (updated) => {
+      setUser({ ...user!, profile_image: updated.profile_image });
+      toast.success("Photo updated");
+      cancelCrop();
+    },
+    onError: (err: unknown) => {
+      console.error("[Navbar] Photo upload failed:", err);
+      toast.error("Upload failed", { description: "Could not save your photo. Please try again." });
+    },
+  });
+
+  const initials = user ? getInitials(`${user.fname} ${user.lname}`) : "";
 
   return (
     <>
@@ -211,59 +283,131 @@ export function Navbar() {
       </nav>
 
       {/* Profile Edit Dialog */}
-      <Dialog open={profileOpen} onOpenChange={(open) => { if (!open) setProfileOpen(false); }}>
+      <Dialog open={profileOpen} onOpenChange={handleDialogChange}>
         <DialogContent className="max-w-[90vw] sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-xl">Edit Profile</DialogTitle>
+            <DialogTitle className="text-xl">
+              {mode === "crop" ? "Crop Photo" : "Edit Profile"}
+            </DialogTitle>
           </DialogHeader>
-          {profileForm && (
-            <div className="grid gap-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>First Name</Label>
-                  <Input value={profileForm.fname} onChange={(e) => setProfileForm({ ...profileForm, fname: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last Name</Label>
-                  <Input value={profileForm.lname} onChange={(e) => setProfileForm({ ...profileForm, lname: e.target.value })} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="Optional" />
-              </div>
-              <div className="space-y-2">
-                <Label>Bio</Label>
-                <Textarea
-                  value={profileForm.bio}
-                  onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
-                  placeholder="Brief description or notes..."
-                  className="min-h-[100px]"
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {mode === "crop" ? (
+            <>
+              <div className="relative w-full" style={{ height: 320 }}>
+                <Cropper
+                  image={imgSrc!}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
                 />
               </div>
-              <div className="border-t pt-4">
-                <Link href="/change-password" onClick={() => setProfileOpen(false)}>
-                  <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground px-0">
-                    <KeyRound className="h-4 w-4" />
-                    Change Password
-                  </Button>
-                </Link>
+              <div className="flex items-center gap-3 px-1">
+                <Label className="text-xs text-muted-foreground shrink-0">Zoom</Label>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.01}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
               </div>
-            </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={cancelCrop}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={uploadPhotoMutation.isPending || !croppedAreaPixels}
+                  onClick={() => uploadPhotoMutation.mutate()}
+                >
+                  {uploadPhotoMutation.isPending ? "Saving…" : "Crop & Save"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            profileForm && (
+              <>
+                <div className="flex flex-col items-center gap-2 pt-2">
+                  <Avatar className="size-20">
+                    {user?.profile_image && (
+                      <AvatarImage src={user.profile_image} alt={`${user.fname} ${user.lname}`} />
+                    )}
+                    <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+                  </Avatar>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Camera className="size-4" />
+                    Change Photo
+                  </Button>
+                </div>
+
+                <div className="grid gap-6 py-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>First Name</Label>
+                      <Input value={profileForm.fname} onChange={(e) => setProfileForm({ ...profileForm, fname: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Last Name</Label>
+                      <Input value={profileForm.lname} onChange={(e) => setProfileForm({ ...profileForm, lname: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="Optional" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bio</Label>
+                    <Textarea
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                      placeholder="Brief description or notes..."
+                      className="min-h-[100px]"
+                    />
+                  </div>
+                  <div className="border-t pt-4">
+                    <Link href="/change-password" onClick={() => setProfileOpen(false)}>
+                      <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground px-0">
+                        <KeyRound className="h-4 w-4" />
+                        Change Password
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancel</Button>
+                  <Button
+                    disabled={saveProfileMutation.isPending}
+                    onClick={() => profileForm && saveProfileMutation.mutate(profileForm)}
+                  >
+                    {saveProfileMutation.isPending ? "Saving…" : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )
           )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancel</Button>
-            <Button
-              disabled={saveProfileMutation.isPending}
-              onClick={() => profileForm && saveProfileMutation.mutate(profileForm)}
-            >
-              {saveProfileMutation.isPending ? "Saving…" : "Save Changes"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
