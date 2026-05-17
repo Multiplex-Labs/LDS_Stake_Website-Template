@@ -1,0 +1,75 @@
+---
+title: "First Run & Bootstrap"
+description: "What happens when the Stake Portal starts for the first time and how to complete the initial setup."
+---
+
+The first time the backend starts against an empty database, it automatically bootstraps everything needed to make the portal usable. No manual SQL or seed scripts are required.
+
+## Before You Start
+
+Set `INITIAL_ADMIN_PASSWORD` in `backend/.env` before launching the backend for the first time:
+
+```bash
+# backend/.env
+INITIAL_ADMIN_PASSWORD=your-secure-password
+```
+
+<Warning>
+  If `INITIAL_ADMIN_PASSWORD` is not set and the database is empty, the backend will fail to start. After the first successful start, this variable is no longer read — the admin account is not recreated or overwritten on subsequent launches.
+</Warning>
+
+## What Happens on First Launch
+
+When the backend detects an empty database, it runs the following bootstrap steps in order:
+
+1. **Admin account created** — `admin@admin.com` is created with the password from `INITIAL_ADMIN_PASSWORD` and the `force_password_reset` flag set to `true`.
+2. **System callings created** — Three callings are inserted: High Councilor, Stake Presidency, and Bishop. These are system-defined and cannot be deleted through the UI.
+3. **Wards loaded** — Rows are created for every ward defined in `backend/wards.csv`.
+
+On every subsequent startup (not just the first), the backend re-reads `wards.csv` and creates any rows that do not yet exist. Existing ward rows are not modified, so it is safe to edit ward names directly in the database after initial load.
+
+## Configuring Wards (wards.csv)
+
+The ward roster is driven by `backend/wards.csv`. The format is:
+
+```
+name,start_hour
+Riverside Ward,9.0
+Eastside Ward,11.0
+Westview Ward,13.5
+Singles Ward,9.0
+```
+
+- `name` — the display name of the ward
+- `start_hour` — meeting start time as a decimal hour (e.g., `9.0` = 9:00 AM, `13.5` = 1:30 PM)
+
+Edit this file before the first launch to match your stake's ward structure. Add new rows at any time — they will be picked up on the next backend restart.
+
+## First Login
+
+Once the backend is running, open the portal in your browser:
+
+```
+http://localhost:3100/login
+```
+
+Log in with:
+
+- **Email:** `admin@admin.com`
+- **Password:** the value you set for `INITIAL_ADMIN_PASSWORD`
+
+## Forced Password Change
+
+Because the admin account is created with `force_password_reset=true`, the portal will immediately redirect you to `/change-password` after login. You must set a new password before you can access any other page.
+
+<Info>
+  This redirect applies to any user account that has `force_password_reset` enabled — not just the admin. Administrators can set this flag when creating new user accounts so that users are required to choose their own password on first login.
+</Info>
+
+After setting a new password you will be taken to the home page and have full access to the Leader Portal.
+
+## Next Steps
+
+- Visit `/leader/user-admin` to create accounts for stake leaders
+- Confirm that your wards loaded correctly at `/ward-info/meeting-times`
+- Review permissions for each user via the user admin page
