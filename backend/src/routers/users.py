@@ -132,7 +132,6 @@ def update_user(
             exclude_id=user_id
         )
 
-    # Update fields
     for field, value in user_update.model_dump(exclude_unset=True).items():
         setattr(db_user, field, value)
 
