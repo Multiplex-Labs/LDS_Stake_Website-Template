@@ -42,12 +42,14 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
-import { apiRequest, queryClient, getAccessToken } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
+import { getInitials } from "@/lib/utils";
 import type { ApiUser, ApiCalling } from "@/types";
 
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
+type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface EditForm {
   fname: string;
@@ -58,7 +60,7 @@ interface EditForm {
   active: boolean;
 }
 
-interface AddForm {
+interface AddWizardForm {
   fname: string;
   lname: string;
   email: string;
@@ -67,6 +69,39 @@ interface AddForm {
   password: string;
   confirmPassword: string;
 }
+
+interface AddWizardState {
+  step: WizardStep;
+  form: AddWizardForm;
+  errors: {
+    fname?: string;
+    lname?: string;
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+  };
+  callingId: number | "";
+  slotNumber: number | "";
+  photo: { blob: Blob; previewUrl: string } | null;
+}
+
+const INITIAL_WIZARD_STATE: AddWizardState = {
+  step: 1,
+  form: { fname: "", lname: "", email: "", phone: "", bio: "", password: "", confirmPassword: "" },
+  errors: {},
+  callingId: "",
+  slotNumber: "",
+  photo: null,
+};
+
+const STEP_TITLES: Record<WizardStep, string> = {
+  1: "Basic Info",
+  2: "Bio",
+  3: "Password",
+  4: "Assign Calling",
+  5: "Profile Photo",
+  6: "Review",
+};
 
 export default function UserAdmin() {
   // --- Queries ---
@@ -88,7 +123,7 @@ export default function UserAdmin() {
   const [editCallingId, setEditCallingId] = useState<number | "">("");
   const [editSlotNumber, setEditSlotNumber] = useState<number | "">("");
 
-  // --- Crop state ---
+  // --- Edit crop state ---
   const [cropMode, setCropMode] = useState(false);
   const [imgSrc, setImgSrc] = useState("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -96,13 +131,17 @@ export default function UserAdmin() {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Add user dialog state ---
+  // --- Add user wizard state ---
   const [isAddingUser, setIsAddingUser] = useState(false);
-  const [addForm, setAddForm] = useState<AddForm>({
-    fname: "", lname: "", email: "", phone: "", bio: "", password: "", confirmPassword: "",
-  });
-  const [addCallingId, setAddCallingId] = useState<number | "">("");
-  const [addSlotNumber, setAddSlotNumber] = useState<number | "">("");
+  const [addWizard, setAddWizard] = useState<AddWizardState>(INITIAL_WIZARD_STATE);
+
+  // --- Wizard Step 5 crop state ---
+  const [addPhotoCropView, setAddPhotoCropView] = useState(false);
+  const [addImgSrc, setAddImgSrc] = useState<string | null>(null);
+  const [addCrop, setAddCrop] = useState({ x: 0, y: 0 });
+  const [addZoom, setAddZoom] = useState(1);
+  const [addCroppedAreaPixels, setAddCroppedAreaPixels] = useState<Area | null>(null);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Memos ---
 
@@ -155,10 +194,10 @@ export default function UserAdmin() {
     editFreeSlots.length > 0 &&
     (editSelectedCalling.max_slots === 1 || editSlotNumber !== "");
 
-  const addSelectedCalling = callings.find((c) => c.id === addCallingId);
+  const addSelectedCalling = callings.find((c) => c.id === addWizard.callingId);
   const addFreeSlots = addSelectedCalling ? getFreeSlots(addSelectedCalling.id, addSelectedCalling.max_slots) : [];
 
-  // --- Crop helpers ---
+  // --- Edit crop helpers ---
 
   function releaseCropState() {
     if (imgSrc) URL.revokeObjectURL(imgSrc);
@@ -173,6 +212,63 @@ export default function UserAdmin() {
   const onCropComplete = useCallback((_: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
   }, []);
+
+  const onAddCropComplete = useCallback((_: Area, pixels: Area) => {
+    setAddCroppedAreaPixels(pixels);
+  }, []);
+
+  // --- Wizard validators ---
+
+  function validateStep1(form: AddWizardForm) {
+    const errors: AddWizardState["errors"] = {};
+    if (!form.fname.trim()) errors.fname = "First name is required";
+    if (!form.lname.trim()) errors.lname = "Last name is required";
+    if (!form.email.trim()) {
+      errors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      errors.email = "Enter a valid email address";
+    }
+    return errors;
+  }
+
+  function validateStep3(form: AddWizardForm) {
+    const errors: AddWizardState["errors"] = {};
+    if (!form.password) errors.password = "Password is required";
+    if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match";
+    return errors;
+  }
+
+  // --- Wizard step navigation ---
+
+  function advanceStep() {
+    const { step, form } = addWizard;
+    let errors: AddWizardState["errors"] = {};
+    if (step === 1) errors = validateStep1(form);
+    else if (step === 3) errors = validateStep3(form);
+    if (Object.keys(errors).length > 0) {
+      setAddWizard((w) => ({ ...w, errors }));
+      return;
+    }
+    setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, errors: {} }));
+  }
+
+  function skipStep() {
+    setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep }));
+  }
+
+  function backStep() {
+    setAddWizard((w) => ({ ...w, step: (w.step - 1) as WizardStep, errors: {} }));
+  }
+
+  function releaseAddCropState() {
+    if (addImgSrc) URL.revokeObjectURL(addImgSrc);
+    setAddImgSrc(null);
+    setAddPhotoCropView(false);
+    setAddCrop({ x: 0, y: 0 });
+    setAddZoom(1);
+    setAddCroppedAreaPixels(null);
+    if (addFileInputRef.current) addFileInputRef.current.value = "";
+  }
 
   // --- Mutations ---
 
@@ -246,36 +342,61 @@ export default function UserAdmin() {
     },
   });
 
+  type CreateUserVars = AddWizardForm & {
+    callingId: number | "";
+    slotNumber: number | "";
+    photo: { blob: Blob; previewUrl: string } | null;
+  };
+
   const createUserMutation = useMutation({
-    mutationFn: async (form: AddForm) => {
+    mutationFn: async (vars: CreateUserVars) => {
       const res = await apiRequest("POST", "/api/users/", {
-        email: form.email,
+        email: vars.email,
         force_password_reset: true,
-        fname: form.fname,
-        lname: form.lname,
+        fname: vars.fname,
+        lname: vars.lname,
         active: true,
-        phone: form.phone || null,
-        bio: form.bio || null,
+        phone: vars.phone || null,
+        bio: vars.bio || null,
         profile_image: null,
-        password: form.password,
+        password: vars.password,
       });
       return res.json() as Promise<ApiUser>;
     },
-    onSuccess: async (newUser, form) => {
-      if (addCallingId !== "") {
-        const slot = addSelectedCalling?.max_slots === 1 ? 1 : Number(addSlotNumber);
-        try {
-          await apiRequest("PUT", `/api/callings/${addCallingId}/${slot}`, { user_id: newUser.id });
-        } catch {
-          toast.warning("User created, but calling assignment failed — assign it via Edit");
-        }
+    onSuccess: async (newUser, vars) => {
+      const { callingId, slotNumber, photo } = vars;
+      const callingForSlot = callings.find((c) => c.id === callingId);
+
+      const results = await Promise.allSettled([
+        photo
+          ? (async () => {
+              const formData = new FormData();
+              formData.append("file", photo.blob, "photo.jpg");
+              await apiRequest("POST", `/api/users/photo?user_id=${newUser.id}`, formData);
+            })()
+          : Promise.resolve(),
+        callingId !== ""
+          ? apiRequest(
+              "PUT",
+              `/api/callings/${callingId}/${callingForSlot?.max_slots === 1 ? 1 : Number(slotNumber)}`,
+              { user_id: newUser.id },
+            )
+          : Promise.resolve(),
+      ]);
+
+      if (results[0].status === "rejected") {
+        toast.warning("User created, but photo upload failed — add it via Edit");
       }
+      if (results[1].status === "rejected") {
+        toast.warning("User created, but calling assignment failed — assign it via Edit");
+      }
+
+      if (photo) URL.revokeObjectURL(photo.previewUrl);
+      releaseAddCropState();
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
-      toast.success("User Created", { description: `${form.fname} ${form.lname} has been added.` });
+      toast.success("User Created", { description: `${newUser.fname} ${newUser.lname} has been added.` });
       setIsAddingUser(false);
-      setAddForm({ fname: "", lname: "", email: "", phone: "", bio: "", password: "", confirmPassword: "" });
-      setAddCallingId("");
-      setAddSlotNumber("");
+      setAddWizard(INITIAL_WIZARD_STATE);
     },
     onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
   });
@@ -284,20 +405,7 @@ export default function UserAdmin() {
     mutationFn: async ({ blob, userId }: { blob: Blob; userId: number }) => {
       const formData = new FormData();
       formData.append("file", blob, "photo.jpg");
-      const token = getAccessToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`/api/users/photo?user_id=${userId}`, {
-        method: "POST",
-        headers,
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`${res.status}: ${text}`);
-      }
-      return res.json();
+      return apiRequest("POST", `/api/users/photo?user_id=${userId}`, formData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
@@ -373,24 +481,12 @@ export default function UserAdmin() {
     uploadPhotoMutation.mutate({ blob, userId: editingUser.id });
   };
 
-  const handleAddUser = () => {
-    if (!addForm.fname || !addForm.lname || !addForm.email || !addForm.password) {
-      toast.error("Missing Information", { description: "Please fill in all required fields." });
-      return;
-    }
-    if (addForm.password !== addForm.confirmPassword) {
-      toast.error("Password Mismatch", { description: "Passwords do not match." });
-      return;
-    }
-    createUserMutation.mutate(addForm);
-  };
-
   const handleCloseAddUser = (open: boolean) => {
     if (!open) {
+      if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
+      releaseAddCropState();
+      setAddWizard(INITIAL_WIZARD_STATE);
       setIsAddingUser(false);
-      setAddForm({ fname: "", lname: "", email: "", phone: "", bio: "", password: "", confirmPassword: "" });
-      setAddCallingId("");
-      setAddSlotNumber("");
     }
   };
 
@@ -503,7 +599,7 @@ export default function UserAdmin() {
                       <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
                         <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
                         <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                          {user.fname[0]}{user.lname[0]}
+                          {getInitials(`${user.fname} ${user.lname}`)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -602,7 +698,7 @@ export default function UserAdmin() {
                         <Avatar className="h-16 w-16 bg-primary text-primary-foreground shrink-0">
                           <AvatarImage src={editingUser.profile_image ?? undefined} alt={`${editingUser.fname} ${editingUser.lname}`} />
                           <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                            {editingUser.fname[0]}{editingUser.lname[0]}
+                            {getInitials(`${editingUser.fname} ${editingUser.lname}`)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="space-y-1">
@@ -760,104 +856,391 @@ export default function UserAdmin() {
           </DialogContent>
         </Dialog>
 
-        {/* Add User Dialog */}
+        {/* Add User Wizard Dialog */}
         <Dialog open={isAddingUser} onOpenChange={handleCloseAddUser}>
-          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-[90vw] sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-xl">Add New User</DialogTitle>
+              <DialogTitle className="text-base font-semibold">
+                Step {addWizard.step} of 6 — {STEP_TITLES[addWizard.step]}
+              </DialogTitle>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${(addWizard.step / 6) * 100}%` }}
+                />
+              </div>
             </DialogHeader>
 
-            <div className="grid gap-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>First Name <span className="text-destructive">*</span></Label>
-                  <Input value={addForm.fname} onChange={(e) => setAddForm({ ...addForm, fname: e.target.value })} placeholder="John" />
+            {/* Step 1: Basic Info */}
+            {addWizard.step === 1 && (
+              <>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>First Name <span className="text-destructive">*</span></Label>
+                      <Input
+                        value={addWizard.form.fname}
+                        onChange={(e) => setAddWizard((w) => ({
+                          ...w,
+                          form: { ...w.form, fname: e.target.value },
+                          errors: { ...w.errors, fname: undefined },
+                        }))}
+                        placeholder="John"
+                      />
+                      {addWizard.errors.fname && (
+                        <p className="text-xs text-destructive">{addWizard.errors.fname}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Last Name <span className="text-destructive">*</span></Label>
+                      <Input
+                        value={addWizard.form.lname}
+                        onChange={(e) => setAddWizard((w) => ({
+                          ...w,
+                          form: { ...w.form, lname: e.target.value },
+                          errors: { ...w.errors, lname: undefined },
+                        }))}
+                        placeholder="Doe"
+                      />
+                      {addWizard.errors.lname && (
+                        <p className="text-xs text-destructive">{addWizard.errors.lname}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="email"
+                      value={addWizard.form.email}
+                      onChange={(e) => setAddWizard((w) => ({
+                        ...w,
+                        form: { ...w.form, email: e.target.value },
+                        errors: { ...w.errors, email: undefined },
+                      }))}
+                      placeholder="john@example.com"
+                    />
+                    {addWizard.errors.email && (
+                      <p className="text-xs text-destructive">{addWizard.errors.email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Phone</Label>
+                    <Input
+                      value={addWizard.form.phone}
+                      onChange={(e) => setAddWizard((w) => ({ ...w, form: { ...w.form, phone: e.target.value } }))}
+                      placeholder="Optional"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Last Name <span className="text-destructive">*</span></Label>
-                  <Input value={addForm.lname} onChange={(e) => setAddForm({ ...addForm, lname: e.target.value })} placeholder="Doe" />
+                <div className="flex justify-end pt-2 border-t">
+                  <Button onClick={advanceStep}>Next</Button>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email <span className="text-destructive">*</span></Label>
-                <Input type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} placeholder="john@example.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} placeholder="Optional" />
-              </div>
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border border-border">
-                <div className="space-y-2">
-                  <Label>Password <span className="text-destructive">*</span></Label>
-                  <Input type="password" value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} placeholder="••••••••" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Confirm Password <span className="text-destructive">*</span></Label>
-                  <Input type="password" value={addForm.confirmPassword} onChange={(e) => setAddForm({ ...addForm, confirmPassword: e.target.value })} placeholder="••••••••" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Bio</Label>
-                <Textarea value={addForm.bio} onChange={(e) => setAddForm({ ...addForm, bio: e.target.value })} placeholder="Brief description or notes..." className="min-h-[80px]" />
-              </div>
+              </>
+            )}
 
-              <Separator />
+            {/* Step 2: Bio */}
+            {addWizard.step === 2 && (
+              <>
+                <div className="py-4">
+                  <div className="space-y-1.5">
+                    <Label>Bio</Label>
+                    <Textarea
+                      value={addWizard.form.bio}
+                      onChange={(e) => setAddWizard((w) => ({ ...w, form: { ...w.form, bio: e.target.value } }))}
+                      placeholder="Brief description or notes..."
+                      className="min-h-[120px]"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-between pt-2 border-t">
+                  <Button variant="outline" onClick={backStep}>Back</Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={skipStep}>Skip</Button>
+                    <Button onClick={advanceStep}>Next</Button>
+                  </div>
+                </div>
+              </>
+            )}
 
-              {/* Optional Calling Assignment */}
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">
-                  Assign Calling{" "}
-                  <span className="font-normal text-muted-foreground">(optional)</span>
-                </Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={addCallingId === "" ? "" : String(addCallingId)}
-                    onValueChange={(v) => { setAddCallingId(Number(v)); setAddSlotNumber(""); }}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Select calling…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {callings.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {/* Step 3: Password */}
+            {addWizard.step === 3 && (
+              <>
+                <div className="grid gap-4 py-4">
+                  <div className="space-y-1.5">
+                    <Label>Password <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="password"
+                      value={addWizard.form.password}
+                      onChange={(e) => setAddWizard((w) => ({
+                        ...w,
+                        form: { ...w.form, password: e.target.value },
+                        errors: { ...w.errors, password: undefined },
+                      }))}
+                      placeholder="••••••••"
+                    />
+                    {addWizard.errors.password && (
+                      <p className="text-xs text-destructive">{addWizard.errors.password}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Confirm Password <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="password"
+                      value={addWizard.form.confirmPassword}
+                      onChange={(e) => setAddWizard((w) => ({
+                        ...w,
+                        form: { ...w.form, confirmPassword: e.target.value },
+                        errors: { ...w.errors, confirmPassword: undefined },
+                      }))}
+                      placeholder="••••••••"
+                    />
+                    {addWizard.errors.confirmPassword && (
+                      <p className="text-xs text-destructive">{addWizard.errors.confirmPassword}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between pt-2 border-t">
+                  <Button variant="outline" onClick={backStep}>Back</Button>
+                  <Button onClick={advanceStep}>Next</Button>
+                </div>
+              </>
+            )}
 
-                  {addSelectedCalling && addSelectedCalling.max_slots > 1 && (
+            {/* Step 4: Assign Calling */}
+            {addWizard.step === 4 && (
+              <>
+                <div className="py-4 space-y-3">
+                  <div className="flex gap-2">
                     <Select
-                      value={addSlotNumber === "" ? "" : String(addSlotNumber)}
-                      onValueChange={(v) => setAddSlotNumber(Number(v))}
-                      disabled={addFreeSlots.length === 0}
+                      value={addWizard.callingId === "" ? "" : String(addWizard.callingId)}
+                      onValueChange={(v) => setAddWizard((w) => ({ ...w, callingId: Number(v), slotNumber: "" }))}
                     >
-                      <SelectTrigger className="w-[110px]">
-                        <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : "Slot…"} />
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select calling…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {addFreeSlots.map((s) => (
-                          <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
+                        {callings.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+
+                    {addSelectedCalling && addSelectedCalling.max_slots > 1 && (
+                      <Select
+                        value={addWizard.slotNumber === "" ? "" : String(addWizard.slotNumber)}
+                        onValueChange={(v) => setAddWizard((w) => ({ ...w, slotNumber: Number(v) }))}
+                        disabled={addFreeSlots.length === 0}
+                      >
+                        <SelectTrigger className="w-[110px]">
+                          <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : "Slot…"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {addFreeSlots.map((s) => (
+                            <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  {addSelectedCalling && addFreeSlots.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {addSelectedCalling.max_slots === 1
+                        ? "This calling is already filled."
+                        : "All slots for this calling are occupied."}
+                    </p>
                   )}
                 </div>
+                <div className="flex justify-between pt-2 border-t">
+                  <Button variant="outline" onClick={backStep}>Back</Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, callingId: "", slotNumber: "" }))}
+                    >
+                      Skip
+                    </Button>
+                    <Button onClick={advanceStep}>Next</Button>
+                  </div>
+                </div>
+              </>
+            )}
 
-                {addSelectedCalling && addFreeSlots.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {addSelectedCalling.max_slots === 1
-                      ? "This calling is already filled."
-                      : "All slots for this calling are occupied."}
-                  </p>
+            {/* Step 5: Profile Photo */}
+            {addWizard.step === 5 && (
+              <>
+                {addPhotoCropView ? (
+                  <div className="py-4 space-y-4">
+                    <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
+                      <Cropper
+                        image={addImgSrc!}
+                        crop={addCrop}
+                        zoom={addZoom}
+                        aspect={1}
+                        cropShape="round"
+                        showGrid={false}
+                        onCropChange={setAddCrop}
+                        onZoomChange={setAddZoom}
+                        onCropComplete={onAddCropComplete}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 px-1">
+                      <Label className="text-xs text-muted-foreground shrink-0">Zoom</Label>
+                      <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.01}
+                        value={addZoom}
+                        onChange={(e) => setAddZoom(Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+                    <div className="flex justify-between pt-2 border-t">
+                      <Button variant="outline" onClick={releaseAddCropState}>Cancel</Button>
+                      <Button
+                        onClick={async () => {
+                          if (!addImgSrc || !addCroppedAreaPixels) return;
+                          let blob: Blob;
+                          try {
+                            blob = await getCroppedImageBlob(addImgSrc, addCroppedAreaPixels);
+                          } catch {
+                            toast.error("Could not process image", { description: "Please try a different photo." });
+                            return;
+                          }
+                          const previewUrl = URL.createObjectURL(blob);
+                          if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
+                          setAddWizard((w) => ({ ...w, photo: { blob, previewUrl } }));
+                          releaseAddCropState();
+                        }}
+                      >
+                        Crop &amp; Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="py-6 flex flex-col items-center gap-4">
+                      <Avatar className="h-24 w-24">
+                        <AvatarImage src={addWizard.photo?.previewUrl} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-medium">
+                          {getInitials(`${addWizard.form.fname} ${addWizard.form.lname}`)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="text-center space-y-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => addFileInputRef.current?.click()}
+                        >
+                          <Camera className="size-4" />
+                          {addWizard.photo ? "Change Photo" : "Choose Photo"}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
+                      </div>
+                      <input
+                        ref={addFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (addImgSrc) URL.revokeObjectURL(addImgSrc);
+                          setAddImgSrc(URL.createObjectURL(file));
+                          setAddCrop({ x: 0, y: 0 });
+                          setAddZoom(1);
+                          setAddCroppedAreaPixels(null);
+                          setAddPhotoCropView(true);
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between pt-2 border-t">
+                      <Button variant="outline" onClick={backStep}>Back</Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
+                            setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, photo: null }));
+                          }}
+                        >
+                          Skip
+                        </Button>
+                        {addWizard.photo && (
+                          <Button onClick={advanceStep}>Next</Button>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
-              </div>
-            </div>
+              </>
+            )}
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => handleCloseAddUser(false)}>Cancel</Button>
-              <Button onClick={handleAddUser} disabled={createUserMutation.isPending}>
-                {createUserMutation.isPending ? "Creating…" : "Create User"}
-              </Button>
-            </DialogFooter>
+            {/* Step 6: Review */}
+            {addWizard.step === 6 && (
+              <>
+                <div className="py-4 space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16 shrink-0">
+                      <AvatarImage src={addWizard.photo?.previewUrl} />
+                      <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
+                        {getInitials(`${addWizard.form.fname} ${addWizard.form.lname}`)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {addWizard.form.fname} {addWizard.form.lname}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{addWizard.form.email}</p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-24 shrink-0">Phone</span>
+                      <span className="text-foreground">{addWizard.form.phone || "—"}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-24 shrink-0">Bio</span>
+                      <span className="text-foreground">{addWizard.form.bio || "—"}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-24 shrink-0">Calling</span>
+                      <span className="text-foreground">
+                        {addSelectedCalling
+                          ? addSelectedCalling.max_slots > 1
+                            ? `${addSelectedCalling.name} · Slot ${addWizard.slotNumber}`
+                            : addSelectedCalling.name
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground w-24 shrink-0">Photo</span>
+                      <span className="text-foreground">{addWizard.photo ? "✓ Added" : "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between pt-2 border-t">
+                  <Button variant="outline" onClick={backStep}>Back</Button>
+                  <Button
+                    onClick={() => createUserMutation.mutate({
+                      ...addWizard.form,
+                      callingId: addWizard.callingId,
+                      slotNumber: addWizard.slotNumber,
+                      photo: addWizard.photo,
+                    })}
+                    disabled={createUserMutation.isPending}
+                  >
+                    {createUserMutation.isPending ? "Creating…" : "Create User"}
+                  </Button>
+                </div>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>
