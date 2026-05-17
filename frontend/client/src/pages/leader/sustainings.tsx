@@ -214,7 +214,8 @@ export default function ReleasesAndSustainings() {
           const p = proposalMap.get(item.proposalId);
           if (!p) continue;
           const name = `${p.fname} ${p.lname}`;
-          const wardName = wardMap.get(p.ward_id) ?? "—";
+          const wardName = wardMap.get(p.ward_id);
+          if (!wardName) console.warn("[sustainings] ward_id not found in ward list:", p.ward_id);
           if (p.is_release) {
             stakeReleases.push({ name, calling: p.proposed_calling, wardName });
           } else {
@@ -238,7 +239,7 @@ export default function ReleasesAndSustainings() {
         showWard: true,
       },
     ];
-  }, [wards, board, prepState, wardMap]);
+  }, [board, prepState, wardMap]);
 
   const visibleTabs = useMemo(() => allTabs.filter(hasEntries), [allTabs]);
   const allEmpty = visibleTabs.length === 0;

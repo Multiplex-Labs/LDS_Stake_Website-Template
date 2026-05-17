@@ -479,7 +479,7 @@ export default function SustainingPrep() {
               <Plus className="size-4" />
               Add Ordination
             </Button>
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={handleClearAll}>
+            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200 text-destructive hover:text-destructive" onClick={handleClearAll}>
               <Trash2 className="size-4" />
               Clear All
             </Button>
