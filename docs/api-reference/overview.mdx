@@ -40,9 +40,25 @@ Store the access token in memory only — never in `localStorage` or a cookie.
 
 ## Error Format
 
-Errors are returned as **plain strings** in the format `"<status_code>: <body>"`.
+FastAPI returns errors as JSON. Validation errors (422) follow the standard Pydantic format:
 
-**Example:** `"403: User does not have permission"`
+```json
+{
+  "detail": [
+    { "loc": ["body", "email"], "msg": "field required", "type": "value_error.missing" }
+  ]
+}
+```
+
+Application errors (400, 401, 403, 404) return a plain `"detail"` string:
+
+```json
+{ "detail": "User does not have permission" }
+```
+
+<Info>
+  The frontend `apiRequest()` helper flattens these responses into an error string formatted as `"<status_code>: <body>"` (e.g. `"403: User does not have permission"`) for easier handling in UI code. This is a client-side transformation — the raw HTTP response is standard FastAPI JSON.
+</Info>
 
 | Status | Meaning |
 |--------|---------|

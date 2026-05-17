@@ -6,15 +6,16 @@ description: "FastAPI service conventions: routers, the CallingUser dependency, 
 The backend is a FastAPI application (Python 3.11+) that owns all business logic, authentication, and database access. It runs on port 8000. Source lives under `backend/src/`.
 
 ```
-backend/src/
-├── app.py                   # FastAPI instance, CORS, lifespan hooks, router registration
+backend/
 ├── main.py                  # Entry point (uvicorn, env setup, .env loading)
-├── models/                  # SQLModel ORM models (one file per domain)
-├── routers/                 # FastAPI route handlers (one file per domain)
-├── db/
-│   ├── orm.py               # Singleton ORM + get_session() dependency
-│   └── engines/sqlite_engine.py
-└── utils/                   # security.py, permissions.py, password hashing, background tasks
+└── src/
+    ├── app.py               # FastAPI instance, CORS, lifespan hooks, router registration
+    ├── models/              # SQLModel ORM models (one file per domain)
+    ├── routers/             # FastAPI route handlers (one file per domain)
+    ├── db/
+    │   ├── orm.py           # Singleton ORM + get_session() dependency
+    │   └── engines/sqlite_engine.py
+    └── utils/               # security.py, permissions.py, password hashing, background tasks
 ```
 
 <Info>

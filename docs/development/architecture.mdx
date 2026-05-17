@@ -82,5 +82,5 @@ Each service has its own dependency management and is started independently:
 - **Slackbot** uses `uv` (Python). Run all slackbot commands from `slackbot/`.
 
 <Warning>
-  The frontend and slackbot share the Python `uv` tool, but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `slackbot/` and vice versa.
+  The backend and slackbot both use `uv` (Python), but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `slackbot/` and vice versa.
 </Warning>
