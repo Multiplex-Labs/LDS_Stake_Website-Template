@@ -49,7 +49,6 @@ export function Navbar() {
   const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
   const [, setLocation] = useLocation();
   const { user, setUser } = useAuthStore();
-  // Crop state
   const [mode, setMode] = useState<DialogMode>("form");
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -140,10 +139,11 @@ export function Navbar() {
       const blob = await getCroppedImageBlob(imgSrc, croppedAreaPixels);
       const formData = new FormData();
       formData.append("file", blob, "photo.jpg");
-      return apiRequest("POST", `/api/users/photo?user_id=${user.id}`, formData);
+      const res = await apiRequest("POST", `/api/users/photo?user_id=${user.id}`, formData);
+      return res.json() as Promise<{ profile_image: string | null }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (updated) => {
+      setUser({ ...user!, profile_image: updated.profile_image });
       toast.success("Photo updated");
       revokeAndReset();
       setMode("form");
@@ -287,7 +287,6 @@ export function Navbar() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -344,7 +343,6 @@ export function Navbar() {
           ) : (
             profileForm && (
               <>
-                {/* Avatar + Change Photo */}
                 <div className="flex flex-col items-center gap-2 pt-2">
                   <Avatar className="size-20">
                     {user?.profile_image && (
