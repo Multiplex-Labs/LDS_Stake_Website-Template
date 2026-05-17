@@ -1,16 +1,16 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer, Settings } from "lucide-react";
-import { Link } from "wouter";
+import { Printer } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
-import { useAuthStore } from "@/stores/auth";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
+import { useWardMap } from "@/lib/hooks";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Ward, KanbanBoard } from "@/types";
 
-// Local types — viewer only, not exported
 interface Release {
   name: string;
   calling: string;
+  wardName?: string;
 }
 
 interface Ordination {
@@ -21,6 +21,7 @@ interface Ordination {
 interface Sustaining {
   name: string;
   calling: string;
+  wardName?: string;
 }
 
 interface TabData {
@@ -28,27 +29,54 @@ interface TabData {
   releases: Release[];
   ordinations: Ordination[];
   sustainings: Sustaining[];
+  showWard: boolean;
 }
 
 function hasEntries(tab: TabData): boolean {
   return tab.releases.length > 0 || tab.ordinations.length > 0 || tab.sustainings.length > 0;
 }
 
-function ReleaseSection({ releases }: { releases: Release[] }) {
+interface GridItem {
+  name: string;
+  wardName?: string;
+  calling: string;
+}
+
+function NameCallingGrid({ items, showWard }: { items: GridItem[]; showWard: boolean }) {
+  const gridCols = showWard ? "grid-cols-[1fr_1fr_2fr]" : "grid-cols-[1fr_2fr]";
+  return (
+    <>
+      <div
+        className={`grid ${gridCols} gap-x-6 text-xs uppercase text-muted-foreground tracking-wide pb-1 border-b`}
+      >
+        <span>Name</span>
+        {showWard && <span>Ward</span>}
+        <span>Calling</span>
+      </div>
+      <div className="space-y-0.5">
+        {items.map((item, i) => (
+          <div key={i} className={`grid ${gridCols} gap-x-6`}>
+            <span className="font-medium">{item.name}</span>
+            {showWard && <span className="text-muted-foreground">{item.wardName ?? "—"}</span>}
+            <span>{item.calling}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ReleaseSection({ releases, showWard }: { releases: Release[]; showWard: boolean }) {
   return (
     <section className="mb-10">
       <h3 className="font-bold text-base uppercase tracking-widest mb-4 pb-2 border-b">Release</h3>
       {releases.length === 0 ? (
         <p className="text-muted-foreground italic text-sm">No releases at this time.</p>
       ) : (
-        <div className="space-y-4 text-sm leading-relaxed">
-          {releases.map((r, i) => (
-            <p key={i}>
-              A release has been extended to: <strong>{r.name}</strong> as{" "}
-              <strong>{r.calling}</strong> — All who would like to express their appreciation may do
-              so by the uplifted hand.
-            </p>
-          ))}
+        <div className="space-y-3 text-sm leading-relaxed">
+          <p>A release has been extended to:</p>
+          <NameCallingGrid items={releases} showWard={showWard} />
+          <p>All who would like to express their appreciation may do so by the uplifted hand.</p>
         </div>
       )}
     </section>
@@ -66,16 +94,17 @@ function OrdinationsSection({ ordinations }: { ordinations: Ordination[] }) {
         {ordinations.map((o, i) => (
           <p key={i}>
             It is proposed that <strong>{o.name}</strong> be ordained to the office of{" "}
-            <strong>{o.office}</strong> in the Melchizedek Priesthood. All in favor, please manifest
-            it. Any opposed?
+            <strong>{o.office}</strong> in the Melchizedek Priesthood.
           </p>
         ))}
+        <p>All in favor, please manifest it. Any opposed?</p>
       </div>
     </section>
   );
 }
 
-function SustainingSection({ sustainings }: { sustainings: Sustaining[] }) {
+function SustainingSection({ sustainings, showWard }: { sustainings: Sustaining[]; showWard: boolean }) {
+  const pronoun = sustainings.length === 1 ? "he/she" : "they";
   return (
     <section className="mb-10">
       <h3 className="font-bold text-base uppercase tracking-widest mb-4 pb-2 border-b">
@@ -84,21 +113,15 @@ function SustainingSection({ sustainings }: { sustainings: Sustaining[] }) {
       {sustainings.length === 0 ? (
         <p className="text-muted-foreground italic text-sm">No sustainings at this time.</p>
       ) : (
-        <div className="space-y-4 text-sm leading-relaxed">
+        <div className="space-y-3 text-sm leading-relaxed">
           <p>
             A call has been extended to the following individuals and if they are here, please
             stand:
           </p>
-          <ul className="list-disc pl-6 space-y-1">
-            {sustainings.map((s, i) => (
-              <li key={i}>
-                <strong>{s.name}</strong> — {s.calling}
-              </li>
-            ))}
-          </ul>
+          <NameCallingGrid items={sustainings} showWard={showWard} />
           <p>
-            It is proposed that {sustainings.length === 1 ? "he/she" : "they"} be sustained. All in
-            favor may manifest it by the uplifted hand. Any opposed may also manifest it.
+            It is proposed that {pronoun} be sustained. All in favor may manifest it by the
+            uplifted hand. Any opposed may also manifest it.
           </p>
         </div>
       )}
@@ -109,16 +132,14 @@ function SustainingSection({ sustainings }: { sustainings: Sustaining[] }) {
 function TabContent({ tab }: { tab: TabData }) {
   return (
     <div>
-      <ReleaseSection releases={tab.releases} />
+      <ReleaseSection releases={tab.releases} showWard={tab.showWard} />
       <OrdinationsSection ordinations={tab.ordinations} />
-      <SustainingSection sustainings={tab.sustainings} />
+      <SustainingSection sustainings={tab.sustainings} showWard={tab.showWard} />
     </div>
   );
 }
 
 export default function ReleasesAndSustainings() {
-  const { user } = useAuthStore();
-
   const {
     data: wards = [],
     isLoading,
@@ -144,19 +165,19 @@ export default function ReleasesAndSustainings() {
 
   if (boardError) console.error("[sustainings] Failed to load kanban board");
 
-  // Load prep state once on mount — re-read on every page visit (Wouter remounts on navigation)
   const prepState = useMemo(() => loadSustainingPrep(), []);
+  const wardMap = useWardMap(wards);
 
-  // Build tab data from localStorage sustaining-prep state
   const allTabs = useMemo<TabData[]>(() => {
     const proposals = board["3"] ?? [];
     const proposalMap = new Map(proposals.map((p) => [p.id, p]));
+    const ordinationMap = new Map(prepState.ordinations.map((o) => [o.id, o]));
 
     const wardTabs: TabData[] = [...wards]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((w) => {
         const wa = prepState.wardAssignments.find((x) => x.wardId === w.id);
-        if (!wa) return { label: w.name, releases: [], ordinations: [], sustainings: [] };
+        if (!wa) return { label: w.name, releases: [], ordinations: [], sustainings: [], showWard: false };
 
         const releases: Release[] = [];
         const ordinations: Ordination[] = [];
@@ -173,20 +194,19 @@ export default function ReleasesAndSustainings() {
               sustainings.push({ name, calling: p.proposed_calling });
             }
           } else {
-            const ord = prepState.ordinations.find((o) => o.id === item.ordinationId);
+            const ord = ordinationMap.get(item.ordinationId);
             if (!ord) continue;
             ordinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
           }
         }
 
-        return { label: w.name, releases, ordinations, sustainings };
+        return { label: w.name, releases, ordinations, sustainings, showWard: false };
       });
 
-    // Stake tab
     const stakeWa = prepState.wardAssignments.find((x) => x.wardId === "stake");
     const stakeReleases: Release[] = [];
     const stakeOrdinations: Ordination[] = [];
-    const stakeS: Sustaining[] = [];
+    const stakeSustainings: Sustaining[] = [];
 
     if (stakeWa) {
       for (const item of stakeWa.items) {
@@ -194,13 +214,14 @@ export default function ReleasesAndSustainings() {
           const p = proposalMap.get(item.proposalId);
           if (!p) continue;
           const name = `${p.fname} ${p.lname}`;
+          const wardName = wardMap.get(p.ward_id) ?? "—";
           if (p.is_release) {
-            stakeReleases.push({ name, calling: p.proposed_calling });
+            stakeReleases.push({ name, calling: p.proposed_calling, wardName });
           } else {
-            stakeS.push({ name, calling: p.proposed_calling });
+            stakeSustainings.push({ name, calling: p.proposed_calling, wardName });
           }
         } else {
-          const ord = prepState.ordinations.find((o) => o.id === item.ordinationId);
+          const ord = ordinationMap.get(item.ordinationId);
           if (!ord) continue;
           stakeOrdinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
         }
@@ -209,22 +230,20 @@ export default function ReleasesAndSustainings() {
 
     return [
       ...wardTabs,
-      { label: "Stake", releases: stakeReleases, ordinations: stakeOrdinations, sustainings: stakeS },
+      {
+        label: "Stake",
+        releases: stakeReleases,
+        ordinations: stakeOrdinations,
+        sustainings: stakeSustainings,
+        showWard: true,
+      },
     ];
-  }, [wards, board, prepState]);
+  }, [wards, board, prepState, wardMap]);
 
   const visibleTabs = useMemo(() => allTabs.filter(hasEntries), [allTabs]);
   const allEmpty = visibleTabs.length === 0;
 
   const [activeTab, setActiveTab] = useState(0);
-
-  // Reset to first tab if the previously active index is no longer valid
-  useEffect(() => {
-    if (activeTab >= visibleTabs.length && visibleTabs.length > 0) {
-      setActiveTab(0);
-    }
-  }, [visibleTabs.length, activeTab]);
-
   const safeActive = Math.min(activeTab, Math.max(0, visibleTabs.length - 1));
   const activeTabData = visibleTabs[safeActive] ?? null;
 
@@ -269,10 +288,8 @@ export default function ReleasesAndSustainings() {
 
   return (
     <Layout>
-      {/* Print: hide nav and footer */}
       <style>{`@media print { nav, footer { display: none !important; } }`}</style>
 
-      {/* Page header — hidden when printing */}
       <div className="bg-muted/30 py-12 print:hidden">
         <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -288,20 +305,10 @@ export default function ReleasesAndSustainings() {
               </p>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {user && (
-              <Link href="/leader/callings/sustainings-prep">
-                <button className="btn btn-outline gap-2">
-                  <Settings className="size-4" />
-                  Manage
-                </button>
-              </Link>
-            )}
-            <button className="btn btn-outline gap-2" onClick={() => window.print()}>
-              <Printer className="size-4" />
-              Print
-            </button>
-          </div>
+          <button className="btn btn-outline gap-2" onClick={() => window.print()}>
+            <Printer className="size-4" />
+            Print
+          </button>
         </div>
       </div>
 
@@ -312,32 +319,27 @@ export default function ReleasesAndSustainings() {
             <p className="text-muted-foreground">
               There are no releases, ordinations, or sustainings scheduled.
             </p>
-            {user && (
-              <Link href="/leader/callings/sustainings-prep">
-                <button className="btn btn-outline mt-6 gap-2">
-                  <Settings className="size-4" />
-                  Set up Sustaining Prep
-                </button>
-              </Link>
-            )}
           </div>
         ) : (
           <>
-            {/* Tab navigation — hidden when printing */}
-            <div role="tablist" className="tabs tabs-bordered mb-8 print:hidden">
-              {visibleTabs.map((tab, i) => (
-                <button
-                  key={tab.label}
-                  role="tab"
-                  className={`tab${safeActive === i ? " tab-active" : ""}`}
-                  onClick={() => setActiveTab(i)}
-                >
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              className="justify-start flex-wrap gap-2 mb-8 print:hidden"
+              value={visibleTabs[safeActive]?.label ?? ""}
+              onValueChange={(v) => {
+                if (!v) return;
+                const idx = visibleTabs.findIndex((t) => t.label === v);
+                if (idx !== -1) setActiveTab(idx);
+              }}
+            >
+              {visibleTabs.map((tab) => (
+                <ToggleGroupItem key={tab.label} value={tab.label}>
                   {tab.label}
-                </button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
 
-            {/* Active tab content */}
             {activeTabData && (
               <div>
                 <h2 className="font-serif text-2xl font-bold mb-6 hidden print:block">

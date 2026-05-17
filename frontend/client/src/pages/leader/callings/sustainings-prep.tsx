@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
 import { Eye, Trash2, Plus } from "lucide-react";
+import { useWardMap } from "@/lib/hooks";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -319,7 +320,7 @@ export default function SustainingPrep() {
   if (wardsError) console.error("[sustainings-prep] Failed to load wards");
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
-  const wardMap = useMemo(() => new Map(wards.map((w) => [w.id, w.name])), [wards]);
+  const wardMap = useWardMap(wards);
   const sortedWards = useMemo(() => [...wards].sort((a, b) => a.name.localeCompare(b.name)), [wards]);
 
   // Auto-populate pool on first load if no proposals are tracked yet
@@ -474,16 +475,16 @@ export default function SustainingPrep() {
                 onChange={(e) => handleDateChange(e.target.value)}
               />
             </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setOrdinationOpen(true)}>
+            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => setOrdinationOpen(true)}>
               <Plus className="size-4" />
               Add Ordination
             </Button>
-            <Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={handleClearAll}>
+            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={handleClearAll}>
               <Trash2 className="size-4" />
               Clear All
             </Button>
             <Link href="/leader/sustainings">
-              <Button variant="secondary" size="sm" className="gap-2">
+              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
                 <Eye className="size-4" />
                 Preview Viewer
               </Button>
