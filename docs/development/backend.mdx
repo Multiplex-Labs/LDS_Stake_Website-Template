@@ -1,0 +1,141 @@
+---
+title: "Backend"
+description: "FastAPI service conventions: routers, the CallingUser dependency, database sessions, and startup sequence."
+---
+
+The backend is a FastAPI application (Python 3.11+) that owns all business logic, authentication, and database access. It runs on port 8000. Source lives under `backend/src/`.
+
+```
+backend/src/
+├── app.py                   # FastAPI instance, CORS, lifespan hooks, router registration
+├── main.py                  # Entry point (uvicorn, env setup, .env loading)
+├── models/                  # SQLModel ORM models (one file per domain)
+├── routers/                 # FastAPI route handlers (one file per domain)
+├── db/
+│   ├── orm.py               # Singleton ORM + get_session() dependency
+│   └── engines/sqlite_engine.py
+└── utils/                   # security.py, permissions.py, password hashing, background tasks
+```
+
+<Info>
+  All Python commands must use `uv run`. Do not use `python`, `pip`, `venv`, or `conda` directly.
+</Info>
+
+---
+
+## Router-per-domain pattern
+
+Each business domain has its own file in `backend/src/routers/`. Routers are registered in `app.py` with a URL prefix. The current routers are:
+
+| File | Prefix | Notes |
+|------|--------|-------|
+| `auth.py` | `/auth` | Login, refresh, logout, /me |
+| `users.py` | `/users` | User CRUD, password change, photo upload |
+| `callings.py` | `/callings` | Calling CRUD, slot assignment |
+| `assignments.py` | `/assignments` | High Council assignment CRUD |
+| `speaking.py` | `/speaking` | Speaking calendar and topics |
+| `calling_kanban.py` | `/calling-kanban` | Proposals, comments, approvals, board view |
+| `ward.py` | `/wards` | Ward list and detail |
+| `health.py` | — | Health check endpoint |
+
+### Adding a new router
+
+<Steps>
+  <Step title="Create the router file">
+    ```python
+    # backend/src/routers/my_domain.py
+    from fastapi import APIRouter
+
+    router = APIRouter()
+
+    @router.get("/")
+    def list_items():
+        ...
+    ```
+  </Step>
+  <Step title="Register it in app.py">
+    ```python
+    # backend/src/app.py
+    from src.routers.my_domain import router as my_domain_router
+
+    app.include_router(my_domain_router, prefix="/my-prefix")
+    ```
+  </Step>
+</Steps>
+
+---
+
+## `CallingUser` dependency
+
+`CallingUser` (in `backend/src/utils/security.py`) is the FastAPI dependency used to authenticate and authorize route handlers. Inject it with `Depends()`.
+
+```python
+from src.utils.security import CallingUser
+from src.models.permissions import Permission
+
+@router.get("/protected")
+def protected_route(current_user = Depends(CallingUser())):
+    return {"user_id": current_user.id}
+```
+
+### Constructor options
+
+| Option | Type | Effect |
+|--------|------|--------|
+| `require_fresh` | `bool` | When `True`, rejects tokens obtained via `/auth/refresh`. Use on the password-change endpoint to ensure the user has recently re-authenticated. |
+| `api_safe` | `bool` | When `True`, returns a `ResponseSafeUser` that omits `password_hash`. Always use this on endpoints that return user data to clients. |
+| `permissions` | `list[Permission]` | Checks that the authenticated user holds all listed permission flags. Returns 403 if any flag is missing. |
+| `allow_unchanged_password` | `bool` | When `True`, bypasses the `force_password_reset` guard. Use on endpoints that must remain accessible before a forced password change (e.g., `/auth/me`). |
+| `allow_anonymous` | `bool` | When `True`, returns `None` instead of raising 401 when no token is present. Use for endpoints that are public but can optionally personalize for logged-in users. |
+
+---
+
+## `get_session()` dependency
+
+`get_session()` (in `backend/src/db/orm.py`) yields a SQLModel `Session`. All database operations must go through this session — do not create sessions manually.
+
+```python
+from sqlmodel import Session
+from src.db.orm import get_session
+
+@router.get("/items")
+def list_items(session: Session = Depends(get_session)):
+    return session.exec(select(Item)).all()
+```
+
+In tests, `get_session` is overridden to use a temporary SQLite file so the real database is never touched. See [Database](/development/database) for details.
+
+---
+
+## Startup sequence
+
+The lifespan hook in `app.py` runs these steps in order when the server starts:
+
+1. **Initialize ORM** — sets up the SQLModel engine and creates tables if they do not exist.
+2. **`create_default_admin_user()`** — creates the initial admin user only when the database is empty. Requires the `INITIAL_ADMIN_PASSWORD` environment variable. The admin's `force_password_reset` flag is set to `true` so the first login forces a password change.
+3. **`create_system_callings_and_assignments()`** — ensures the system-defined callings exist: High Councilor, Stake Presidency, and Bishop. These callings cannot be deleted through the API (`system_defined=True`).
+4. **`load_wards()`** — reads `backend/wards.csv` (format: `name,start_hour`) and creates `Ward` rows for any ward that does not already exist.
+5. **Background tasks** — starts two background loops:
+   - Session cleanup: periodically deletes expired `usersession` rows.
+   - Speaking assignment cleanup: removes stale auto-generated speaking assignments.
+
+<Warning>
+  `INITIAL_ADMIN_PASSWORD` is only needed on the very first launch when the database is empty. After the admin user is created, the variable is ignored. Do not leave it set in production after the initial setup.
+</Warning>
+
+---
+
+## Running the backend
+
+```bash
+# First launch (creates admin user)
+INITIAL_ADMIN_PASSWORD=admin123 uv run python main.py
+
+# Normal start
+uv run python main.py
+
+# Dev with auto-reload
+uv run python -m uvicorn src.app:app --reload --host localhost --port 8000
+```
+
+Swagger UI is available at `http://localhost:8000/docs` in development (when `DEV=true`).

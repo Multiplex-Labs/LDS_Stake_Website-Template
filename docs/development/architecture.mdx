@@ -1,0 +1,86 @@
+---
+title: "Architecture"
+description: "How the three services fit together and how requests flow through the system."
+---
+
+The portal is composed of three independent services. Each runs in its own process and communicates over HTTP or WebSocket — there is no shared in-process state between them.
+
+| Service | Stack | Port |
+|---------|-------|------|
+| Frontend | React 19 SPA + Express proxy | 3100 |
+| Backend | FastAPI REST API | 8000 |
+| Slackbot | Slack Bolt (Socket Mode) | — |
+
+---
+
+## Request flow
+
+```
+Browser
+  └─▶ React SPA (port 3100)
+        └─▶ /api/* ▶ Express proxy ▶ FastAPI (port 8000)
+
+Slack ▶ SlackBot [Socket Mode]   [future: ▶ FastAPI]
+```
+
+<img src="/architecture/architecture.svg" alt="Architecture diagram" />
+
+### Express proxy
+
+The Express server is a **pure proxy**. It does no session management, no authentication, and no business logic. Every request that matches `/api/*` is forwarded to FastAPI with the `/api` prefix stripped. The React SPA never calls FastAPI directly — all API calls go through the proxy so that cookies are scoped to the same origin.
+
+<Info>
+  `express-session`, `passport`, and `connect-pg-simple` appear in `package.json` but are **not used**. They are legacy from an earlier design. Do not add Passport-based auth.
+</Info>
+
+### FastAPI backend
+
+FastAPI owns all business logic, authentication, and database access. It exposes a REST API on port 8000. In production the proxy forwards requests to it; in development it can also be accessed directly at `http://localhost:8000/docs` for Swagger UI exploration.
+
+### Slackbot
+
+The Slackbot connects outbound to Slack via a persistent WebSocket (Socket Mode). No inbound webhook URL is required. The bot currently runs fully standalone — FastAPI integration is planned but not yet implemented.
+
+---
+
+## Local development startup order
+
+Start services in this order to avoid connection errors:
+
+<Steps>
+  <Step title="Start the backend">
+    ```bash
+    cd backend
+    uv run python main.py
+    ```
+    The backend must be up first because the frontend proxy will immediately begin forwarding requests to it.
+  </Step>
+  <Step title="Start the frontend">
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+    Opens the React SPA and Express proxy on port 3100.
+  </Step>
+  <Step title="Start the slackbot (optional)">
+    ```bash
+    cd slackbot
+    uv run python main.py
+    ```
+    Only needed when working on Slack-related features.
+  </Step>
+</Steps>
+
+---
+
+## Service boundaries
+
+Each service has its own dependency management and is started independently:
+
+- **Frontend** uses `npm` (Node.js). Run all frontend commands from `frontend/`.
+- **Backend** uses `uv` (Python). Run all backend commands from `backend/`. Never use `python`, `pip`, `venv`, or `conda` directly.
+- **Slackbot** uses `uv` (Python). Run all slackbot commands from `slackbot/`.
+
+<Warning>
+  The frontend and slackbot share the Python `uv` tool, but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `slackbot/` and vice versa.
+</Warning>

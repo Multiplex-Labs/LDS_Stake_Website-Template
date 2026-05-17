@@ -1,0 +1,88 @@
+---
+title: "User Administration"
+description: "Create and manage portal user accounts, assign callings, and upload profile photos from the User Admin page."
+---
+
+## Accessing the Page
+
+Navigate to `/leader/user-admin`. Access requires the **MANAGE_USERS** permission. If you do not see this page in the navigation, contact your stake clerk or system administrator.
+
+## The User Table
+
+The user table lists every portal account. Columns include:
+
+| Column | Description |
+|--------|-------------|
+| Name | The user's first and last name |
+| Email | The user's email address (used for login) |
+| Callings | The calling(s) currently assigned to the user |
+| Status | Whether the account is Active or Inactive |
+
+- **Sort** any column by clicking the column header.
+- **Search** by typing in the search bar above the table — filters by name or email address in real time.
+
+## Activating and Deactivating Users
+
+Each user row has an **Active** toggle. Deactivating a user prevents them from logging in without deleting their account or history. Reactivating restores their access immediately.
+
+<Warning>
+  Deactivating a user does not end any currently active sessions. The user's existing session will expire on its own schedule.
+</Warning>
+
+## Adding a New User
+
+Click the **Add User** button to open the Add User wizard. The wizard guides you through six steps:
+
+<Steps>
+  <Step title="Basic Info">
+    Enter the user's **first name**, **last name**, and **email address**. All three fields are required. The email address must be unique in the system and will be used as the login username.
+  </Step>
+  <Step title="Bio">
+    Enter a short biography for the user. This is optional — click **Skip** to proceed without adding a bio. The bio can be updated later from the Edit User dialog.
+  </Step>
+  <Step title="Password">
+    Set an initial password for the account. The user will be required to change this password on their first login — they will be redirected to `/change-password` immediately after signing in for the first time.
+  </Step>
+  <Step title="Assign Calling">
+    Optionally assign a calling and slot number to the new user. Select a calling from the dropdown, then select the slot number. Click **Skip** if no calling assignment is needed at this time — callings can be assigned later from the Edit User dialog.
+  </Step>
+  <Step title="Profile Photo">
+    Optionally upload a profile photo. Click **Skip** if no photo is available. If you select a file, a **circular crop dialog** opens:
+    - Drag the image to reposition it within the circular crop area.
+    - Scroll (or use the zoom slider) to zoom in and out.
+    - When satisfied with the crop, click **Crop & Save** to confirm.
+
+    The cropped image is stored and displayed on the user's profile and in the stake leadership pages.
+  </Step>
+  <Step title="Review">
+    A summary of all the information you entered is displayed before the account is created. Optional fields that were skipped show as **—**. Review everything carefully, then click **Create** to create the account.
+  </Step>
+</Steps>
+
+<Info>
+  After clicking Create, the user account is created first. The profile photo upload and calling assignment (if provided) happen in parallel immediately afterward. If either the photo upload or calling assignment fails, a warning toast will appear — but the user account itself will still have been created successfully. You can retry the photo or calling assignment from the Edit User dialog.
+</Info>
+
+## Editing an Existing User
+
+Click any user's row in the table (or their **Edit** button) to open the **Edit User** dialog. The dialog has several sections:
+
+### Account Details
+
+Update the user's **first name**, **last name**, **email address**, **phone number**, **bio**, and **active status** from this section. Click **Save** to apply changes.
+
+### Callings
+
+View the callings currently assigned to the user. You can assign a new calling (by selecting a calling and slot number) or remove an existing calling assignment from this section.
+
+### Profile Photo
+
+Re-upload or replace the user's profile photo. The same **circular crop flow** from the Add User wizard applies here:
+
+1. Click **Upload Photo** and select an image file.
+2. The crop dialog opens — drag and scroll to position the circular crop.
+3. Click **Crop & Save** to confirm. The new photo replaces the previous one immediately.
+
+<Note>
+  The profile photo is stored as a circular-cropped JPEG on the server. The original un-cropped file is not retained.
+</Note>

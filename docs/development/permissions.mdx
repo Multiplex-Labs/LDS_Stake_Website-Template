@@ -1,0 +1,108 @@
+---
+title: "Permissions"
+description: "Bitmask permission flags, how they are stored, and how to protect routes."
+---
+
+The portal uses an IntFlag bitmask system for authorization. Permissions can be granted directly to a user or inherited from a calling the user holds.
+
+---
+
+## `Permission` flags
+
+Defined in `backend/src/models/permissions.py` as a Python `IntFlag` enum. Because it is an `IntFlag`, flags can be combined with bitwise OR.
+
+| Flag | Description |
+|------|-------------|
+| `NONE` | No permissions (value 0) |
+| `MANAGE_USERS` | Create, edit, and deactivate user accounts |
+| `MANAGE_CALLINGS` | Create and edit callings and slot assignments |
+| `MANAGE_ASSIGNMENTS` | Manage High Council assignments |
+| `MANAGE_SPEAKING_SCHEDULE` | Edit the speaking calendar |
+| `SUBMIT_CALLING_PROPOSALS` | Submit new calling or release proposals |
+| `MANAGE_CALLING_PROPOSALS` | Move proposals through the Kanban stages, approve/reject |
+| `VIEW_CALLING_PROPOSALS` | Read-only view of the Kanban board |
+
+---
+
+## How permissions are stored
+
+The `permissions` table has three key columns:
+
+| Column | Type | Meaning |
+|--------|------|---------|
+| `foreign_id` | integer | ID of a user or a calling, depending on `is_calling` |
+| `is_calling` | bool | `false` = row grants permission to a specific user; `true` = row grants permission to all current holders of a calling |
+| `scopes` | integer | Bitmask of one or more `Permission` flags combined with bitwise OR |
+
+### User-level permissions (`is_calling = false`)
+
+`foreign_id` is a `user.id`. The permission is granted to exactly that one user.
+
+### Calling-level permissions (`is_calling = true`)
+
+`foreign_id` is a `calling.id`. The permission is automatically inherited by every user who currently holds that calling (i.e., has an active `usercalling` row for it). When a user is released from the calling, they lose the inherited permission.
+
+<Info>
+  Calling-level permissions are how stake presidency and high council members get their access automatically when they are assigned to the corresponding calling — no manual per-user grant is needed.
+</Info>
+
+---
+
+## Checking permissions
+
+`user_has_permission(user_id, permission, session)` in `backend/src/utils/permissions.py` performs the full check:
+
+1. Looks up all `permissions` rows where `foreign_id = user_id` and `is_calling = false`.
+2. Looks up all callings the user currently holds (via `usercalling`) and checks for `permissions` rows where `foreign_id` is one of those calling IDs and `is_calling = true`.
+3. Combines all matched `scopes` values with bitwise OR.
+4. Returns `True` if the requested `permission` flag is set in the combined result.
+
+---
+
+## Protecting a route
+
+Pass the required flags to `CallingUser` via the `permissions` parameter. The dependency performs the check and raises HTTP 403 if the user does not hold the required flags.
+
+```python
+from fastapi import APIRouter, Depends
+from src.utils.security import CallingUser
+from src.models.permissions import Permission
+
+router = APIRouter()
+
+@router.get("/admin-only")
+def admin_route(
+    current_user = Depends(CallingUser(permissions=[Permission.MANAGE_USERS]))
+):
+    return {"user_id": current_user.id}
+```
+
+Multiple flags can be passed in the list — the user must hold **all** of them:
+
+```python
+@router.post("/proposals")
+def submit_proposal(
+    current_user = Depends(
+        CallingUser(permissions=[Permission.SUBMIT_CALLING_PROPOSALS])
+    )
+):
+    ...
+```
+
+<Warning>
+  Passing an empty `permissions` list (or omitting the parameter entirely) does **not** mean "no permissions required" — it still requires a valid authenticated session. Use `allow_anonymous=True` if the endpoint should be accessible without login.
+</Warning>
+
+---
+
+## Combining flags
+
+Because `Permission` is an `IntFlag`, you can express compound grants in a single integer:
+
+```python
+# Grant both MANAGE_USERS and MANAGE_CALLINGS in one row
+scopes = Permission.MANAGE_USERS | Permission.MANAGE_CALLINGS
+# scopes is stored as an integer in the permissions.scopes column
+```
+
+This is how the admin user gets all permissions: their `scopes` value is the bitwise OR of every flag.

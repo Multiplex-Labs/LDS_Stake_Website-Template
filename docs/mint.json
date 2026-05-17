@@ -1,0 +1,78 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "LDS Stake Portal",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#1B4F8A",
+    "light": "#3B82F6",
+    "dark": "#1B4F8A"
+  },
+  "topbar": {
+    "style": "default"
+  },
+  "openapi": "api-reference/openapi.json",
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": [
+        "introduction",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "Deployment",
+      "pages": [
+        "deployment/overview",
+        "deployment/docker",
+        "deployment/manual",
+        "deployment/environment",
+        "deployment/first-run",
+        "deployment/upgrading"
+      ]
+    },
+    {
+      "group": "Development",
+      "pages": [
+        "development/architecture",
+        "development/frontend",
+        "development/backend",
+        "development/authentication",
+        "development/permissions",
+        "development/database",
+        "development/slackbot"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview"
+      ]
+    },
+    {
+      "group": "User Guide",
+      "pages": [
+        "user-guide/overview",
+        "user-guide/assignments",
+        "user-guide/speaking",
+        {
+          "group": "Callings",
+          "pages": [
+            "user-guide/callings/submit",
+            "user-guide/callings/review",
+            "user-guide/callings/manage",
+            "user-guide/callings/archive"
+          ]
+        },
+        "user-guide/sustainings",
+        "user-guide/user-admin"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com"
+  }
+}

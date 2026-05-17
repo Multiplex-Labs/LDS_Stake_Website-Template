@@ -1,0 +1,53 @@
+---
+title: "Deployment Overview"
+description: "Choose between Docker Compose and manual deployment for the LDS Stake Portal."
+---
+
+The Stake Portal consists of three independent services that must be running together for the application to function:
+
+- **Frontend** — React 19 SPA served by an Express proxy (port 3100)
+- **Backend** — FastAPI REST API managed with `uv` (port 8000)
+- **Slackbot** — Slack Bolt app running in Socket Mode (optional)
+
+Two deployment modes are supported. Choose the one that fits your environment.
+
+## Prerequisites
+
+Regardless of deployment mode, ensure the following are available on your host:
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 18+ | Required for the frontend/proxy service |
+| Python | 3.11+ | Required for backend and slackbot |
+| uv | Latest | Python package manager — [install here](https://docs.astral.sh/uv/) |
+| Docker + Docker Compose | Any recent version | Required for Docker mode only |
+
+<Info>
+  `uv` replaces `pip`, `venv`, and `conda` entirely. Never call `python` or `pip` directly — always use `uv run` and `uv sync`.
+</Info>
+
+## Deployment Modes
+
+<CardGroup cols={2}>
+  <Card title="Docker Compose" icon="docker" href="/deployment/docker">
+    The recommended path for most deployments. All three services are containerized and started with a single command. Ideal for servers, VMs, and any environment where Docker is available.
+  </Card>
+  <Card title="Manual Deployment" icon="terminal" href="/deployment/manual">
+    Run each service directly on the host without containers. Best for local development, constrained environments, or when you need fine-grained control over each process.
+  </Card>
+</CardGroup>
+
+## What Happens at First Launch
+
+On the very first run (when the database is empty), the backend automatically:
+
+1. Creates the `admin@admin.com` account using `INITIAL_ADMIN_PASSWORD`
+2. Creates system callings (High Councilor, Stake Presidency, Bishop)
+3. Loads wards from `backend/wards.csv`
+
+See [First Run & Bootstrap](/deployment/first-run) for the full walkthrough.
+
+## Further Reading
+
+- [Environment Variables](/deployment/environment) — complete reference for all configuration values
+- [Upgrading](/deployment/upgrading) — how to apply migrations and restart services safely

@@ -1,0 +1,76 @@
+---
+title: "API Reference"
+description: "REST API for the LDS Stake Portal, auto-documented from the FastAPI OpenAPI spec."
+---
+
+## Base URL
+
+All browser requests go through the Express proxy on port 3100. The proxy strips the `/api` prefix and forwards each request to FastAPI on port 8000. The browser never calls FastAPI directly.
+
+| Environment | URL |
+|-------------|-----|
+| Development (via proxy) | `http://localhost:3100/api` |
+| Direct FastAPI access (dev only) | `http://localhost:8000` |
+| Production | `/api` (same host, proxied by Express) |
+
+## Authentication
+
+All protected endpoints require a JWT access token passed as an `Authorization` Bearer header:
+
+```
+Authorization: Bearer <access_token>
+```
+
+Obtain an access token by calling `POST /api/auth/login` with a form-encoded body. The token expires after **15 minutes**. When you receive a `401` response, call `GET /api/auth/refresh` — it exchanges the HttpOnly `refresh_token` cookie for a new access token and rotates the cookie.
+
+### Login example
+
+```bash
+curl -X POST http://localhost:3100/api/auth/login \
+  -d "email=admin@admin.com&password=yourpassword"
+```
+
+**Response:**
+
+```json
+{ "access_token": "eyJ...", "token_type": "bearer" }
+```
+
+Store the access token in memory only — never in `localStorage` or a cookie.
+
+## Error Format
+
+Errors are returned as **plain strings** in the format `"<status_code>: <body>"`.
+
+**Example:** `"403: User does not have permission"`
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Bad request or validation error |
+| 401 | Unauthenticated — no valid token present |
+| 403 | Forbidden — valid token but insufficient permissions, or `force_password_reset` is set |
+| 404 | Resource not found |
+| 422 | Request body validation failed (Pydantic) |
+
+## Swagger UI
+
+When `DEV=true`, interactive API documentation is available at:
+
+```
+http://localhost:8000/docs
+```
+
+## API Routers
+
+All routers are registered under `/` in FastAPI. The Express proxy strips the `/api` prefix before forwarding, so a browser request to `/api/auth/login` reaches FastAPI as `/auth/login`.
+
+| Router | Prefix | Key endpoints |
+|--------|--------|---------------|
+| auth | `/auth` | login, refresh, logout, me |
+| users | `/users` | CRUD, photo upload, password change |
+| callings | `/callings` | CRUD, slot assignment |
+| assignments | `/assignments` | HC assignment CRUD |
+| speaking | `/speaking` | Speaking calendar |
+| calling-kanban | `/calling-kanban` | Proposals, board, comments, approvals |
+| wards | `/wards` | List wards |
+| health | `/` | Health check |
