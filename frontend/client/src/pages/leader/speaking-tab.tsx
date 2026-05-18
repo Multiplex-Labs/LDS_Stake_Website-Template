@@ -45,6 +45,15 @@ function invalidateSpeakingData(year: number) {
   queryClient.invalidateQueries({ queryKey: ["/api/speaking/calendar/", year] });
 }
 
+function overrideAssignment(ucId: number, wardId: number | null, monthIdx: number, year: number) {
+  return apiRequest("PUT", "/api/speaking/calendar/override", {
+    high_councilor_id: ucId,
+    ward_id: wardId,
+    month: monthIdx + 1,
+    year,
+  });
+}
+
 export function SpeakingTab() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
@@ -104,13 +113,7 @@ export function SpeakingTab() {
       ucId: number;
       wardId: number | null;
       monthIdx: number;
-    }) =>
-      apiRequest("PUT", "/api/speaking/calendar/override", {
-        high_councilor_id: ucId,
-        ward_id: wardId,
-        month: monthIdx + 1,
-        year,
-      }),
+    }) => overrideAssignment(ucId, wardId, monthIdx, year),
     onSuccess: () => {
       invalidateSpeakingData(year);
       toast.success("Schedule updated.");
@@ -123,21 +126,16 @@ export function SpeakingTab() {
 
   const clearMonthMutation = useMutation({
     mutationFn: ({ monthIdx }: { monthIdx: number }) =>
-      Promise.all(
-        (calendar?.speakers ?? [])
+      Promise.allSettled(
+        calendar!.speakers
           .filter((sp) => sp.assignments[monthIdx]?.ward_id != null)
-          .map((sp) =>
-            apiRequest("PUT", "/api/speaking/calendar/override", {
-              high_councilor_id: sp.high_councilor_id,
-              ward_id: null,
-              month: monthIdx + 1,
-              year,
-            })
-          )
+          .map((sp) => overrideAssignment(sp.high_councilor_id, null, monthIdx, year))
       ),
-    onSuccess: () => {
+    onSuccess: (results) => {
       invalidateSpeakingData(year);
-      toast.success("Month cleared.");
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
+      else toast.success("Month cleared.");
     },
     onError: (err: Error) => {
       console.error("[speaking-tab] clear month:", err);
@@ -148,22 +146,17 @@ export function SpeakingTab() {
   const clearHCMutation = useMutation({
     mutationFn: ({ ucId }: { ucId: number }) => {
       const sp = calendar?.speakers.find((s) => s.high_councilor_id === ucId);
-      return Promise.all(
+      return Promise.allSettled(
         MONTH_INDICES
           .filter((mIdx) => sp?.assignments[mIdx]?.ward_id != null)
-          .map((mIdx) =>
-            apiRequest("PUT", "/api/speaking/calendar/override", {
-              high_councilor_id: ucId,
-              ward_id: null,
-              month: mIdx + 1,
-              year,
-            })
-          )
+          .map((mIdx) => overrideAssignment(ucId, null, mIdx, year))
       );
     },
-    onSuccess: () => {
+    onSuccess: (results) => {
       invalidateSpeakingData(year);
-      toast.success("Schedule cleared.");
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
+      else toast.success("Schedule cleared.");
     },
     onError: (err: Error) => {
       console.error("[speaking-tab] clear HC:", err);
@@ -281,14 +274,19 @@ export function SpeakingTab() {
                     <TableHead key={i} className="text-center min-w-14 px-1">
                       <div className="flex flex-col items-center gap-0.5">
                         <span>{m.slice(0, 3)}</span>
-                        <button
-                          className="text-muted-foreground/30 hover:text-destructive transition-colors"
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
                           onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
-                          disabled={clearMonthMutation.isPending}
+                          disabled={
+                            clearMonthMutation.isPending &&
+                            clearMonthMutation.variables?.monthIdx === i
+                          }
                           title={`Clear all ${m} assignments`}
                         >
                           <X className="size-3" />
-                        </button>
+                        </Button>
                       </div>
                     </TableHead>
                   ))}
@@ -372,8 +370,10 @@ export function SpeakingTab() {
                         );
                       })}
                       <TableCell className="p-1">
-                        <button
-                          className="text-muted-foreground/30 hover:text-destructive transition-colors"
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
                           onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
                           disabled={
                             clearHCMutation.isPending &&
@@ -382,7 +382,7 @@ export function SpeakingTab() {
                           title="Clear all assignments for this high councilor"
                         >
                           <X className="size-3" />
-                        </button>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
