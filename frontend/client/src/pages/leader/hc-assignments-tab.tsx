@@ -57,7 +57,7 @@ export function HCAssignmentsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const [hcOptions, hcBySlot, ucIdToSlot] = useMemo(() => {
+  const [hcOptions, hcBySlot] = useMemo(() => {
     const options: HcOption[] = [];
     for (const u of users) {
       for (const uc of u.callings ?? []) {
@@ -68,24 +68,21 @@ export function HCAssignmentsTab() {
     }
     options.sort((a, b) => a.slotNum - b.slotNum);
     const bySlot = new Map<number, HcOption>();
-    const ucToSlot = new Map<number, number>();
-    for (const opt of options) {
-      bySlot.set(opt.slotNum, opt);
-      ucToSlot.set(opt.ucId, opt.slotNum);
-    }
-    return [options, bySlot, ucToSlot] as const;
+    for (const opt of options) bySlot.set(opt.slotNum, opt);
+    return [options, bySlot] as const;
   }, [users]);
 
   const assignmentBySlot = useMemo(() => {
+    const ucToSlot = new Map(hcOptions.map((o) => [o.ucId, o.slotNum]));
     const map = new Map<number, HcAssignment>();
     for (const a of assignments) {
       if (a.high_councilor_id != null) {
-        const slotNum = ucIdToSlot.get(a.high_councilor_id);
+        const slotNum = ucToSlot.get(a.high_councilor_id);
         if (slotNum != null) map.set(slotNum, a);
       }
     }
     return map;
-  }, [assignments, ucIdToSlot]);
+  }, [hcOptions, assignments]);
 
   const saveMutation = useMutation({
     mutationFn: ({
@@ -95,7 +92,7 @@ export function HCAssignmentsTab() {
       committee,
     }: {
       slotNum: number;
-      ucId: number | null;
+      ucId: number;
       responsibility: string;
       committee: string;
     }) =>
