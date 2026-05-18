@@ -1,3 +1,5 @@
+export const SELECT_NONE = "__none__";
+
 export const WARDS = [
   "9th Ward", "10th Ward", "11th Ward", "12th Ward",
   "13th Ward", "14th Ward", "15th Ward", "16th Ward", "17th Ward",

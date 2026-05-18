@@ -10,6 +10,10 @@ export function extractWardNumber(name: string): string {
   return match ? match[1] : name;
 }
 
+export function fullName(user: { fname: string; lname: string }): string {
+  return `${user.fname} ${user.lname}`;
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")

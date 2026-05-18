@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SELECT_NONE } from "@/lib/constants";
+import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser } from "@/types";
 
 const HC_SLOTS = Array.from({ length: 14 }, (_, i) => i + 1);
@@ -40,7 +42,7 @@ interface HcOption {
 
 interface EditState {
   slotNum: number;
-  ucId: string; // "__none__" or String(UserCalling.id)
+  ucId: string; // SELECT_NONE or String(UserCalling.id)
   responsibility: string;
   committee: string;
 }
@@ -55,23 +57,20 @@ export function HCAssignmentsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const hcOptions = useMemo((): HcOption[] => {
+  const [hcOptions, hcBySlot] = useMemo(() => {
     const options: HcOption[] = [];
     for (const u of users) {
       for (const uc of u.callings ?? []) {
         if (uc.calling?.name === "High Councilor") {
-          options.push({ ucId: uc.id, name: `${u.fname} ${u.lname}`, slotNum: uc.slot_number });
+          options.push({ ucId: uc.id, name: fullName(u), slotNum: uc.slot_number });
         }
       }
     }
-    return options.sort((a, b) => a.slotNum - b.slotNum);
+    options.sort((a, b) => a.slotNum - b.slotNum);
+    const bySlot = new Map<number, HcOption>();
+    for (const opt of options) bySlot.set(opt.slotNum, opt);
+    return [options, bySlot] as const;
   }, [users]);
-
-  const hcBySlot = useMemo(() => {
-    const map = new Map<number, HcOption>();
-    for (const opt of hcOptions) map.set(opt.slotNum, opt);
-    return map;
-  }, [hcOptions]);
 
   const assignmentByUcId = useMemo(() => {
     const map = new Map<number, HcAssignment>();
@@ -114,7 +113,7 @@ export function HCAssignmentsTab() {
     const assignment = hcEntry ? assignmentByUcId.get(hcEntry.ucId) : null;
     setEditing({
       slotNum,
-      ucId: hcEntry ? String(hcEntry.ucId) : "__none__",
+      ucId: hcEntry ? String(hcEntry.ucId) : SELECT_NONE,
       responsibility: assignment?.responsibility ?? "",
       committee: assignment?.committee ?? "",
     });
@@ -189,7 +188,7 @@ export function HCAssignmentsTab() {
                     <SelectValue placeholder="Select member…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— Unassigned</SelectItem>
+                    <SelectItem value={SELECT_NONE}>— Unassigned</SelectItem>
                     {hcOptions.map((opt) => (
                       <SelectItem key={opt.ucId} value={String(opt.ucId)}>
                         {opt.name}
@@ -235,7 +234,7 @@ export function HCAssignmentsTab() {
                 if (!editing) return;
                 saveMutation.mutate({
                   slotNum: editing.slotNum,
-                  ucId: editing.ucId === "__none__" ? null : Number(editing.ucId),
+                  ucId: editing.ucId === SELECT_NONE ? null : Number(editing.ucId),
                   responsibility: editing.responsibility,
                   committee: editing.committee,
                 });
