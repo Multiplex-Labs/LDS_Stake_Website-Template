@@ -1,4 +1,5 @@
 import { useState, useMemo, Fragment } from "react";
+import { useSetToggle } from "@/lib/hooks";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -321,7 +322,7 @@ function CallingDialog({
 }
 
 export function CallingsTab() {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [expandedIds, toggleExpand] = useSetToggle<number>();
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCalling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiCalling | null>(null);
@@ -379,15 +380,6 @@ export function CallingsTab() {
       toast.error("Failed to delete calling.");
     },
   });
-
-  const toggleExpand = (id: number) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   if (callingsLoading || usersLoading) {
     return (
