@@ -285,7 +285,7 @@ export function SpeakingTab() {
                           }
                           title={`Clear all ${m} assignments`}
                         >
-                          <X className="size-3" />
+                          <X className="size-4" />
                         </Button>
                       </div>
                     </TableHead>
@@ -381,7 +381,7 @@ export function SpeakingTab() {
                           }
                           title="Clear all assignments for this high councilor"
                         >
-                          <X className="size-3" />
+                          <X className="size-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
