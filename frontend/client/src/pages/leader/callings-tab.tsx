@@ -154,9 +154,13 @@ function SlotRow({
     onSuccess: invalidateCallingData,
     onError: (err: Error) => {
       console.error("[callings-tab] assign slot:", err);
-      toast.error(
-        err.message.startsWith("400") ? "Slot is already filled." : "Failed to assign.",
-      );
+      if (err.message.startsWith("409")) {
+        toast.error("User already has a calling.", { description: "A person can only hold one calling at a time." });
+      } else if (err.message.startsWith("400")) {
+        toast.error("Slot is already filled.");
+      } else {
+        toast.error("Failed to assign.");
+      }
     },
   });
 
@@ -337,6 +341,16 @@ export function CallingsTab() {
 
   const activeUsers = useMemo(() => users.filter((u) => u.active), [users]);
 
+  const assignedUserIds = useMemo(
+    () => new Set(users.filter((u) => u.callings && u.callings.length > 0).map((u) => u.id)),
+    [users],
+  );
+
+  const unassignedActiveUsers = useMemo(
+    () => activeUsers.filter((u) => !assignedUserIds.has(u.id)),
+    [activeUsers, assignedUserIds],
+  );
+
   const occupantMap = useMemo(() => {
     const map = new Map<string, ApiUser>();
     for (const u of users) {
@@ -491,7 +505,7 @@ export function CallingsTab() {
                         callingId={calling.id}
                         slot={slot}
                         occupant={occupantMap.get(`${calling.id}:${slot}`)}
-                        activeUsers={activeUsers}
+                        activeUsers={unassignedActiveUsers}
                       />
                     ))}
                 </Fragment>

@@ -332,7 +332,9 @@ export function UserAdminContent() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("403")) {
+      if (msg.startsWith("409")) {
+        toast.error("User already has a calling", { description: "A person can only hold one calling at a time." });
+      } else if (msg.startsWith("403")) {
         toast.error("Permission denied", { description: "MANAGE_CALLINGS permission required." });
       } else if (msg.startsWith("400")) {
         toast.error("Slot unavailable", { description: "That slot was just taken. Please select another." });

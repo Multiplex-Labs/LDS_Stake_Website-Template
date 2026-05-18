@@ -2,9 +2,9 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, delete, select
-from ..utils import CallingUser, get_or_make_user_calling
+from ..utils import CallingUser, get_or_make_user_calling, HC_CALLING_NAME
 from ..db import get_session
-from ..models import Calling, Permission, BaseModel, UserCalling, Permissions, User, ResponseSafeUser
+from ..models import Calling, Permission, BaseModel, UserCalling, Permissions, User, ResponseSafeUser, Assignment
 
 logger = getLogger("application")
 
@@ -178,7 +178,13 @@ def assign_calling_slot(
         raise HTTPException(status_code=404, detail="Calling not found")
     if slot_id < 1 or slot_id > calling.max_slots:
         raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
-    # Check if slot is already filled    
+    # Enforce one calling per user
+    user_calling_conflict = session.exec(
+        select(UserCalling).where(UserCalling.user_id == data.user_id)
+    ).first()
+    if user_calling_conflict:
+        raise HTTPException(status_code=409, detail="This user is already assigned to a calling.")
+    # Check if slot is already filled
     existing_assignment = session.exec(
         select(UserCalling).where(UserCalling.calling_id == calling_id, UserCalling.slot_number == slot_id)
         ).first()
@@ -194,6 +200,15 @@ def assign_calling_slot(
     else:
         existing_assignment.user_id = data.user_id
     session.add(existing_assignment)
+    # For HC slots, ensure an Assignment row exists so the assignments page picks it up.
+    # Flush first to materialise existing_assignment.id before the Assignment FK references it.
+    if calling.name == HC_CALLING_NAME:
+        session.flush()
+        has_assignment = session.exec(
+            select(Assignment).where(Assignment.high_councilor_id == existing_assignment.id)
+        ).first()
+        if has_assignment is None:
+            session.add(Assignment(high_councilor_id=existing_assignment.id))
     session.commit()
     session.refresh(existing_assignment)
     return existing_assignment

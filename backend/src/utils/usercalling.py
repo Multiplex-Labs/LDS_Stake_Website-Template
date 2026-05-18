@@ -3,6 +3,8 @@ from sqlmodel import Session, select
 from fastapi import HTTPException
 from typing import Optional
 
+HC_CALLING_NAME = "High Councilor"
+
 def get_or_make_user_calling(
     calling_id: int,
     slot_id: int,
@@ -52,7 +54,7 @@ def get_or_make_hc_assignment(
     if assignment is None:
         # We need to see if the slot exists at all to determine if this is a 404 or just an empty slot
         calling = session.exec(
-            select(Calling).where(Calling.name == "High Councilor")
+            select(Calling).where(Calling.name == HC_CALLING_NAME)
         ).first()
 
         if calling is None:

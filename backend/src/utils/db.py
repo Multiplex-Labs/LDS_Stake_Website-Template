@@ -11,6 +11,7 @@ from ..models import (
     Calling
 )
 from .security import hash_password
+from .usercalling import HC_CALLING_NAME
 from logging import getLogger
 
 import asyncio
@@ -185,9 +186,8 @@ def create_system_callings_and_assignments():
     """Creates system callings and assignments if they don't exist."""
     orm = ORM()
     with Session(orm.engine) as session:
-        # Check if the "High Councilor" calling exists
         _create_calling_if_not_exists(
-            session, "High Councilor", max_slots=15, is_public=True,
+            session, HC_CALLING_NAME, max_slots=15, is_public=True,
             permissions=[
                 Permission.SUBMIT_CALLING_PROPOSALS, Permission.VIEW_CALLING_PROPOSALS
             ]

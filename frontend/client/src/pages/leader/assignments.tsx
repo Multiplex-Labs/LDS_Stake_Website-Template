@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Layout } from "@/components/layout/Layout";
-import type { HcAssignment, ApiUser } from "@/types";
+import { HC_CALLING_NAME } from "@/lib/constants";
+import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 export default function HighCouncilAssignments() {
   const { data: assignments = [], isLoading: assignmentsLoading, isError: assignmentsError } = useQuery<HcAssignment[]>({
@@ -19,29 +20,40 @@ export default function HighCouncilAssignments() {
   const { data: users = [], isLoading: usersLoading, isError: usersError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+  const { data: callings = [], isLoading: callingsLoading, isError: callingsError } = useQuery<ApiCalling[]>({
+    queryKey: ["/api/callings/"],
+  });
 
-  const isLoading = assignmentsLoading || usersLoading;
-  const isError = assignmentsError || usersError;
+  const isLoading = assignmentsLoading || usersLoading || callingsLoading;
+  const isError = assignmentsError || usersError || callingsError;
 
-  // Build UserCalling.id → user + slot_number map
-  const userCallingMap = useMemo(() => {
-    const map = new Map<number, { user: ApiUser; slot: number }>();
+  const hcCallingId = useMemo(
+    () => callings.find((c) => c.name === HC_CALLING_NAME)?.id,
+    [callings],
+  );
+
+  // All users with the HC calling, sorted by slot number
+  const hcMembers = useMemo(() => {
+    if (hcCallingId == null) return [];
+    const members: Array<{ user: ApiUser; ucId: number; slot: number }> = [];
     for (const user of users) {
       for (const uc of user.callings ?? []) {
-        map.set(uc.id, { user, slot: uc.slot_number });
+        if (uc.calling_id === hcCallingId) {
+          members.push({ user, ucId: uc.id, slot: uc.slot_number });
+        }
       }
     }
-    return map;
-  }, [users]);
+    return members.sort((a, b) => a.slot - b.slot);
+  }, [users, hcCallingId]);
 
-  // Sort by slot number
-  const sortedAssignments = useMemo(() => {
-    return [...assignments].sort((a, b) => {
-      const slotA = a.high_councilor_id != null ? (userCallingMap.get(a.high_councilor_id)?.slot ?? 99) : 99;
-      const slotB = b.high_councilor_id != null ? (userCallingMap.get(b.high_councilor_id)?.slot ?? 99) : 99;
-      return slotA - slotB;
-    });
-  }, [assignments, userCallingMap]);
+  // Assignment details keyed by UserCalling.id
+  const assignmentByUcId = useMemo(() => {
+    const map = new Map<number, HcAssignment>();
+    for (const a of assignments) {
+      if (a.high_councilor_id != null) map.set(a.high_councilor_id, a);
+    }
+    return map;
+  }, [assignments]);
 
   if (isError) {
     return (
@@ -81,24 +93,26 @@ export default function HighCouncilAssignments() {
                         <TableCell><div className="skeleton h-4 w-32 rounded" /></TableCell>
                       </TableRow>
                     ))
-                  ) : sortedAssignments.map((item) => {
-                    const entry = item.high_councilor_id != null ? userCallingMap.get(item.high_councilor_id) : null;
-                    const name = entry ? `${entry.user.fname} ${entry.user.lname}` : "—";
-                    const phone = entry?.user.phone ?? "—";
-                    const slot = entry?.slot;
+                  ) : hcMembers.map(({ user, ucId, slot }) => {
+                    const assignment = assignmentByUcId.get(ucId);
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow key={ucId}>
                         <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span>{slot ? `HC ${slot} — ` : ""}{name}</span>
-                          </div>
+                          HC {slot} — {user.fname} {user.lname}
                         </TableCell>
-                        <TableCell>{phone}</TableCell>
-                        <TableCell>{item.responsibility ?? "—"}</TableCell>
-                        <TableCell>{item.committee ?? "—"}</TableCell>
+                        <TableCell>{user.phone ?? "—"}</TableCell>
+                        <TableCell>{assignment?.responsibility ?? "—"}</TableCell>
+                        <TableCell>{assignment?.committee ?? "—"}</TableCell>
                       </TableRow>
                     );
                   })}
+                  {!isLoading && hcMembers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-12 text-center text-muted-foreground text-sm">
+                        No High Councilors assigned.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>

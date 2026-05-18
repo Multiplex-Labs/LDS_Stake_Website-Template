@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlmodel import select
 
 from .db import ORM, Session
-from .usercalling import get_or_make_user_calling
+from .usercalling import get_or_make_user_calling, HC_CALLING_NAME
 from ..db import get_session
 from ..models import (
     Calling, SpeakerSchedule, SpeakingCalendar, SpeakingAssignmentAPI,
@@ -53,7 +53,7 @@ def load_speaking_schedule() -> list[list[str]]:
     orm = ORM()
     with Session(orm.engine) as session:
         # Get High Councilor callings
-        statement = select(Calling).where(Calling.name == "High Councilor")
+        statement = select(Calling).where(Calling.name == HC_CALLING_NAME)
         high_councilor_calling = session.exec(statement).first()
         if high_councilor_calling is None:
             logger.warning(
@@ -93,7 +93,7 @@ def get_speaking_calendar(request:Request, session: Session, year: int=-1) -> Sp
     # Iterate through schedule and populate SpeakingCalendar object
     calendar = SpeakingCalendar(year=year, speakers=[])
     ## Get High Councilor callings
-    statement = select(Calling).where(Calling.name == "High Councilor")
+    statement = select(Calling).where(Calling.name == HC_CALLING_NAME)
     high_councilor_calling = session.exec(statement).first()
     if high_councilor_calling is None:
         raise HTTPException(
