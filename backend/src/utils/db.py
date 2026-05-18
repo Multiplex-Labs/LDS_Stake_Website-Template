@@ -127,6 +127,31 @@ def create_default_admin_user():
                         " and password from INITIAL_ADMIN_PASSWORD environment variable."
                         " Please change the password upon first login.")
 
+def create_discord_bot_user():
+    """Creates a default discord bot user if it doesn't exist."""
+    orm = ORM()
+    with Session(orm.engine) as db:
+        statement = select(
+            func.count()
+            ).select_from(User).where(
+                User.email == "discord-bot@localhost")
+        user_count = db.exec(statement).one()
+        if user_count == 0:
+            # Create a default discord bot user
+            logger.warning(
+                "Discord bot user not found. Creating default discord bot user.")
+            discord_bot = User(
+                email="discord-bot@localhost",
+                fname="Discord",
+                lname="Bot",
+                # TODO: Get the password from an environment variable
+                password_hash=hash_password("discord-bot-password"),  # Replace with actual password
+                force_password_reset=False,
+                active=True,
+            )
+            db.add(discord_bot)
+            db.commit()
+            db.refresh(discord_bot)
 
 def _create_calling_if_not_exists(
         session: Session,
