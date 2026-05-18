@@ -3,6 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserAdminContent } from "./users";
+import { CallingsTab } from "./callings-tab";
 
 const TABS = [
   { value: "users", label: "Users" },
@@ -54,7 +55,11 @@ export default function AdminHub() {
             <UserAdminContent />
           </TabsContent>
 
-          {TABS.filter((t) => t.value !== "users").map((tab) => (
+          <TabsContent value="callings">
+            <CallingsTab />
+          </TabsContent>
+
+          {TABS.filter((t) => t.value !== "users" && t.value !== "callings").map((tab) => (
             <TabsContent key={tab.value} value={tab.value}>
               <TabPlaceholder name={tab.label} />
             </TabsContent>
