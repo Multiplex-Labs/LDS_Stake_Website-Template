@@ -1,4 +1,5 @@
 import { useState, Fragment } from "react";
+import { X } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ import { cn, extractWardNumber } from "@/lib/utils";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
 
 interface TopicEdit {
@@ -117,6 +118,56 @@ export function SpeakingTab() {
     onError: (err: Error) => {
       console.error("[speaking-tab] schedule:", err);
       toast.error("Failed to update schedule.");
+    },
+  });
+
+  const clearMonthMutation = useMutation({
+    mutationFn: ({ monthIdx }: { monthIdx: number }) =>
+      Promise.all(
+        (calendar?.speakers ?? [])
+          .filter((sp) => sp.assignments[monthIdx]?.ward_id != null)
+          .map((sp) =>
+            apiRequest("PUT", "/api/speaking/calendar/override", {
+              high_councilor_id: sp.high_councilor_id,
+              ward_id: null,
+              month: monthIdx + 1,
+              year,
+            })
+          )
+      ),
+    onSuccess: () => {
+      invalidateSpeakingData(year);
+      toast.success("Month cleared.");
+    },
+    onError: (err: Error) => {
+      console.error("[speaking-tab] clear month:", err);
+      toast.error("Failed to clear month.");
+    },
+  });
+
+  const clearHCMutation = useMutation({
+    mutationFn: ({ ucId }: { ucId: number }) => {
+      const sp = calendar?.speakers.find((s) => s.high_councilor_id === ucId);
+      return Promise.all(
+        MONTH_INDICES
+          .filter((mIdx) => sp?.assignments[mIdx]?.ward_id != null)
+          .map((mIdx) =>
+            apiRequest("PUT", "/api/speaking/calendar/override", {
+              high_councilor_id: ucId,
+              ward_id: null,
+              month: mIdx + 1,
+              year,
+            })
+          )
+      );
+    },
+    onSuccess: () => {
+      invalidateSpeakingData(year);
+      toast.success("Schedule cleared.");
+    },
+    onError: (err: Error) => {
+      console.error("[speaking-tab] clear HC:", err);
+      toast.error("Failed to clear schedule.");
     },
   });
 
@@ -228,9 +279,20 @@ export function SpeakingTab() {
                   </TableHead>
                   {MONTHS.map((m, i) => (
                     <TableHead key={i} className="text-center min-w-14 px-1">
-                      {m.slice(0, 3)}
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span>{m.slice(0, 3)}</span>
+                        <button
+                          className="text-muted-foreground/30 hover:text-destructive transition-colors"
+                          onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
+                          disabled={clearMonthMutation.isPending}
+                          title={`Clear all ${m} assignments`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
                     </TableHead>
                   ))}
+                  <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -309,6 +371,19 @@ export function SpeakingTab() {
                           </TableCell>
                         );
                       })}
+                      <TableCell className="p-1">
+                        <button
+                          className="text-muted-foreground/30 hover:text-destructive transition-colors"
+                          onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
+                          disabled={
+                            clearHCMutation.isPending &&
+                            clearHCMutation.variables?.ucId === sp.high_councilor_id
+                          }
+                          title="Clear all assignments for this high councilor"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
