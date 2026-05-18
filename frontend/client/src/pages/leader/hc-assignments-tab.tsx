@@ -57,7 +57,7 @@ export function HCAssignmentsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const [hcOptions, hcBySlot] = useMemo(() => {
+  const [hcOptions, hcBySlot, ucIdToSlot] = useMemo(() => {
     const options: HcOption[] = [];
     for (const u of users) {
       for (const uc of u.callings ?? []) {
@@ -68,17 +68,24 @@ export function HCAssignmentsTab() {
     }
     options.sort((a, b) => a.slotNum - b.slotNum);
     const bySlot = new Map<number, HcOption>();
-    for (const opt of options) bySlot.set(opt.slotNum, opt);
-    return [options, bySlot] as const;
+    const ucToSlot = new Map<number, number>();
+    for (const opt of options) {
+      bySlot.set(opt.slotNum, opt);
+      ucToSlot.set(opt.ucId, opt.slotNum);
+    }
+    return [options, bySlot, ucToSlot] as const;
   }, [users]);
 
-  const assignmentByUcId = useMemo(() => {
+  const assignmentBySlot = useMemo(() => {
     const map = new Map<number, HcAssignment>();
     for (const a of assignments) {
-      if (a.high_councilor_id != null) map.set(a.high_councilor_id, a);
+      if (a.high_councilor_id != null) {
+        const slotNum = ucIdToSlot.get(a.high_councilor_id);
+        if (slotNum != null) map.set(slotNum, a);
+      }
     }
     return map;
-  }, [assignments]);
+  }, [assignments, ucIdToSlot]);
 
   const saveMutation = useMutation({
     mutationFn: ({
@@ -110,7 +117,7 @@ export function HCAssignmentsTab() {
 
   function openEdit(slotNum: number) {
     const hcEntry = hcBySlot.get(slotNum);
-    const assignment = hcEntry ? assignmentByUcId.get(hcEntry.ucId) : null;
+    const assignment = assignmentBySlot.get(slotNum);
     setEditing({
       slotNum,
       ucId: hcEntry ? String(hcEntry.ucId) : SELECT_NONE,
@@ -143,7 +150,7 @@ export function HCAssignmentsTab() {
           <TableBody>
             {HC_SLOTS.map((slotNum) => {
               const hcEntry = hcBySlot.get(slotNum);
-              const assignment = hcEntry ? assignmentByUcId.get(hcEntry.ucId) : null;
+              const assignment = assignmentBySlot.get(slotNum);
               return (
                 <TableRow key={slotNum}>
                   <TableCell className="text-muted-foreground text-sm">{slotNum}</TableCell>
@@ -188,7 +195,6 @@ export function HCAssignmentsTab() {
                     <SelectValue placeholder="Select member…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={SELECT_NONE}>— Unassigned</SelectItem>
                     {hcOptions.map((opt) => (
                       <SelectItem key={opt.ucId} value={String(opt.ucId)}>
                         {opt.name}
@@ -229,12 +235,12 @@ export function HCAssignmentsTab() {
               Cancel
             </Button>
             <Button
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || editing?.ucId === SELECT_NONE}
               onClick={() => {
-                if (!editing) return;
+                if (!editing || editing.ucId === SELECT_NONE) return;
                 saveMutation.mutate({
                   slotNum: editing.slotNum,
-                  ucId: editing.ucId === SELECT_NONE ? null : Number(editing.ucId),
+                  ucId: Number(editing.ucId),
                   responsibility: editing.responsibility,
                   committee: editing.committee,
                 });
