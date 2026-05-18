@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { findByCallingName } from "@/lib/hooks";
+import { HC_CALLING_NAME } from "@/lib/constants";
 import type { ApiUser, ApiUserCalling } from "@/types";
 
 function findAllByCallingName(users: ApiUser[], name: string): { user: ApiUser; uc: ApiUserCalling }[] {
@@ -31,7 +32,7 @@ export default function StakeLeadership() {
     stake2c:   findByCallingName(users, "2nd Counselor"),
     execSec:   findByCallingName(users, "Stake Executive Secretary"),
     clerk:     findByCallingName(users, "Stake Clerk"),
-    highCouncil: findAllByCallingName(users, "High Councilor"),
+    highCouncil: findAllByCallingName(users, HC_CALLING_NAME),
     rsPres:    findByCallingName(users, "Stake Relief Society President"),
     rs1c:      findByCallingName(users, "Stake Relief Society 1st Counselor"),
     rs2c:      findByCallingName(users, "Stake Relief Society 2nd Counselor"),

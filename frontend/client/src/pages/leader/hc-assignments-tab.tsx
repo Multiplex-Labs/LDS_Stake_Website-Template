@@ -28,11 +28,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { SELECT_NONE } from "@/lib/constants";
+import { SELECT_NONE, HC_CALLING_NAME } from "@/lib/constants";
 import { fullName } from "@/lib/utils";
-import type { HcAssignment, ApiUser } from "@/types";
-
-const HC_SLOTS = Array.from({ length: 14 }, (_, i) => i + 1);
+import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 interface HcOption {
   ucId: number;
@@ -56,12 +54,20 @@ export function HCAssignmentsTab() {
   const { data: users = [], isLoading: usersLoading } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+  const { data: callings = [], isLoading: callingsLoading } = useQuery<ApiCalling[]>({
+    queryKey: ["/api/callings/"],
+  });
+
+  const hcSlots = useMemo(() => {
+    const hcCalling = callings.find((c) => c.name === HC_CALLING_NAME);
+    return Array.from({ length: hcCalling?.max_slots ?? 0 }, (_, i) => i + 1);
+  }, [callings]);
 
   const [hcOptions, hcBySlot] = useMemo(() => {
     const options: HcOption[] = [];
     for (const u of users) {
       for (const uc of u.callings ?? []) {
-        if (uc.calling?.name === "High Councilor") {
+        if (uc.calling?.name === HC_CALLING_NAME) {
           options.push({ ucId: uc.id, name: fullName(u), slotNum: uc.slot_number });
         }
       }
@@ -123,7 +129,7 @@ export function HCAssignmentsTab() {
     });
   }
 
-  if (assignmentsLoading || usersLoading) {
+  if (assignmentsLoading || usersLoading || callingsLoading) {
     return (
       <div className="py-16 text-center text-muted-foreground text-sm">
         Loading assignments…
@@ -145,7 +151,7 @@ export function HCAssignmentsTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {HC_SLOTS.map((slotNum) => {
+            {hcSlots.map((slotNum) => {
               const hcEntry = hcBySlot.get(slotNum);
               const assignment = assignmentBySlot.get(slotNum);
               return (
