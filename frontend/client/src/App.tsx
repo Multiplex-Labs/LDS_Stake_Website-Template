@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -29,6 +29,7 @@ import ArchiveCallings from "@/pages/leader/callings/archive";
 import SustainingPrep from "@/pages/leader/callings/sustainings-prep";
 import ReleasesAndSustainings from "@/pages/leader/sustainings";
 import UserAdmin from "@/pages/leader/users";
+import AdminHub from "@/pages/leader/admin";
 
 import Resources from "@/pages/resources";
 import Login from "@/pages/login";
@@ -69,7 +70,8 @@ function Router() {
       <Route path="/leader/callings/archive">{() => <ProtectedRoute><ArchiveCallings /></ProtectedRoute>}</Route>
       <Route path="/leader/callings/sustainings-prep">{() => <ProtectedRoute><SustainingPrep /></ProtectedRoute>}</Route>
       <Route path="/leader/sustainings">{() => <ProtectedRoute><ReleasesAndSustainings /></ProtectedRoute>}</Route>
-      <Route path="/leader/user-admin">{() => <ProtectedRoute><UserAdmin /></ProtectedRoute>}</Route>
+      <Route path="/leader/admin">{() => <ProtectedRoute><AdminHub /></ProtectedRoute>}</Route>
+      <Route path="/leader/user-admin">{() => <Redirect to="/leader/admin?tab=users" />}</Route>
 
       <Route component={NotFound} />
     </Switch>

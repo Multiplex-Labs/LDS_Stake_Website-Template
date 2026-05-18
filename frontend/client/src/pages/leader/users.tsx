@@ -103,7 +103,7 @@ const STEP_TITLES: Record<WizardStep, string> = {
   6: "Review",
 };
 
-export default function UserAdmin() {
+export function UserAdminContent() {
   // --- Queries ---
   const { data: users = [], isLoading, isError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
@@ -494,21 +494,14 @@ export default function UserAdmin() {
 
   if (isError) {
     return (
-      <Layout>
-        <div className="text-center py-16">
-          <p className="text-destructive">Failed to load users. Please refresh.</p>
-        </div>
-      </Layout>
+      <div className="text-center py-16">
+        <p className="text-destructive">Failed to load users. Please refresh.</p>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="container mx-auto px-6 py-8 max-w-[1400px]">
-        <div className="mb-8">
-          <h1 className="text-xl font-bold text-foreground">User Administration</h1>
-        </div>
-
+    <div className="container mx-auto px-6 py-8 max-w-[1400px]">
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-2xl">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1244,6 +1237,13 @@ export default function UserAdmin() {
           </DialogContent>
         </Dialog>
       </div>
+  );
+}
+
+export default function UserAdmin() {
+  return (
+    <Layout>
+      <UserAdminContent />
     </Layout>
   );
 }

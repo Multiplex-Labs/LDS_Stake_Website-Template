@@ -231,7 +231,7 @@ export function Navbar() {
                         <ListItem href="/leader/presidency" title="Presidency Assignments" />
                         <ListItem href="/leader/calling-system" title="Stake Calling System" />
                         <ListItem href="/leader/sustainings" title="Releases & Sustainings" />
-                        <ListItem href="/leader/user-admin" title="User Administration" />
+                        <ListItem href="/leader/admin" title="Administration" />
                       </ul>
                     </NavigationMenuContent>
                   </NavigationMenuItem>
@@ -460,7 +460,7 @@ export function Navbar() {
                     <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
                     <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
                     <MobileLink href="/leader/sustainings" onClick={() => setMobileOpen(false)}>Releases & Sustainings</MobileLink>
-                    <MobileLink href="/leader/user-admin" onClick={() => setMobileOpen(false)}>User Administration</MobileLink>
+                    <MobileLink href="/leader/admin" onClick={() => setMobileOpen(false)}>Administration</MobileLink>
                   </>
                 )}
 
