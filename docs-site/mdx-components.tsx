@@ -4,7 +4,7 @@ import { APIPage } from 'fumadocs-openapi/ui';
 import { Steps, Step } from 'fumadocs-ui/components/steps';
 import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
 
-export function useMDXComponents(components: MDXComponents): MDXComponents {
+export function getMDXComponents(components: MDXComponents): MDXComponents {
   return {
     ...defaultMdxComponents,
     APIPage,
