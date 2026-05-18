@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MONTHS } from "@/lib/constants";
+import { MONTHS, SELECT_NONE } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import { cn, extractWardNumber } from "@/lib/utils";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
@@ -321,12 +321,12 @@ export function SpeakingTab() {
                             {isActive ? (
                               <Select
                                 defaultOpen
-                                value={wardId != null ? String(wardId) : "__none__"}
+                                value={wardId != null ? String(wardId) : SELECT_NONE}
                                 onValueChange={(v) => {
                                   setActiveCell(null);
                                   scheduleMutation.mutate({
                                     ucId: sp.high_councilor_id,
-                                    wardId: v === "__none__" ? null : Number(v),
+                                    wardId: v === SELECT_NONE ? null : Number(v),
                                     monthIdx,
                                   });
                                 }}
@@ -338,7 +338,7 @@ export function SpeakingTab() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="__none__">— None</SelectItem>
+                                  <SelectItem value={SELECT_NONE}>— None</SelectItem>
                                   {wards.map((w) => (
                                     <SelectItem key={w.id} value={String(w.id)}>
                                       {w.name}
