@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Exports the FastAPI OpenAPI spec from a running backend to docs/api-reference/openapi.json.
+# Exports the FastAPI OpenAPI spec from a running backend to docs-site/content/docs/api-reference/openapi.json.
 # Usage: ./scripts/export-openapi.sh [backend-url]
 # Default backend URL: http://localhost:8000
-# Must be run from the repository root.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_URL="${1:-http://localhost:8000}"
-OUTPUT="$REPO_ROOT/docs/api-reference/openapi.json"
+OUTPUT="$REPO_ROOT/docs-site/content/docs/api-reference/openapi.json"
 
 mkdir -p "$(dirname "$OUTPUT")"
 

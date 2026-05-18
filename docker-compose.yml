@@ -1,0 +1,35 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/database.db:/app/database.db
+      - ./backend/wards.csv:/app/wards.csv
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3100:3100"
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend
+
+  docs-site:
+    build: ./docs-site
+    ports:
+      - "3400:3400"
+    environment:
+      - NODE_ENV=production
+
+  slackbot:
+    build: ./slackbot
+    env_file:
+      - ./slackbot/.env
+    depends_on:
+      - backend
+    profiles:
+      - slackbot
