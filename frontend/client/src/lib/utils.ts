@@ -5,6 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function extractWardNumber(name: string): string {
+  const match = name.match(/(\d+)(th|st|nd|rd)\s+Ward/i);
+  return match ? match[1] : name;
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")
