@@ -51,7 +51,7 @@ export default function AdminHub() {
           </TabsList>
 
           <TabsContent value="users">
-            {activeTab === "users" && <UserAdminContent />}
+            <UserAdminContent />
           </TabsContent>
 
           {TABS.filter((t) => t.value !== "users").map((tab) => (

@@ -501,7 +501,7 @@ export function UserAdminContent() {
   }
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-[1400px]">
+    <>
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-2xl">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1236,14 +1236,16 @@ export function UserAdminContent() {
             )}
           </DialogContent>
         </Dialog>
-      </div>
+    </>
   );
 }
 
 export default function UserAdmin() {
   return (
     <Layout>
-      <UserAdminContent />
+      <div className="container mx-auto px-6 py-8 max-w-[1400px]">
+        <UserAdminContent />
+      </div>
     </Layout>
   );
 }
