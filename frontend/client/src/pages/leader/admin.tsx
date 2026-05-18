@@ -4,6 +4,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserAdminContent } from "./users";
 import { CallingsTab } from "./callings-tab";
+import { SpeakingTab } from "./speaking-tab";
 
 const TABS = [
   { value: "users", label: "Users" },
@@ -59,7 +60,11 @@ export default function AdminHub() {
             <CallingsTab />
           </TabsContent>
 
-          {TABS.filter((t) => t.value !== "users" && t.value !== "callings").map((tab) => (
+          <TabsContent value="speaking">
+            <SpeakingTab />
+          </TabsContent>
+
+          {TABS.filter((t) => t.value !== "users" && t.value !== "callings" && t.value !== "speaking").map((tab) => (
             <TabsContent key={tab.value} value={tab.value}>
               <TabPlaceholder name={tab.label} />
             </TabsContent>

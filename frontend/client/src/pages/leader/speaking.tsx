@@ -6,17 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar, BookOpen } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, extractWardNumber } from "@/lib/utils";
 import { MONTHS } from "@/lib/constants";
-import { useUserCallingMap, useWardMap } from "@/lib/hooks";
+import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-function extractWardNumber(name: string): string {
-  const match = name.match(/(\d+)(th|st|nd|rd)\s+Ward/i);
-  return match ? match[1] : name;
-}
 
 export default function SpeakingSchedule() {
   const [currentMonthIndex, setCurrentMonthIndex] = useState(new Date().getMonth());
@@ -40,14 +36,7 @@ export default function SpeakingSchedule() {
   const userCallingMap = useUserCallingMap(users);
   const wardMap = useWardMap(wards);
 
-  const topicForMonth = useMemo(() => {
-    const map = new Map<number, SpeakingTopic>();
-    for (const topic of topics) {
-      const monthIdx = new Date(topic.month).getMonth();
-      map.set(monthIdx, topic);
-    }
-    return map;
-  }, [topics]);
+  const topicForMonth = useTopicForMonth(topics);
 
   const currentTopic = topicForMonth.get(currentMonthIndex);
 
