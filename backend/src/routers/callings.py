@@ -178,9 +178,12 @@ def assign_calling_slot(
         raise HTTPException(status_code=404, detail="Calling not found")
     if slot_id < 1 or slot_id > calling.max_slots:
         raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
-    # Enforce one calling per user
+    # Enforce one calling per user, but allow re-slotting within the same calling
     user_calling_conflict = session.exec(
-        select(UserCalling).where(UserCalling.user_id == data.user_id)
+        select(UserCalling).where(
+            UserCalling.user_id == data.user_id,
+            UserCalling.calling_id != calling_id,
+        )
     ).first()
     if user_calling_conflict:
         raise HTTPException(status_code=409, detail="This user is already assigned to a calling.")
