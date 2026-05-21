@@ -1,29 +1,23 @@
 import os
-import logging
+import uvicorn
+import dotenv
+from src.logging_config import setup_logging
 
-from discord import Client, Intents
-from dotenv import load_dotenv
-from rich.logging import RichHandler
-from rich.traceback import install as install_rich_traceback
 
-load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
+def main():
+    dotenv.load_dotenv()
 
-# Install rich traceback for nicer exception output
-install_rich_traceback()
+    # run the ASGI app from `src.app:app`
+    debug = os.environ.get("DEV", "false").lower() == "true"
 
-# Set up Rich logging for the bot with filename and line number
-handler = RichHandler()
-formatter = logging.Formatter("%(message)s")
-handler.setFormatter(formatter)
-logging.basicConfig(level=logging.INFO, handlers=[handler])
-logger = logging.getLogger("discordbot")
+    host = "localhost" if debug else "0.0.0.0"
 
-intents = Intents.default()
-client = Client(intents=intents)
+    log_cfg = setup_logging("DEBUG" if debug else "INFO")
 
-@client.event
-async def on_ready():
-    logger.info(f"{client.user} has connected to Discord!")
+    port = int(os.environ.get("PORT", 8000))
+    # configure uvicorn programmatically
+    uvicorn.run("src.app:app", host=host, port=port, reload=debug, log_config=log_cfg)
 
-client.run(TOKEN)
+
+if __name__ == "__main__":
+    main()
