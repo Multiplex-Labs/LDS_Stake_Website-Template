@@ -64,22 +64,13 @@ def register_listeners(client:"LDSStakeBot"):
             result = db.exec(statement)
             user_mapping = result.one_or_none()
             if user_mapping:
-                await ctx.response.send_message(f"Your current email mapping is: `{user_mapping.user_email}`")
+                await ctx.response.send_message(f"Your current email mapping is: `{user_mapping.user_email}`", ephemeral=True)
             else:
-                await ctx.response.send_message("You do not have an email mapping. Please type `/update_email` to update your email address.")
+                await ctx.response.send_message("You do not have an email mapping. Please type `/update_email` to update your email address.", ephemeral=True)
 
     @client.tree.command(name="update_email", description="Update your email registration for stake website syncing")
-    async def update_email(ctx: Interaction):
+    async def update_email(ctx: Interaction, email: str):
         client.logger.info(f"User {ctx.user.name} (ID: {ctx.user.id}) initiated email update process.")
-        await ctx.followup.send("Please provide the new email address you would like to use for syncing with the stake website.")
-        def check(m):
-            return m.author == ctx.user and m.channel.type == "private"
-        try:               
-            email_message = await client.wait_for('message', check=check, timeout=300)  # Wait for 5 minutes
-            email = email_message.content
-        except asyncio.TimeoutError:
-            await ctx.response.send_message("You took too long to respond. Please type /update_email to start the update process again.")
-            return
         with get_session() as db:
             statement = select(UserMapping).where(UserMapping.discord_user_id == ctx.user.id)
             result = db.exec(statement)
@@ -88,9 +79,9 @@ def register_listeners(client:"LDSStakeBot"):
                 user_mapping.user_email = email
                 db.add(user_mapping)
                 db.commit()
-                await ctx.response.send_message(f"Your email mapping has been updated to: `{email}`")
+                await ctx.response.send_message(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
             else:
                 user_mapping = UserMapping(discord_user_id=ctx.user.id, user_email=email)
                 db.add(user_mapping)
                 db.commit()
-                await ctx.response.send_message(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`")
+                await ctx.response.send_message(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`", ephemeral=True)
