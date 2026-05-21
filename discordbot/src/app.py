@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
 from .bot import initialize_bot, shutdown_bot
+from .db import ORM
 
 logger = getLogger("application")
 
@@ -16,9 +17,13 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Application")
     bot = await initialize_bot()
     logger.info("Application initialized successfully")
+
+    logger.info("Instantiating ORM")
+    orm = ORM("sqlite")
     # State object
     yield {
-        "bot": bot
+        "bot": bot,
+        "orm": orm
     }
     # Cleanup
     logger.info("Shutting down Application")
