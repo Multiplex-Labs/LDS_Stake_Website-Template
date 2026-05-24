@@ -2,13 +2,15 @@ import asyncio
 import os
 import logging
 
-from discord import Client, Intents, app_commands
+from discord import Client, Forbidden, Guild, HTTPException, Intents, app_commands
 from dotenv import load_dotenv
 from rich.console import Console
 
 class LDSStakeBot(Client):
     def __init__(self):
-        super().__init__(intents=Intents.default())
+        intents = Intents.default()
+        intents.members = True  # Enable the members intent to receive member join events
+        super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self.logger = logging.getLogger("application")
         self.logger.debug("LDSStakeBot initialized with intents: %s", self.intents)
@@ -16,6 +18,32 @@ class LDSStakeBot(Client):
     async def setup_hook(self):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')
+
+
+async def ensure_welcome_channel(client: LDSStakeBot, guild: Guild) -> None:
+    channel = next((c for c in guild.text_channels if c.name == "welcome"), None)
+    if channel is not None:
+        client.logger.debug("Guild %s already has a #welcome channel.", guild.name)
+        return
+
+    if guild.me is None or not guild.me.guild_permissions.manage_channels:
+        client.logger.warning(
+            "Cannot create #welcome in guild %s because the bot lacks MANAGE_CHANNELS.",
+            guild.name,
+        )
+        return
+
+    try:
+        await guild.create_text_channel(
+            "welcome",
+            topic="Welcome channel for onboarding and stake website registration.",
+            reason="Create default welcome channel for new guild members",
+        )
+        client.logger.info("Created #welcome channel in guild %s.", guild.name)
+    except Forbidden:
+        client.logger.exception("Permission denied while creating #welcome in guild %s.", guild.name)
+    except HTTPException:
+        client.logger.exception("Failed to create #welcome channel in guild %s.", guild.name)
 
 
 from .listeners import (
@@ -36,6 +64,15 @@ async def initialize_bot() -> LDSStakeBot:
     @client.event
     async def on_ready():
         logger.info(f"{client.user} has connected to Discord!")
+        if not getattr(client, "_welcome_channels_created", False):
+            client._welcome_channels_created = True
+            for guild in client.guilds:
+                await ensure_welcome_channel(client, guild)
+
+    @client.event
+    async def on_guild_join(guild: Guild):
+        logger.info(f"Joined new guild: {guild.name} (ID: {guild.id})")
+        await ensure_welcome_channel(client, guild)
 
     @client.event
     async def on_error(event, *args, **kwargs):
