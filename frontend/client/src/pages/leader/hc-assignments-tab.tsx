@@ -26,9 +26,7 @@ import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 interface HcOption {
-  ucId: number;
   name: string;
-  slotNum: number;
 }
 
 interface EditState {
@@ -51,37 +49,34 @@ export function HCAssignmentsTab() {
     queryKey: ["/api/callings/"],
   });
 
-  const hcSlots = useMemo(() => {
-    const hcCalling = callings.find((c) => c.name === HC_CALLING_NAME);
-    return Array.from({ length: hcCalling?.max_slots ?? 0 }, (_, i) => i + 1);
-  }, [callings]);
+  const hcCalling = useMemo(
+    () => callings.find((c) => c.name === HC_CALLING_NAME),
+    [callings],
+  );
 
-  const [hcOptions, hcBySlot] = useMemo(() => {
-    const options: HcOption[] = [];
+  const hcSlots = useMemo(
+    () => Array.from({ length: hcCalling?.max_slots ?? 0 }, (_, i) => i + 1),
+    [hcCalling],
+  );
+
+  const hcBySlot = useMemo(() => {
+    const bySlot = new Map<number, HcOption>();
+    if (hcCalling == null) return bySlot;
     for (const u of users) {
       for (const uc of u.callings ?? []) {
-        if (uc.calling?.name === HC_CALLING_NAME) {
-          options.push({ ucId: uc.id, name: fullName(u), slotNum: uc.slot_number });
+        if (uc.calling_id === hcCalling.id) {
+          bySlot.set(uc.slot_number, { name: fullName(u) });
         }
       }
     }
-    options.sort((a, b) => a.slotNum - b.slotNum);
-    const bySlot = new Map<number, HcOption>();
-    for (const opt of options) bySlot.set(opt.slotNum, opt);
-    return [options, bySlot] as const;
-  }, [users]);
+    return bySlot;
+  }, [users, hcCalling]);
 
   const assignmentBySlot = useMemo(() => {
-    const ucToSlot = new Map(hcOptions.map((o) => [o.ucId, o.slotNum]));
     const map = new Map<number, HcAssignment>();
-    for (const a of assignments) {
-      if (a.high_councilor_id != null) {
-        const slotNum = ucToSlot.get(a.high_councilor_id);
-        if (slotNum != null) map.set(slotNum, a);
-      }
-    }
+    for (const a of assignments) map.set(a.slot_number, a);
     return map;
-  }, [hcOptions, assignments]);
+  }, [assignments]);
 
   const saveMutation = useMutation({
     mutationFn: ({
@@ -174,7 +169,7 @@ export function HCAssignmentsTab() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Slot {editing?.slotNum}</DialogTitle>
+            <DialogTitle>Edit Assignment</DialogTitle>
           </DialogHeader>
           {editing && (
             <div className="space-y-4">

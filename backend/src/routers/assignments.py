@@ -8,7 +8,7 @@ from ..utils import (
     get_or_make_hc_assignment
 )
 from ..db import get_session
-from ..models import Assignment, Permission, BaseModel
+from ..models import Assignment, Permission, BaseModel, UserCalling
 
 
 class AssignmentUpdate(BaseModel):
@@ -16,20 +16,38 @@ class AssignmentUpdate(BaseModel):
     committee: str | None = None
 
 
+class AssignmentResponse(BaseModel):
+    id: int
+    slot_number: int
+    high_councilor_id: int | None
+    responsibility: str | None
+    committee: str | None
+
+
 logger = getLogger("application")
 
 router = APIRouter(prefix="/assignments", tags=["assignments","high-council"])
 
 
-@router.get("/")
+@router.get("/", response_model=list[AssignmentResponse])
 def get_assignments(
     _ = Depends(CallingUser()),
     session: Session = Depends(get_session)
 ):
-    """Return all assignments."""
-    statement = select(Assignment)
-    assignments = session.exec(statement).all()
-    return assignments
+    rows = session.exec(
+        select(Assignment, UserCalling.slot_number)
+        .join(UserCalling, Assignment.high_councilor_id == UserCalling.id)
+    ).all()
+    return [
+        AssignmentResponse(
+            id=a.id,
+            slot_number=slot_number,
+            high_councilor_id=a.high_councilor_id,
+            responsibility=a.responsibility,
+            committee=a.committee,
+        )
+        for a, slot_number in rows
+    ]
 
 
 @router.get("/slot/{slot_id}")
