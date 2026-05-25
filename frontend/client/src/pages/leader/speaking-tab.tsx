@@ -43,6 +43,7 @@ interface ActiveCell {
 function invalidateSpeakingData(year: number) {
   queryClient.invalidateQueries({ queryKey: ["/api/speaking/topics/", year] });
   queryClient.invalidateQueries({ queryKey: ["/api/speaking/calendar/", year] });
+  queryClient.invalidateQueries({ queryKey: ["/api/speaking/calendar"] });
 }
 
 function overrideAssignment(ucId: number, wardId: number | null, monthIdx: number, year: number) {

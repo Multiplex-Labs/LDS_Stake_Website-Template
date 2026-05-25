@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar, BookOpen } from "lucide-react";
-import { cn, extractWardNumber } from "@/lib/utils";
+import { cn, extractWardNumber, fullName } from "@/lib/utils";
 import { MONTHS } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
@@ -42,15 +42,16 @@ export default function SpeakingSchedule() {
 
   const speakerRows = useMemo(() => {
     if (!calendar) return [];
-    return calendar.speakers.map((sp, idx) => {
-      const user = userCallingMap.get(sp.high_councilor_id);
-      const name = user ? `${user.fname} ${user.lname}` : `HC ${idx + 1}`;
-      return {
-        ucId: sp.high_councilor_id,
-        name,
-        assignments: sp.assignments, // 12 entries
-      };
-    });
+    return calendar.speakers
+      .filter((sp) => userCallingMap.has(sp.high_councilor_id))
+      .map((sp) => {
+        const user = userCallingMap.get(sp.high_councilor_id)!;
+        return {
+          ucId: sp.high_councilor_id,
+          name: fullName(user),
+          assignments: sp.assignments,
+        };
+      });
   }, [calendar, userCallingMap]);
 
   // Month view: speakers assigned this month
