@@ -12,8 +12,9 @@ import traceback
 import discord
 from sqlmodel import select
 
-from discord import Member, Interaction, ButtonStyle
+from discord import Member, Interaction, ButtonStyle, app_commands
 from discord.ui import Modal, TextInput, View, button, Button
+from discord.ext.commands import Cog, Context, hybrid_command
 
 from ..bot import LDSStakeBot
 
@@ -55,21 +56,25 @@ class WizardView(View):
         logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) started the onboarding wizard.")
         await interaction.response.send_modal(WizardModal())
 
-def register_listeners(client:"LDSStakeBot"):
-    client.logger.info("Registering user-mapping listeners")
-    @client.event
-    async def on_member_join(member: Member):
-        client.logger.info(f"New member joined: {member.name} (ID: {member.id})")
+class UserMappingCog(Cog):
+    def __init__(self, bot: LDSStakeBot):
+        self.bot = bot
+        self.bot.logger.info("Registering user-mapping listeners")
+        self.logger = self.bot.logger.getChild("UserMappingCog")
+
+    @Cog.listener()
+    async def on_member_join(self, member: Member):
+        self.bot.logger.info(f"New member joined: {member.name} (ID: {member.id})")
         # Send message to user asking for email address
         await member.send("Welcome to the server! Please provide the email address associated with your stake website account to complete your registration.")
         wizard_view = WizardView()
-        client.add_view(wizard_view)
+        self.bot.add_view(wizard_view)
         await member.send(view=wizard_view)
         # Get email address from user response
         def check(m):
             return m.author == member and m.channel.type == "private"
         try:               
-            email_message = await client.wait_for('message', check=check, timeout=300)  # Wait for 5 minutes
+            email_message = await self.bot.wait_for('message', check=check, timeout=300)  # Wait for 5 minutes
             email = email_message.content
         except asyncio.TimeoutError:
             await member.send("You took too long to respond. Please type /register to start the registration process again.")
@@ -86,10 +91,14 @@ def register_listeners(client:"LDSStakeBot"):
             " If you need to update your email address, you can use the `/update_email` command."
             )
 
-    @client.event
-    async def on_member_remove(member: Member):
+    # def cog_command_error(self, ctx, error):
+    #     # self.logger.exception(f"Error in {ctx.command}: {error}")
+    #     asyncio.create_task(ctx.send("An error occurred while processing your command. Please try again later."))
+
+    @Cog.listener()
+    async def on_member_remove(self, member: Member):
         # Remove mapping from database for member.id
-        client.logger.info(f"Member left: {member.name} (ID: {member.id}). Removing mapping from database.")
+        self.logger.info(f"Member left: {member.name} (ID: {member.id}). Removing mapping from database.")
         with get_session() as db:
             statement = select(UserMapping).where(UserMapping.discord_user_id == member.id)
             result = db.exec(statement)
@@ -98,32 +107,32 @@ def register_listeners(client:"LDSStakeBot"):
                 db.delete(user_mapping)
                 db.commit()
 
-    @client.tree.command(name="email", description="View your current email registration for stake website syncing")
-    async def email(ctx: Interaction):
-        client.logger.info(f"User {ctx.user.name} (ID: {ctx.user.id}) requested their email mapping.")
+    @hybrid_command(name="email", description="View your current email registration for stake website syncing")
+    async def email(self, interaction: Context):
+        self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) requested their email mapping.")
         with get_session() as db:
-            statement = select(UserMapping).where(UserMapping.discord_user_id == ctx.user.id)
+            statement = select(UserMapping).where(UserMapping.discord_user_id == interaction.author.id)
             result = db.exec(statement)
             user_mapping = result.one_or_none()
             if user_mapping:
-                await ctx.response.send_message(f"Your current email mapping is: `{user_mapping.user_email}`", ephemeral=True)
+                await interaction.send(f"Your current email mapping is: `{user_mapping.user_email}`", ephemeral=True)
             else:
-                await ctx.response.send_message("You do not have an email mapping. Please type `/update_email` to update your email address.", ephemeral=True)
+                await interaction.send("You do not have an email mapping. Please type `/update_email` to update your email address.", ephemeral=True)
 
-    @client.tree.command(name="update_email", description="Update your email registration for stake website syncing")
-    async def update_email(ctx: Interaction, email: str):
-        client.logger.info(f"User {ctx.user.name} (ID: {ctx.user.id}) initiated email update process.")
+    @hybrid_command(name="update_email", description="Update your email registration for stake website syncing")
+    async def update_email(self, interaction: Context, email: str):
+        self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) initiated email update process.")
         with get_session() as db:
-            statement = select(UserMapping).where(UserMapping.discord_user_id == ctx.user.id)
+            statement = select(UserMapping).where(UserMapping.discord_user_id == interaction.author.id)
             result = db.exec(statement)
             user_mapping = result.one_or_none()
             if user_mapping:
                 user_mapping.user_email = email
                 db.add(user_mapping)
                 db.commit()
-                await ctx.response.send_message(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
+                await interaction.send(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
             else:
-                user_mapping = UserMapping(discord_user_id=ctx.user.id, user_email=email)
+                user_mapping = UserMapping(discord_user_id=interaction.author.id, user_email=email)
                 db.add(user_mapping)
                 db.commit()
-                await ctx.response.send_message(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`", ephemeral=True)
+                await interaction.send(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`", ephemeral=True)
