@@ -19,16 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { SELECT_NONE, HC_CALLING_NAME } from "@/lib/constants";
+import { HC_CALLING_NAME } from "@/lib/constants";
 import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
@@ -40,7 +33,7 @@ interface HcOption {
 
 interface EditState {
   slotNum: number;
-  ucId: string; // SELECT_NONE or String(UserCalling.id)
+  hcName: string;
   responsibility: string;
   committee: string;
 }
@@ -93,17 +86,14 @@ export function HCAssignmentsTab() {
   const saveMutation = useMutation({
     mutationFn: ({
       slotNum,
-      ucId,
       responsibility,
       committee,
     }: {
       slotNum: number;
-      ucId: number;
       responsibility: string;
       committee: string;
     }) =>
       apiRequest("PUT", `/api/assignments/slot/${slotNum}`, {
-        high_councilor_id: ucId,
         responsibility: responsibility.trim() || null,
         committee: committee.trim() || null,
       }),
@@ -123,7 +113,7 @@ export function HCAssignmentsTab() {
     const assignment = assignmentBySlot.get(slotNum);
     setEditing({
       slotNum,
-      ucId: hcEntry ? String(hcEntry.ucId) : SELECT_NONE,
+      hcName: hcEntry?.name ?? "Unassigned",
       responsibility: assignment?.responsibility ?? "",
       committee: assignment?.committee ?? "",
     });
@@ -189,22 +179,8 @@ export function HCAssignmentsTab() {
           {editing && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="hc-member">HC Member</Label>
-                <Select
-                  value={editing.ucId}
-                  onValueChange={(v) => setEditing((prev) => prev && { ...prev, ucId: v })}
-                >
-                  <SelectTrigger id="hc-member">
-                    <SelectValue placeholder="Select member…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hcOptions.map((opt) => (
-                      <SelectItem key={opt.ucId} value={String(opt.ucId)}>
-                        {opt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>HC Member</Label>
+                <p className="text-sm font-medium py-2">{editing.hcName}</p>
               </div>
 
               <div className="space-y-1.5">
@@ -238,12 +214,11 @@ export function HCAssignmentsTab() {
               Cancel
             </Button>
             <Button
-              disabled={saveMutation.isPending || editing?.ucId === SELECT_NONE}
+              disabled={saveMutation.isPending}
               onClick={() => {
-                if (!editing || editing.ucId === SELECT_NONE) return;
+                if (!editing) return;
                 saveMutation.mutate({
                   slotNum: editing.slotNum,
-                  ucId: Number(editing.ucId),
                   responsibility: editing.responsibility,
                   committee: editing.committee,
                 });

@@ -8,7 +8,13 @@ from ..utils import (
     get_or_make_hc_assignment
 )
 from ..db import get_session
-from ..models import Assignment, Permission
+from ..models import Assignment, Permission, BaseModel
+from typing import Optional
+
+
+class AssignmentUpdate(BaseModel):
+    responsibility: Optional[str] = None
+    committee: Optional[str] = None
 
 
 logger = getLogger("application")
@@ -43,7 +49,7 @@ def get_assignment(
 @router.put("/slot/{slot_id}")
 def update_assignment(
     slot_id: int,
-    data: Assignment,
+    data: AssignmentUpdate,
     current_user = Depends(CallingUser(permissions=[Permission.MANAGE_ASSIGNMENTS])),
     session: Session = Depends(get_session)
 ):
@@ -51,8 +57,6 @@ def update_assignment(
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    # Update fields
-    assignment.high_councilor_id = data.high_councilor_id
     assignment.responsibility = data.responsibility
     assignment.committee = data.committee
 
