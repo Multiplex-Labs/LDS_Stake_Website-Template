@@ -4,6 +4,7 @@ import { Printer } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
 import { useWardMap } from "@/lib/hooks";
+import { fullName } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Ward, KanbanBoard } from "@/types";
 
@@ -173,8 +174,36 @@ export default function ReleasesAndSustainings() {
     const proposalMap = new Map(proposals.map((p) => [p.id, p]));
     const ordinationMap = new Map(prepState.ordinations.map((o) => [o.id, o]));
 
+    const stakeWa = prepState.wardAssignments.find((x) => x.wardId === "stake");
+    const stakeReleases: Release[] = [];
+    const stakeOrdinations: Ordination[] = [];
+    const stakeSustainings: Sustaining[] = [];
+
+    if (stakeWa) {
+      for (const item of stakeWa.items) {
+        if (item.type === "proposal") {
+          const p = proposalMap.get(item.proposalId);
+          if (!p) continue;
+          const name = fullName(p);
+          const wardName = wardMap.get(p.ward_id);
+          if (!wardName) console.warn("[sustainings] ward_id not found in ward list:", p.ward_id);
+          if (p.is_release) {
+            stakeReleases.push({ name, calling: p.proposed_calling, wardName });
+          } else {
+            stakeSustainings.push({ name, calling: p.proposed_calling, wardName });
+          }
+        } else {
+          const ord = ordinationMap.get(item.ordinationId);
+          if (!ord) continue;
+          stakeOrdinations.push({ name: fullName(ord), office: ord.office });
+        }
+      }
+    }
+
+    const stakeTab: TabData = { label: "Stake", releases: stakeReleases, ordinations: stakeOrdinations, sustainings: stakeSustainings, showWard: true };
+
     const wardTabs: TabData[] = [...wards]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => parseInt(a.name) - parseInt(b.name))
       .map((w) => {
         const wa = prepState.wardAssignments.find((x) => x.wardId === w.id);
         if (!wa) return { label: w.name, releases: [], ordinations: [], sustainings: [], showWard: false };
@@ -187,7 +216,7 @@ export default function ReleasesAndSustainings() {
           if (item.type === "proposal") {
             const p = proposalMap.get(item.proposalId);
             if (!p) continue;
-            const name = `${p.fname} ${p.lname}`;
+            const name = fullName(p);
             if (p.is_release) {
               releases.push({ name, calling: p.proposed_calling });
             } else {
@@ -196,50 +225,22 @@ export default function ReleasesAndSustainings() {
           } else {
             const ord = ordinationMap.get(item.ordinationId);
             if (!ord) continue;
-            ordinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
+            ordinations.push({ name: fullName(ord), office: ord.office });
           }
         }
 
-        return { label: w.name, releases, ordinations, sustainings, showWard: false };
+        const injectStake = hasEntries(stakeTab) && (releases.length > 0 || ordinations.length > 0 || sustainings.length > 0);
+        return {
+          label: w.name,
+          releases: injectStake ? [...releases, ...stakeReleases] : releases,
+          ordinations: injectStake ? [...ordinations, ...stakeOrdinations] : ordinations,
+          sustainings: injectStake ? [...sustainings, ...stakeSustainings] : sustainings,
+          showWard: false,
+        };
       });
 
-    const stakeWa = prepState.wardAssignments.find((x) => x.wardId === "stake");
-    const stakeReleases: Release[] = [];
-    const stakeOrdinations: Ordination[] = [];
-    const stakeSustainings: Sustaining[] = [];
-
-    if (stakeWa) {
-      for (const item of stakeWa.items) {
-        if (item.type === "proposal") {
-          const p = proposalMap.get(item.proposalId);
-          if (!p) continue;
-          const name = `${p.fname} ${p.lname}`;
-          const wardName = wardMap.get(p.ward_id);
-          if (!wardName) console.warn("[sustainings] ward_id not found in ward list:", p.ward_id);
-          if (p.is_release) {
-            stakeReleases.push({ name, calling: p.proposed_calling, wardName });
-          } else {
-            stakeSustainings.push({ name, calling: p.proposed_calling, wardName });
-          }
-        } else {
-          const ord = ordinationMap.get(item.ordinationId);
-          if (!ord) continue;
-          stakeOrdinations.push({ name: `${ord.fname} ${ord.lname}`, office: ord.office });
-        }
-      }
-    }
-
-    return [
-      ...wardTabs,
-      {
-        label: "Stake",
-        releases: stakeReleases,
-        ordinations: stakeOrdinations,
-        sustainings: stakeSustainings,
-        showWard: true,
-      },
-    ];
-  }, [board, prepState, wardMap]);
+    return [stakeTab, ...wardTabs];
+  }, [board, prepState, wardMap, wards]);
 
   const visibleTabs = useMemo(() => allTabs.filter(hasEntries), [allTabs]);
   const allEmpty = visibleTabs.length === 0;

@@ -321,7 +321,10 @@ export default function SustainingPrep() {
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useWardMap(wards);
-  const sortedWards = useMemo(() => [...wards].sort((a, b) => a.name.localeCompare(b.name)), [wards]);
+  const sortedWards = useMemo(
+    () => [...wards].sort((a, b) => parseInt(a.name) - parseInt(b.name)),
+    [wards],
+  );
 
   // Auto-populate pool on first load if no proposals are tracked yet
   useEffect(() => {
@@ -542,6 +545,16 @@ export default function SustainingPrep() {
 
             {/* Right: Ward Sections */}
             <div className="flex-1 space-y-4">
+              {/* Stake section first */}
+              <WardDropZone
+                droppableId="ward-stake"
+                label="Stake"
+                items={state.wardAssignments.find((w) => w.wardId === "stake")?.items ?? []}
+                proposals={board}
+                ordinations={state.ordinations}
+                wardMap={wardMap}
+              />
+
               {sortedWards.map((ward) => {
                 const wa = state.wardAssignments.find((w) => w.wardId === ward.id);
                 return (
@@ -556,16 +569,6 @@ export default function SustainingPrep() {
                   />
                 );
               })}
-
-              {/* Stake section */}
-              <WardDropZone
-                droppableId="ward-stake"
-                label="Stake"
-                items={state.wardAssignments.find((w) => w.wardId === "stake")?.items ?? []}
-                proposals={board}
-                ordinations={state.ordinations}
-                wardMap={wardMap}
-              />
             </div>
           </div>
 
