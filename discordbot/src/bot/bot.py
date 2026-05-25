@@ -20,7 +20,7 @@ class LDSStakeBot(Bot):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')
 
-from .cogs import UserMappingCog, ChannelsCog
+from .cogs import UserMappingCog, ChannelsAndRolesCog
 
 async def initialize_bot() -> LDSStakeBot:
     logger = logging.getLogger("application")
@@ -53,7 +53,7 @@ async def initialize_bot() -> LDSStakeBot:
 
     # Register cogs
     await client.add_cog(UserMappingCog(client))
-    await client.add_cog(ChannelsCog(client))
+    await client.add_cog(ChannelsAndRolesCog(client))
 
     if not TOKEN:
         logger.error("DISCORD_TOKEN is not set.")

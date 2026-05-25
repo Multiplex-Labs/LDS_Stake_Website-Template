@@ -1,2 +1,2 @@
 from .mapping import UserMappingCog
-from .channels import ChannelsCog
+from .channels_and_roles import ChannelsAndRolesCog
