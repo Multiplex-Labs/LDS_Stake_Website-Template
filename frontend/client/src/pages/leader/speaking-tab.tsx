@@ -294,7 +294,7 @@ export function SpeakingTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {calendar.speakers.map((sp) => {
+                {calendar.speakers.filter((sp) => userCallingMap.has(sp.high_councilor_id)).map((sp) => {
                   const user = userCallingMap.get(sp.high_councilor_id);
                   const name = user
                     ? `${user.fname} ${user.lname}`
