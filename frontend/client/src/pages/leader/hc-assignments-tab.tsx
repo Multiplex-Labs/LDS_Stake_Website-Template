@@ -179,7 +179,7 @@ export function HCAssignmentsTab() {
           {editing && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label>HC Member</Label>
+                <p className="text-sm font-medium leading-none">HC Member</p>
                 <p className="text-sm font-medium py-2">{editing.hcName}</p>
               </div>
 

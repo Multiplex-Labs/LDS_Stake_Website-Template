@@ -9,12 +9,11 @@ from ..utils import (
 )
 from ..db import get_session
 from ..models import Assignment, Permission, BaseModel
-from typing import Optional
 
 
 class AssignmentUpdate(BaseModel):
-    responsibility: Optional[str] = None
-    committee: Optional[str] = None
+    responsibility: str | None = None
+    committee: str | None = None
 
 
 logger = getLogger("application")
