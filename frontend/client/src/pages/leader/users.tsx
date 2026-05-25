@@ -45,6 +45,8 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
 import { getInitials } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ApiUser, ApiCalling } from "@/types";
 
 type SortKey = "name" | "active" | "email";
@@ -112,10 +114,14 @@ export function UserAdminContent() {
     queryKey: ["/api/callings/"],
   });
 
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const activeCount = useMemo(() => users.filter((u) => u.active).length, [users]);
+
   // --- Table state ---
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
 
   // --- Edit dialog state ---
   const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
@@ -503,7 +509,7 @@ export function UserAdminContent() {
   }
 
   return (
-    <>
+    <TooltipProvider>
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-2xl">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -613,15 +619,32 @@ export function UserAdminContent() {
                   </TableCell>
                   <TableCell className="text-right pr-4">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-medium"
-                        disabled={toggleStatusMutation.isPending}
-                        onClick={() => toggleStatusMutation.mutate(user)}
-                      >
-                        {user.active ? "Deactivate" : "Activate"}
-                      </Button>
+                      {user.active && (user.id === currentUserId || activeCount <= 1) ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button variant="outline" size="sm" className="h-8 text-xs font-medium" disabled>
+                                Deactivate
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {user.id === currentUserId
+                              ? "Cannot deactivate your own account"
+                              : "Cannot deactivate the last active user"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs font-medium"
+                          disabled={toggleStatusMutation.isPending}
+                          onClick={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
+                        >
+                          {user.active ? "Deactivate" : "Activate"}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1238,7 +1261,35 @@ export function UserAdminContent() {
             )}
           </DialogContent>
         </Dialog>
-    </>
+
+        {/* Confirm Deactivate Dialog */}
+        <Dialog open={confirmTarget != null} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Deactivate {confirmTarget?.fname} {confirmTarget?.lname}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              They will no longer be able to log in.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={toggleStatusMutation.isPending}
+                onClick={() => {
+                  if (!confirmTarget) return;
+                  toggleStatusMutation.mutate(confirmTarget);
+                  setConfirmTarget(null);
+                }}
+              >
+                {toggleStatusMutation.isPending ? "Deactivating…" : "Deactivate"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+    </TooltipProvider>
   );
 }
 
