@@ -74,17 +74,6 @@ def add_speaking_override(
     # Check if the month is valid
     if override.month < 1 or override.month > 12:
         raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
-    # ward_id=None means clear: delete the existing override and return
-    if override.ward_id is None:
-        statement = select(SpeakingAssignment).where(
-            SpeakingAssignment.high_councilor_id == override.high_councilor_id).where(
-                SpeakingAssignment.month == datetime(override.year, override.month, 1)
-            )
-        existing = session.exec(statement).first()
-        if existing:
-            session.delete(existing)
-            session.commit()
-        return {"ok": True}
     # Check if the ward_id is valid (you may want to add additional validation here)
     # TODO: Add validation for ward_id
     # Check if an override already exists for the given month and high councilor
@@ -111,6 +100,10 @@ def add_speaking_override(
         session.add(existing_override)
         session.commit()
         session.refresh(existing_override)
+    # ward_id=None is a "cleared" override — it supresses the base schedule for this slot.
+    # Skip the swap logic since there is no target ward to trade.
+    if override.ward_id is None:
+        return {"ok": True}
     # Check who is currently assigned to speak in the given month in the given ward
     previous_assignment = calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1]
     for speaker in calendar.speakers:
