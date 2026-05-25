@@ -39,13 +39,7 @@ def get_assignments(
         .join(UserCalling, Assignment.high_councilor_id == UserCalling.id)
     ).all()
     return [
-        AssignmentResponse(
-            id=a.id,
-            slot_number=slot_number,
-            high_councilor_id=a.high_councilor_id,
-            responsibility=a.responsibility,
-            committee=a.committee,
-        )
+        AssignmentResponse(**a.model_dump() | {"slot_number": slot_number})
         for a, slot_number in rows
     ]
 
@@ -56,7 +50,6 @@ def get_assignment(
     session: Session = Depends(get_session),
     current_user = Depends(CallingUser())
 ):
-        
     assignment = get_or_make_hc_assignment(slot_id, session, current_user)
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")

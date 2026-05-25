@@ -11,6 +11,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Layout } from "@/components/layout/Layout";
 import { HC_CALLING_NAME } from "@/lib/constants";
+import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 export default function HighCouncilAssignments() {
@@ -95,7 +96,7 @@ export default function HighCouncilAssignments() {
                     return (
                       <TableRow key={ucId}>
                         <TableCell className="font-medium">
-                          {user.fname} {user.lname}
+                          {fullName(user)}
                         </TableCell>
                         <TableCell>{user.phone ?? "—"}</TableCell>
                         <TableCell>{assignment?.responsibility ?? "—"}</TableCell>

@@ -25,10 +25,6 @@ import { HC_CALLING_NAME } from "@/lib/constants";
 import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
-interface HcOption {
-  name: string;
-}
-
 interface EditState {
   slotNum: number;
   hcName: string;
@@ -60,12 +56,12 @@ export function HCAssignmentsTab() {
   );
 
   const hcBySlot = useMemo(() => {
-    const bySlot = new Map<number, HcOption>();
+    const bySlot = new Map<number, string>();
     if (hcCalling == null) return bySlot;
     for (const u of users) {
       for (const uc of u.callings ?? []) {
         if (uc.calling_id === hcCalling.id) {
-          bySlot.set(uc.slot_number, { name: fullName(u) });
+          bySlot.set(uc.slot_number, fullName(u));
         }
       }
     }
@@ -108,7 +104,7 @@ export function HCAssignmentsTab() {
     const assignment = assignmentBySlot.get(slotNum);
     setEditing({
       slotNum,
-      hcName: hcEntry?.name ?? "Unassigned",
+      hcName: hcEntry ?? "Unassigned",
       responsibility: assignment?.responsibility ?? "",
       committee: assignment?.committee ?? "",
     });
@@ -143,7 +139,7 @@ export function HCAssignmentsTab() {
                 <TableRow key={slotNum}>
                   <TableCell className="text-muted-foreground text-sm">{slotNum}</TableCell>
                   <TableCell className="font-medium">
-                    {hcEntry?.name ?? (
+                    {hcEntry ?? (
                       <span className="text-muted-foreground">Unassigned</span>
                     )}
                   </TableCell>
