@@ -51,7 +51,7 @@ class SpeakingOverrideRequest(BaseModel):
     high_councilor_id: int
     month: int
     year: int
-    ward_id: int
+    ward_id: int | None = None
     speaker2: str | None = None
 @router.put("/calendar/override")
 def add_speaking_override(
@@ -74,6 +74,17 @@ def add_speaking_override(
     # Check if the month is valid
     if override.month < 1 or override.month > 12:
         raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
+    # ward_id=None means clear: delete the existing override and return
+    if override.ward_id is None:
+        statement = select(SpeakingAssignment).where(
+            SpeakingAssignment.high_councilor_id == override.high_councilor_id).where(
+                SpeakingAssignment.month == datetime(override.year, override.month, 1)
+            )
+        existing = session.exec(statement).first()
+        if existing:
+            session.delete(existing)
+            session.commit()
+        return {"ok": True}
     # Check if the ward_id is valid (you may want to add additional validation here)
     # TODO: Add validation for ward_id
     # Check if an override already exists for the given month and high councilor
