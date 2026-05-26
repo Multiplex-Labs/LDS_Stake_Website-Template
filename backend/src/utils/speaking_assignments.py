@@ -134,7 +134,7 @@ def get_speaking_calendar(request:Request, session: Session, year: int=-1) -> Sp
                 f"Skipping override with id {override.id}."
             )
             continue
-        slot = usercalling.slot_id - 1
+        slot = usercalling.slot_number - 1
         month = override.month.month - 1
         if slot < len(calendar.speakers) and month < len(calendar.speakers[slot].assignments):
             calendar.speakers[slot].assignments[month] = SpeakingAssignmentAPI(

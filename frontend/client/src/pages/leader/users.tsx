@@ -44,7 +44,9 @@ import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
-import { getInitials } from "@/lib/utils";
+import { getInitials, fullName } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ApiUser, ApiCalling } from "@/types";
 
 type SortKey = "name" | "active" | "email";
@@ -112,10 +114,18 @@ export function UserAdminContent() {
     queryKey: ["/api/callings/"],
   });
 
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const activeCount = useMemo(() => users.filter((u) => u.active).length, [users]);
+
   // --- Table state ---
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<ApiUser | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<ApiUser | null>(null);
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
+  const [resetPasswordErrors, setResetPasswordErrors] = useState<{ password?: string; confirm?: string }>({});
 
   // --- Edit dialog state ---
   const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
@@ -234,6 +244,7 @@ export function UserAdminContent() {
   function validateStep3(form: AddWizardForm) {
     const errors: AddWizardState["errors"] = {};
     if (!form.password) errors.password = "Password is required";
+    else if (form.password.length < 8) errors.password = "Minimum 8 characters";
     if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match";
     return errors;
   }
@@ -403,6 +414,44 @@ export function UserAdminContent() {
     onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ user, newPassword }: { user: ApiUser; newPassword: string }) =>
+      apiRequest("PATCH", `/api/users/${user.id}/password`, { new_password: newPassword }),
+    onSuccess: (_, { user }) => {
+      toast.success("Password Reset", {
+        description: `${user.fname} will be prompted to set a new password on next login.`,
+      });
+      setResetPasswordUser(null);
+      setResetPasswordForm({ password: "", confirm: "" });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("401") || msg.startsWith("403")) {
+        toast.error("Session Expired", { description: "Log out and back in, then try again." });
+      } else {
+        toast.error("Reset Failed", { description: "Could not reset password." });
+      }
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: number) => apiRequest("DELETE", `/api/users/${userId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
+      toast.success("User Deleted");
+      setDeleteConfirmUser(null);
+      handleCloseEdit();
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("400")) {
+        toast.error("Cannot Delete User", { description: msg.replace(/^\d+:\s*/, "") });
+      } else {
+        toast.error("Delete Failed", { description: "Could not delete user." });
+      }
+    },
+  });
+
   const uploadPhotoMutation = useMutation({
     mutationFn: async ({ blob, userId }: { blob: Blob; userId: number }) => {
       const formData = new FormData();
@@ -503,7 +552,7 @@ export function UserAdminContent() {
   }
 
   return (
-    <>
+    <TooltipProvider>
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="relative flex-1 max-w-2xl">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -613,15 +662,32 @@ export function UserAdminContent() {
                   </TableCell>
                   <TableCell className="text-right pr-4">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-medium"
-                        disabled={toggleStatusMutation.isPending}
-                        onClick={() => toggleStatusMutation.mutate(user)}
-                      >
-                        {user.active ? "Deactivate" : "Activate"}
-                      </Button>
+                      {user.active && (user.id === currentUserId || activeCount <= 1) ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button variant="outline" size="sm" className="h-8 text-xs font-medium" disabled>
+                                Deactivate
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {user.id === currentUserId
+                              ? "Cannot deactivate your own account"
+                              : "Cannot deactivate the last active user"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs font-medium"
+                          disabled={toggleStatusMutation.isPending}
+                          onClick={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
+                        >
+                          {user.active ? "Deactivate" : "Activate"}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -835,15 +901,56 @@ export function UserAdminContent() {
                       </div>
                     </div>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
-                      <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
-                      <Button
-                        disabled={saveEditMutation.isPending}
-                        onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
-                      >
-                        {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
-                      </Button>
-                    </DialogFooter>
+                    <Separator />
+
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="flex gap-2">
+                        {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button variant="destructive" size="sm" disabled>
+                                  Delete User
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {editingUser.id === currentUserId
+                                ? "Cannot delete your own account"
+                                : "Cannot delete the last active user"}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => editingUser && setDeleteConfirmUser(editingUser)}
+                          >
+                            Delete User
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setResetPasswordForm({ password: "", confirm: "" });
+                            setResetPasswordErrors({});
+                            setResetPasswordUser(editingUser);
+                          }}
+                        >
+                          Reset Password
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
+                        <Button
+                          disabled={saveEditMutation.isPending}
+                          onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
+                        >
+                          {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
+                        </Button>
+                      </div>
+                    </div>
                   </>
                 )}
               </>
@@ -1238,7 +1345,136 @@ export function UserAdminContent() {
             )}
           </DialogContent>
         </Dialog>
-    </>
+
+        {/* Confirm Delete Dialog */}
+        <Dialog open={deleteConfirmUser != null} onOpenChange={(open) => { if (!open) setDeleteConfirmUser(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete {deleteConfirmUser?.fname} {deleteConfirmUser?.lname}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              This will permanently remove their account, callings, and all associated data. This cannot be undone.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmUser(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteUserMutation.isPending}
+                onClick={() => {
+                  if (!deleteConfirmUser) return;
+                  deleteUserMutation.mutate(deleteConfirmUser.id);
+                }}
+              >
+                {deleteUserMutation.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reset Password Dialog */}
+        <Dialog
+          open={resetPasswordUser != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setResetPasswordUser(null);
+              setResetPasswordForm({ password: "", confirm: "" });
+              setResetPasswordErrors({});
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                Reset Password — {resetPasswordUser ? fullName(resetPasswordUser) : ""}
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              They will be required to change their password on next login.
+            </p>
+            <div className="grid gap-4 py-2">
+              <div className="space-y-1.5">
+                <Label>New Password</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetPasswordForm.password}
+                  onChange={(e) => {
+                    setResetPasswordForm((f) => ({ ...f, password: e.target.value }));
+                    setResetPasswordErrors((err) => ({ ...err, password: undefined }));
+                  }}
+                />
+                {resetPasswordErrors.password && (
+                  <p className="text-xs text-destructive">{resetPasswordErrors.password}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Confirm Password</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetPasswordForm.confirm}
+                  onChange={(e) => {
+                    setResetPasswordForm((f) => ({ ...f, confirm: e.target.value }));
+                    setResetPasswordErrors((err) => ({ ...err, confirm: undefined }));
+                  }}
+                />
+                {resetPasswordErrors.confirm && (
+                  <p className="text-xs text-destructive">{resetPasswordErrors.confirm}</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setResetPasswordUser(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={resetPasswordMutation.isPending}
+                onClick={() => {
+                  const errors: typeof resetPasswordErrors = {};
+                  if (!resetPasswordForm.password) errors.password = "Password is required";
+                  else if (resetPasswordForm.password.length < 8) errors.password = "Minimum 8 characters";
+                  if (resetPasswordForm.password !== resetPasswordForm.confirm) errors.confirm = "Passwords do not match";
+                  if (Object.keys(errors).length > 0) { setResetPasswordErrors(errors); return; }
+                  if (!resetPasswordUser) return;
+                  resetPasswordMutation.mutate({ user: resetPasswordUser, newPassword: resetPasswordForm.password });
+                }}
+              >
+                {resetPasswordMutation.isPending ? "Resetting…" : "Reset Password"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Confirm Deactivate Dialog */}
+        <Dialog open={confirmTarget != null} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Deactivate {confirmTarget?.fname} {confirmTarget?.lname}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              They will no longer be able to log in.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={toggleStatusMutation.isPending}
+                onClick={() => {
+                  if (!confirmTarget) return;
+                  toggleStatusMutation.mutate(confirmTarget);
+                  setConfirmTarget(null);
+                }}
+              >
+                {toggleStatusMutation.isPending ? "Deactivating…" : "Deactivate"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+    </TooltipProvider>
   );
 }
 

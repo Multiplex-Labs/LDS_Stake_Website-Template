@@ -43,6 +43,7 @@ interface ActiveCell {
 function invalidateSpeakingData(year: number) {
   queryClient.invalidateQueries({ queryKey: ["/api/speaking/topics/", year] });
   queryClient.invalidateQueries({ queryKey: ["/api/speaking/calendar/", year] });
+  queryClient.invalidateQueries({ queryKey: ["/api/speaking/calendar"] });
 }
 
 function overrideAssignment(ucId: number, wardId: number | null, monthIdx: number, year: number) {
@@ -294,7 +295,7 @@ export function SpeakingTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {calendar.speakers.map((sp) => {
+                {calendar.speakers.filter((sp) => userCallingMap.has(sp.high_councilor_id)).map((sp) => {
                   const user = userCallingMap.get(sp.high_councilor_id);
                   const name = user
                     ? `${user.fname} ${user.lname}`

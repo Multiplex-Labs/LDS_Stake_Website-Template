@@ -84,6 +84,7 @@ export interface CallingComment {
 
 export interface HcAssignment {
   id: number;
+  slot_number: number;
   high_councilor_id: number | null;
   responsibility: string | null;
   committee: string | null;

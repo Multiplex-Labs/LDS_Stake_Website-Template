@@ -51,7 +51,7 @@ class SpeakingOverrideRequest(BaseModel):
     high_councilor_id: int
     month: int
     year: int
-    ward_id: int
+    ward_id: int | None = None
     speaker2: str | None = None
 @router.put("/calendar/override")
 def add_speaking_override(
@@ -100,6 +100,10 @@ def add_speaking_override(
         session.add(existing_override)
         session.commit()
         session.refresh(existing_override)
+    # ward_id=None is a "cleared" override — it supresses the base schedule for this slot.
+    # Skip the swap logic since there is no target ward to trade.
+    if override.ward_id is None:
+        return {"ok": True}
     # Check who is currently assigned to speak in the given month in the given ward
     previous_assignment = calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1]
     for speaker in calendar.speakers:

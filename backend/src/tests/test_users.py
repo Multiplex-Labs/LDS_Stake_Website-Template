@@ -71,17 +71,14 @@ def test_change_password_self(client: TestClient, userpass: Tuple[User, str]):
     assert login.status_code == 200
 
 
-def test_delete_self_removes_user(client: TestClient, userpass: Tuple[User, str]):
+def test_delete_self_is_forbidden(client: TestClient, userpass: Tuple[User, str]):
     user, password = userpass
     token = login_client(client, user.email, password)
     headers = {"Authorization": f"Bearer {token}"}
 
     r = client.delete(f"/users/{user.id}", headers=headers)
-    assert r.status_code == 200
-
-    # After deletion the user should not be found
-    get_r = client.get(f"/users/{user.id}")
-    assert get_r.status_code == 404
+    assert r.status_code == 400
+    assert "own account" in r.json()["detail"]
 
 def test_get_users(client: TestClient, userpass: Tuple[User, str]):
     user, password = userpass

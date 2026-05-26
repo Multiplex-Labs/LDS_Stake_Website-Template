@@ -11,6 +11,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Layout } from "@/components/layout/Layout";
 import { HC_CALLING_NAME } from "@/lib/constants";
+import { fullName } from "@/lib/utils";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 export default function HighCouncilAssignments() {
@@ -46,12 +47,9 @@ export default function HighCouncilAssignments() {
     return members.sort((a, b) => a.slot - b.slot);
   }, [users, hcCallingId]);
 
-  // Assignment details keyed by UserCalling.id
-  const assignmentByUcId = useMemo(() => {
+  const assignmentBySlot = useMemo(() => {
     const map = new Map<number, HcAssignment>();
-    for (const a of assignments) {
-      if (a.high_councilor_id != null) map.set(a.high_councilor_id, a);
-    }
+    for (const a of assignments) map.set(a.slot_number, a);
     return map;
   }, [assignments]);
 
@@ -94,11 +92,11 @@ export default function HighCouncilAssignments() {
                       </TableRow>
                     ))
                   ) : hcMembers.map(({ user, ucId, slot }) => {
-                    const assignment = assignmentByUcId.get(ucId);
+                    const assignment = assignmentBySlot.get(slot);
                     return (
                       <TableRow key={ucId}>
                         <TableCell className="font-medium">
-                          HC {slot} — {user.fname} {user.lname}
+                          {fullName(user)}
                         </TableCell>
                         <TableCell>{user.phone ?? "—"}</TableCell>
                         <TableCell>{assignment?.responsibility ?? "—"}</TableCell>

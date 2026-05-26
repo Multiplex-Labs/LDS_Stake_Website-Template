@@ -10,6 +10,7 @@ from ..utils import (
     create_kanban_update,
     update_proposal_status,
     user_has_calling,
+    user_has_permission,
     get_bishops_ward
 )
 from ..db import get_session
@@ -75,10 +76,10 @@ def list_proposals(
     """List all calling proposals"""
     # TODO: Who should be allowed to view calling proposals?
     # User must either be a bishop or have permission to view proposals
-    if current_user.has_permission(Permission.VIEW_CALLING_PROPOSALS):
+    if user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session):
         logger.debug(f"User {current_user.id} is listing all calling proposals with permission {Permission.VIEW_CALLING_PROPOSALS}")
         statement = select(CallingProposal)
-    elif current_user.has_calling("Bishop"):
+    elif user_has_calling(current_user, "Bishop"):
         # Bishops can only view proposals from their own ward
         bishop_ward = get_bishops_ward(session, current_user)
         logger.debug(f"User {current_user.id} is listing calling proposals for their ward as they have the Bishop calling")
@@ -103,7 +104,7 @@ def get_proposal(
         if not proposal or proposal.ward_id != bishop_ward.ward_id:
             raise HTTPException(status_code=404, detail="Proposal not found")
         return proposal
-    if not current_user.has_permission(Permission.VIEW_CALLING_PROPOSALS) or not proposal:
+    if not user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session) or not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return proposal
 
@@ -117,7 +118,7 @@ def update_proposal(
     """Update an existing calling proposal"""
     # TODO: Should updating a calling proposal reset its stage back to submitted?
     logger.debug(f"User {current_user.id} is attempting to update calling proposal with ID {proposal_id}, submitter {proposal_data.submitter}, and data: {proposal_data}")
-    if current_user.id != proposal_data.submitter and not current_user.has_permission(Permission.MANAGE_CALLING_PROPOSALS):
+    if current_user.id != proposal_data.submitter and not user_has_permission(current_user, Permission.MANAGE_CALLING_PROPOSALS, session):
         raise HTTPException(status_code=403, detail="Not authorized to update this proposal")
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
@@ -200,7 +201,7 @@ def delete_comment(
     comment = session.get(CallingComment, comment_id)
     if not comment or comment.proposal_id != proposal_id:
         raise HTTPException(status_code=404, detail="Comment not found")
-    if comment.commenter_id != current_user.id and not current_user.has_permission(Permission.MANAGE_CALLING_PROPOSALS):
+    if comment.commenter_id != current_user.id and not user_has_permission(current_user, Permission.MANAGE_CALLING_PROPOSALS, session):
         raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
     session.delete(comment)
     session.commit()
