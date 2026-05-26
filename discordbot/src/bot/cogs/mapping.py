@@ -12,7 +12,7 @@ import traceback
 import discord
 from sqlmodel import select
 
-from discord import Member, Interaction, ButtonStyle, app_commands
+from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import Modal, TextInput, View, button, Button
 from discord.ext.commands import Cog, Context, hybrid_command
 
@@ -53,47 +53,87 @@ class WizardView(View):
     @button(label="Start Wizard", style=ButtonStyle.green, custom_id="start_wizard")
     async def start_button(self, interaction: Interaction, button: Button):
         logger = logging.getLogger("application")
-        logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) started the onboarding wizard.")
-        await interaction.response.send_modal(WizardModal())
+        logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) clicked Start Wizard.")
+
+        # Prepare a DM with instructions and register the interactive view so the
+        # button in the DM can open the modal there.
+        wizard_view = WizardView()
+        try:
+            # Register persistent view so button callbacks work from the DM
+            self.bot.add_view(wizard_view)
+        except Exception:
+            # add_view may raise if view already registered; ignore safely
+            pass
+
+        dm_text = (
+            "Welcome! To complete onboarding, please run `/update_email`"
+        )
+
+        try:
+            await interaction.user.send(dm_text)
+            try:
+                await interaction.response.send_message("I've sent you a DM with onboarding instructions.", ephemeral=True)
+            except Exception:
+                # If the interaction response fails for any reason, log but continue
+                logger.exception("Failed to acknowledge interaction after sending DM to user %s", interaction.user.id)
+            logger.info(f"Sent onboarding DM to user {interaction.user.name} (ID: {interaction.user.id}).")
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "I couldn't DM you. Please enable DMs from server members or use `/update_email`.",
+                ephemeral=True,
+            )
+            logger.warning(f"Failed to DM user {interaction.user.id} (forbidden).")
+        except Exception:
+            await interaction.response.send_message(
+                "Failed to send DM. Please try `/update_email` instead.",
+                ephemeral=True,
+            )
+            logger.exception("Failed to send onboarding DM to user %s", interaction.user.id)
 
 class UserMappingCog(Cog):
+    WELCOME_CHANNEL_NAME = "welcome"
+    WELCOME_MESSAGE_MARKER = "complete registration"
+
     def __init__(self, bot: LDSStakeBot):
         self.bot = bot
         self.bot.logger.info("Registering user-mapping listeners")
         self.logger = self.bot.logger.getChild("UserMappingCog")
 
-    @Cog.listener()
-    async def on_member_join(self, member: Member):
-        self.bot.logger.info(f"New member joined: {member.name} (ID: {member.id})")
-        # Send message to user asking for email address
-        await member.send("Welcome to the server! Please provide the email address associated with your stake website account to complete your registration.")
-        wizard_view = WizardView()
-        self.bot.add_view(wizard_view)
-        await member.send(view=wizard_view)
-        # Get email address from user response
-        def check(m):
-            return m.author == member and m.channel.type == "private"
-        try:               
-            email_message = await self.bot.wait_for('message', check=check, timeout=300)  # Wait for 5 minutes
-            email = email_message.content
-        except asyncio.TimeoutError:
-            await member.send("You took too long to respond. Please type /register to start the registration process again.")
-            return
-        # Create mapping in database between member.id and email address
-        with get_session() as db:
-            user_mapping = UserMapping(discord_user_id=member.id, user_email=email)
-            db.add(user_mapping)
-            db.commit()
-        
-        await member.send(
-            "Thank you for registering! Your email address has been linked to your Discord account in this server.\n"
-            " You can now use the `/email` command to view your current mapping.\n"
-            " If you need to update your email address, you can use the `/update_email` command."
-            )
+    async def _welcome_channel_already_sent(self, channel: TextChannel) -> bool:
+        async for message in channel.history(limit=100):
+            if message.author == self.bot.user and self.WELCOME_MESSAGE_MARKER in (message.content or ""):
+                return True
+        return False
 
-    # def cog_command_error(self, ctx, error):
-    #     # self.logger.exception(f"Error in {ctx.command}: {error}")
-    #     asyncio.create_task(ctx.send("An error occurred while processing your command. Please try again later."))
+    @Cog.listener()
+    async def on_ready(self):
+        if getattr(self.bot, "_mapping_cog_initialized", False):
+            return
+        self.bot._mapping_cog_initialized = True
+        for guild in self.bot.guilds:
+            welcome_channel = None
+            if guild is not None:
+                welcome_channel = discord.utils.get(guild.text_channels, name=self.WELCOME_CHANNEL_NAME)
+
+            if welcome_channel is not None:
+                try:
+                    if not await self._welcome_channel_already_sent(welcome_channel):
+                        welcome_view = WizardView()
+                        self.bot.add_view(welcome_view)
+                        await welcome_channel.send(
+                            "Welcome to the server! To complete registration, click the button below or use `/update_email`.",
+                            view=welcome_view,
+                        )
+                except Exception:
+                    self.logger.exception(
+                        "Failed to send welcome message in channel %s in guild %s.",
+                        self.WELCOME_CHANNEL_NAME, guild.name,
+                    )
+            else:
+                self.logger.warning(
+                    "Welcome channel named '%s' not found in guild %s. Cannot send welcome message.",
+                    self.WELCOME_CHANNEL_NAME, guild.name,
+                )
 
     @Cog.listener()
     async def on_member_remove(self, member: Member):
