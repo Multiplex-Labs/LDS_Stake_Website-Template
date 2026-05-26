@@ -7,7 +7,7 @@ from logging import getLogger
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from sqlmodel import Field, SQLModel, Session, delete, select
+from sqlmodel import Field, SQLModel, Session, delete, func, select
 
 
 from ..models import (
@@ -39,15 +39,15 @@ def can_manage_user_or_throw(
     current_user: User,
     session: Session
     ) -> None:
-    """
-    Dependency to check if the current user can manage the target user.
-    Raises HTTPException if not permitted.
-    """
     if current_user.id == target_user_id:
-        return # Users can always manage themselves
-
+        return
     if not user_has_permission(current_user, Permission.MANAGE_USERS, session):
         raise HTTPException(status_code=403, detail="Insufficient permissions to manage users.")
+
+def _assert_not_last_active_user(user_id: int, session: Session, action: str = "remove") -> None:
+    count = session.exec(select(func.count(User.id)).where(User.active == True)).one()
+    if count <= 1:
+        raise HTTPException(status_code=400, detail=f"Cannot {action} the last active user.")
 @router.get("/")
 def list_users(
     session: Session = Depends(get_session),
@@ -109,9 +109,7 @@ def update_user(
     if db_user.active and not user_update.active:
         if user_id == calling_user.id:
             raise HTTPException(status_code=400, detail="Cannot deactivate your own account.")
-        active_users_count = len(session.exec(select(User).where(User.active == True)).all())
-        if active_users_count <= 1:
-            raise HTTPException(status_code=400, detail="Cannot deactivate the last active user.")
+        _assert_not_last_active_user(user_id, session, action="deactivate")
         
     if user_update.email != db_user.email:
         # Ensure email is unique
@@ -188,25 +186,21 @@ def delete_user(
     session: Session = Depends(get_session),
     calling_user: User = Depends(CallingUser())
 ):
-    # Check permissions
     can_manage_user_or_throw(user_id, calling_user, session)
-    # Do not delete last user
-    total_users = len(session.exec(select(User)).all())
-    if total_users <= 1:
-        raise HTTPException(status_code=400, detail="Cannot delete the last user in the system.")
-    # Fetch existing user
     db_user = session.get(User, user_id)
-
-    # Cascade delete permissions
-    if db_user:
-        session.exec(
-            delete(Permissions).where(
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if user_id == calling_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account.")
+    _assert_not_last_active_user(user_id, session, action="delete")
+    session.exec(
+        delete(Permissions).where(
             Permissions.foreign_id == str(user_id),
             Permissions.is_calling == False
-            )
         )
-        session.delete(db_user)
-        session.commit()
+    )
+    session.delete(db_user)
+    session.commit()
     return None
 
 class UserCreateRequest(RequestSafeUser):

@@ -122,6 +122,7 @@ export function UserAdminContent() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<ApiUser | null>(null);
 
   // --- Edit dialog state ---
   const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
@@ -407,6 +408,24 @@ export function UserAdminContent() {
       setAddWizard(INITIAL_WIZARD_STATE);
     },
     onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: number) => apiRequest("DELETE", `/api/users/${userId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
+      toast.success("User Deleted");
+      setDeleteConfirmUser(null);
+      handleCloseEdit();
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("400")) {
+        toast.error("Cannot Delete User", { description: msg.replace(/^\d+:\s*/, "") });
+      } else {
+        toast.error("Delete Failed", { description: "Could not delete user." });
+      }
+    },
   });
 
   const uploadPhotoMutation = useMutation({
@@ -858,15 +877,43 @@ export function UserAdminContent() {
                       </div>
                     </div>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
-                      <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
-                      <Button
-                        disabled={saveEditMutation.isPending}
-                        onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
-                      >
-                        {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
-                      </Button>
-                    </DialogFooter>
+                    <Separator />
+
+                    <div className="flex items-center justify-between pt-2">
+                      {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Button variant="destructive" size="sm" disabled>
+                                Delete User
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {editingUser.id === currentUserId
+                              ? "Cannot delete your own account"
+                              : "Cannot delete the last active user"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => editingUser && setDeleteConfirmUser(editingUser)}
+                        >
+                          Delete User
+                        </Button>
+                      )}
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
+                        <Button
+                          disabled={saveEditMutation.isPending}
+                          onClick={() => editingUser && editForm && saveEditMutation.mutate({ user: editingUser, form: editForm })}
+                        >
+                          {saveEditMutation.isPending ? "Saving…" : "Save Changes"}
+                        </Button>
+                      </div>
+                    </div>
                   </>
                 )}
               </>
@@ -1259,6 +1306,33 @@ export function UserAdminContent() {
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Confirm Delete Dialog */}
+        <Dialog open={deleteConfirmUser != null} onOpenChange={(open) => { if (!open) setDeleteConfirmUser(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete {deleteConfirmUser?.fname} {deleteConfirmUser?.lname}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              This will permanently remove their account, callings, and all associated data. This cannot be undone.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmUser(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteUserMutation.isPending}
+                onClick={() => {
+                  if (!deleteConfirmUser) return;
+                  deleteUserMutation.mutate(deleteConfirmUser.id);
+                }}
+              >
+                {deleteUserMutation.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
