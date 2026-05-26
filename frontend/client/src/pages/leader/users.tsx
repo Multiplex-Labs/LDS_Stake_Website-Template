@@ -44,7 +44,7 @@ import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
-import { getInitials } from "@/lib/utils";
+import { getInitials, fullName } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ApiUser, ApiCalling } from "@/types";
@@ -123,6 +123,9 @@ export function UserAdminContent() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<ApiUser | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<ApiUser | null>(null);
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: "", confirm: "" });
+  const [resetPasswordErrors, setResetPasswordErrors] = useState<{ password?: string; confirm?: string }>({});
 
   // --- Edit dialog state ---
   const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
@@ -241,6 +244,7 @@ export function UserAdminContent() {
   function validateStep3(form: AddWizardForm) {
     const errors: AddWizardState["errors"] = {};
     if (!form.password) errors.password = "Password is required";
+    else if (form.password.length < 8) errors.password = "Minimum 8 characters";
     if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match";
     return errors;
   }
@@ -408,6 +412,26 @@ export function UserAdminContent() {
       setAddWizard(INITIAL_WIZARD_STATE);
     },
     onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ user, newPassword }: { user: ApiUser; newPassword: string }) =>
+      apiRequest("PATCH", `/api/users/${user.id}/password`, { new_password: newPassword }),
+    onSuccess: (_, { user }) => {
+      toast.success("Password Reset", {
+        description: `${user.fname} will be prompted to set a new password on next login.`,
+      });
+      setResetPasswordUser(null);
+      setResetPasswordForm({ password: "", confirm: "" });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("401") || msg.startsWith("403")) {
+        toast.error("Session Expired", { description: "Log out and back in, then try again." });
+      } else {
+        toast.error("Reset Failed", { description: "Could not reset password." });
+      }
+    },
   });
 
   const deleteUserMutation = useMutation({
@@ -880,30 +904,43 @@ export function UserAdminContent() {
                     <Separator />
 
                     <div className="flex items-center justify-between pt-2">
-                      {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
-                              <Button variant="destructive" size="sm" disabled>
-                                Delete User
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {editingUser.id === currentUserId
-                              ? "Cannot delete your own account"
-                              : "Cannot delete the last active user"}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
+                      <div className="flex gap-2">
+                        {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button variant="destructive" size="sm" disabled>
+                                  Delete User
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {editingUser.id === currentUserId
+                                ? "Cannot delete your own account"
+                                : "Cannot delete the last active user"}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => editingUser && setDeleteConfirmUser(editingUser)}
+                          >
+                            Delete User
+                          </Button>
+                        )}
                         <Button
-                          variant="destructive"
+                          variant="outline"
                           size="sm"
-                          onClick={() => editingUser && setDeleteConfirmUser(editingUser)}
+                          onClick={() => {
+                            setResetPasswordForm({ password: "", confirm: "" });
+                            setResetPasswordErrors({});
+                            setResetPasswordUser(editingUser);
+                          }}
                         >
-                          Delete User
+                          Reset Password
                         </Button>
-                      )}
+                      </div>
                       <div className="flex gap-2">
                         <Button variant="outline" onClick={handleCloseEdit}>Cancel</Button>
                         <Button
@@ -1331,6 +1368,80 @@ export function UserAdminContent() {
                 }}
               >
                 {deleteUserMutation.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reset Password Dialog */}
+        <Dialog
+          open={resetPasswordUser != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setResetPasswordUser(null);
+              setResetPasswordForm({ password: "", confirm: "" });
+              setResetPasswordErrors({});
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                Reset Password — {resetPasswordUser ? fullName(resetPasswordUser) : ""}
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              They will be required to change their password on next login.
+            </p>
+            <div className="grid gap-4 py-2">
+              <div className="space-y-1.5">
+                <Label>New Password</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetPasswordForm.password}
+                  onChange={(e) => {
+                    setResetPasswordForm((f) => ({ ...f, password: e.target.value }));
+                    setResetPasswordErrors((err) => ({ ...err, password: undefined }));
+                  }}
+                />
+                {resetPasswordErrors.password && (
+                  <p className="text-xs text-destructive">{resetPasswordErrors.password}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Confirm Password</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={resetPasswordForm.confirm}
+                  onChange={(e) => {
+                    setResetPasswordForm((f) => ({ ...f, confirm: e.target.value }));
+                    setResetPasswordErrors((err) => ({ ...err, confirm: undefined }));
+                  }}
+                />
+                {resetPasswordErrors.confirm && (
+                  <p className="text-xs text-destructive">{resetPasswordErrors.confirm}</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setResetPasswordUser(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={resetPasswordMutation.isPending}
+                onClick={() => {
+                  const errors: typeof resetPasswordErrors = {};
+                  if (!resetPasswordForm.password) errors.password = "Password is required";
+                  else if (resetPasswordForm.password.length < 8) errors.password = "Minimum 8 characters";
+                  if (resetPasswordForm.password !== resetPasswordForm.confirm) errors.confirm = "Passwords do not match";
+                  if (Object.keys(errors).length > 0) { setResetPasswordErrors(errors); return; }
+                  if (!resetPasswordUser) return;
+                  resetPasswordMutation.mutate({ user: resetPasswordUser, newPassword: resetPasswordForm.password });
+                }}
+              >
+                {resetPasswordMutation.isPending ? "Resetting…" : "Reset Password"}
               </Button>
             </DialogFooter>
           </DialogContent>
