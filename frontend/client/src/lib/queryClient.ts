@@ -43,9 +43,15 @@ async function refreshAccessToken(): Promise<string | null> {
 // --- Helpers ---
 function buildHeaders(data?: unknown): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (data) headers["Content-Type"] = "application/json";
+  if (data && !(data instanceof FormData)) headers["Content-Type"] = "application/json";
   if (_accessToken) headers["Authorization"] = `Bearer ${_accessToken}`;
   return headers;
+}
+
+function serializeBody(data?: unknown): BodyInit | undefined {
+  if (!data) return undefined;
+  if (data instanceof FormData) return data;
+  return JSON.stringify(data);
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -64,7 +70,7 @@ export async function apiRequest(
   const res = await fetch(url, {
     method,
     headers: buildHeaders(data),
-    body: data ? JSON.stringify(data) : undefined,
+    body: serializeBody(data),
     credentials: "include",
   });
 
@@ -77,7 +83,7 @@ export async function apiRequest(
     const retry = await fetch(url, {
       method,
       headers: buildHeaders(data),
-      body: data ? JSON.stringify(data) : undefined,
+      body: serializeBody(data),
       credentials: "include",
     });
     await throwIfResNotOk(retry);
