@@ -3,8 +3,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
+  PointerSensor,
   useDraggable,
   useDroppable,
+  useSensor,
+  useSensors,
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -26,14 +29,12 @@ const STAGE_KEY_TO_COLUMN_ID: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.map((s) => [s.key, s.id]),
 );
 
-// Each stage key maps to the column id of the immediately next stage
-const NEXT_COLUMN_ID: Record<string, string> = {
-  "0": "pending-hc-approval",
-  "1": "pending-interview",
-  "2": "pending-sustainment",
-  "3": "pending-setting-apart",
-  "4": "pending-lcr",
-};
+const NEXT_COLUMN_ID: Record<string, string> = Object.fromEntries(
+  KANBAN_STAGES.slice(0, -1).map((s, i) => [s.key, KANBAN_STAGES[i + 1].id]),
+);
+
+const [SK_SP_APPROVAL, SK_HC_APPROVAL, SK_INTERVIEW, SK_SUSTAIN, SK_SET_APART] =
+  KANBAN_STAGES.map((s) => s.key);
 
 const COLUMNS = KANBAN_STAGES.map((s) => ({
   id: s.id,
@@ -140,6 +141,10 @@ export default function CallingSystem() {
 
   const wardMap = useWardMap(wards);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
   const [selectedProposal, setSelectedProposal] = useState<ProposalWithStage | null>(null);
   const [activeCard, setActiveCard] = useState<ProposalWithStage | null>(null);
 
@@ -205,15 +210,19 @@ export default function CallingSystem() {
     // Must be exactly the next stage
     if (NEXT_COLUMN_ID[stageKey] !== targetColumnId) return;
 
-    // Stages 0, 1, 2 → open modal (auto-advance or interview constraints)
-    if (stageKey === "0" || stageKey === "1" || stageKey === "2") {
+    if (stageKey === SK_SP_APPROVAL || stageKey === SK_HC_APPROVAL) {
+      toast.info("Approvals for this stage are handled on the Review Callings page.");
+      return;
+    }
+
+    if (stageKey === SK_INTERVIEW) {
       openModal(item, stageKey);
       return;
     }
 
-    // Stages 3, 4 → direct API advance (stage 5→done has no board column to drop on)
-    if (stageKey === "3") sustainMutation.mutate(item.id);
-    else if (stageKey === "4") setApartMutation.mutate(item.id);
+    // stage 5 (LCR→DONE) has no droppable board column, so only 3 and 4 reach here
+    if (stageKey === SK_SUSTAIN) sustainMutation.mutate(item.id);
+    else if (stageKey === SK_SET_APART) setApartMutation.mutate(item.id);
   }
 
   return (
@@ -244,7 +253,7 @@ export default function CallingSystem() {
           </div>
         </div>
 
-        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-4 overflow-x-auto pb-6 min-h-[600px]">
             {COLUMNS.map((column) => {
               const items = boardLoading ? [] : (columnItems.get(column.id) ?? []);
