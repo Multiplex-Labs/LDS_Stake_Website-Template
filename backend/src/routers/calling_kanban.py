@@ -11,6 +11,7 @@ from ..utils import (
     get_current_proposal_status,
     create_kanban_update,
     update_proposal_status,
+    ensure_interview_row,
     user_has_calling,
     user_has_permission,
     get_bishops_ward
@@ -219,8 +220,9 @@ def force_advance_proposal(
     current_stage = get_current_proposal_status(proposal, session)
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=400, detail="Proposal is already at final stage")
-    # Create kanban update to next stage
     next_stage = KanbanStages(current_stage.value + 1)
+    if next_stage == KanbanStages.INTERVIEW:
+        ensure_interview_row(proposal_id, session)
     create_kanban_update(
         session=session,
         proposal_id=proposal_id,
@@ -228,14 +230,6 @@ def force_advance_proposal(
         from_stage=current_stage,
         to_stage=next_stage,
     )
-    # Mirror the CallingInterview row creation that update_proposal_status performs
-    if next_stage == KanbanStages.INTERVIEW:
-        existing = session.exec(
-            select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
-        ).first()
-        if not existing:
-            session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
-            session.commit()
     return {"detail": f"Proposal advanced to {next_stage}"}
 
 # CallingApproval endpoints
@@ -485,21 +479,10 @@ def revert_proposal(
 
     prev_stage = KanbanStages(current_stage.value - 1)
 
-    # Reset the interview whenever INTERVIEW is either end of the transition:
-    # - leaving INTERVIEW backward (current=INTERVIEW → prev=HC_APPROVAL): cancels it
-    # - entering INTERVIEW backward (current=SUSTAIN → prev=INTERVIEW): clears completion
-    # If no CallingInterview row exists (e.g. after a force-advance), create one
-    # so that schedule_interview does not 404.
+    # Reset the interview whenever INTERVIEW is either end of the transition so a
+    # new interviewer can be assigned. Committed atomically with the stage revert below.
     if KanbanStages.INTERVIEW in (current_stage, prev_stage):
-        statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
-        interview = session.exec(statement).first()
-        if interview:
-            interview.interviewer_id = None
-            interview.interview_date = None
-            session.add(interview)
-        else:
-            session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
-        session.commit()
+        ensure_interview_row(proposal_id, session, reset=True)
 
     create_kanban_update(
         session=session,

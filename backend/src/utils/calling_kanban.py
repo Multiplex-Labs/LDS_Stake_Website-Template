@@ -92,6 +92,10 @@ def is_stake_presidency(user: User) -> bool:
         callings = []
     return any(calling in ["stake president", "first counselor", "second counselor"] for calling in callings)
 
+def _latest_update(updates: list) -> KanbanUpdate:
+    return max(updates, key=lambda u: (u.updated_at, u.id))
+
+
 def _get_stage_last_entered_at(proposal_id: int, stage: KanbanStages, session: Session):
     """Return the updated_at of the most recent KanbanUpdate that moved this proposal TO stage."""
     updates = session.exec(
@@ -102,7 +106,7 @@ def _get_stage_last_entered_at(proposal_id: int, stage: KanbanStages, session: S
     ).all()
     if not updates:
         return None
-    return max(updates, key=lambda u: (u.updated_at, u.id)).updated_at
+    return _latest_update(updates).updated_at
 
 
 def get_current_proposal_status(proposal: CallingProposal, session: Session) -> KanbanStages:
@@ -118,7 +122,25 @@ def get_current_proposal_status(proposal: CallingProposal, session: Session) -> 
     ).all()
     if not updates:
         raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
-    return max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
+    return _latest_update(updates).to_stage
+
+
+def ensure_interview_row(proposal_id: int, session: Session, *, reset: bool = False) -> None:
+    """Ensure a CallingInterview row exists for the proposal.
+
+    If reset=True, clears interviewer_id and interview_date so a new interview
+    can be scheduled. Does not commit — caller is responsible for committing.
+    """
+    interview = session.exec(
+        select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    ).first()
+    if interview:
+        if reset:
+            interview.interviewer_id = None
+            interview.interview_date = None
+            session.add(interview)
+    else:
+        session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
 
 def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanStages, to_stage: KanbanStages, session: Session):
     """
@@ -193,15 +215,17 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
     """
     status = get_current_proposal_status(proposal, session)
     updates = []
+    all_approvals = session.exec(
+        select(CallingApproval).where(CallingApproval.proposal_id == proposal.id)
+    ).all()
+
     if status == KanbanStages.SP_APPROVAL:
         # Only count approvals submitted after the proposal last entered this stage.
         # This prevents historical pre-revert votes from auto-advancing on the next approval event.
         stage_entry_time = _get_stage_last_entered_at(proposal.id, KanbanStages.SP_APPROVAL, session)
         logger.debug(f"Checking SP approvals for proposal {proposal.id} since {stage_entry_time}")
-        statement = select(CallingApproval).where(CallingApproval.proposal_id == proposal.id)
-        approvals = session.exec(statement).all()
         sp_approvals = [
-            a for a in approvals
+            a for a in all_approvals
             if a.approver_user
             and is_stake_presidency(a.approver_user)
             and (stage_entry_time is None or a.created_at >= stage_entry_time)
@@ -222,18 +246,16 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
             status = KanbanStages.HC_APPROVAL
     if status == KanbanStages.HC_APPROVAL:
         stage_entry_time = _get_stage_last_entered_at(proposal.id, KanbanStages.HC_APPROVAL, session)
-        statement = select(CallingApproval).where(CallingApproval.proposal_id == proposal.id)
-        approvals = session.exec(statement).all()
         hc_approvals = [
-            a for a in approvals
+            a for a in all_approvals
             if a.approver_user
             and is_high_councilor(a.approver_user)
             and (stage_entry_time is None or a.created_at >= stage_entry_time)
         ]
         if len(hc_approvals) >= int(os.getenv("HC_APPROVAL_THRESHOLD", "3")) and all(a.approved for a in hc_approvals):
-            # updater should be most recent person to approve
             sorted_approvals = sorted(hc_approvals, key=lambda a: a.created_at, reverse=True)
             latest_approver_id = sorted_approvals[0].approver_id
+            ensure_interview_row(proposal.id, session)
             update = create_kanban_update(
                 proposal_id=proposal.id,
                 updater_id=latest_approver_id,
@@ -242,13 +264,6 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
                 session=session
             )
             updates.append(update)
-            # Create interview slots for the proposal
-            interview = CallingInterview(
-                proposal_id=proposal.id,
-                interviewer_id = None,
-            )
-            session.add(interview)
-            session.commit()
             status = KanbanStages.INTERVIEW
 
     if status == KanbanStages.INTERVIEW:

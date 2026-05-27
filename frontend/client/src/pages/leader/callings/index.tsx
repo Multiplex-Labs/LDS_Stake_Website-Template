@@ -172,44 +172,41 @@ export default function CallingSystem() {
 
   const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
 
-  function onStageAdvanceError(err: unknown) {
-    const raw = err instanceof Error ? err.message : "";
-    if (raw.startsWith("401")) {
-      toast.error("Session expired", { description: "Please log in again." });
-    } else if (raw.startsWith("400") || raw.startsWith("409")) {
-      toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
-    } else {
-      toast.error("Failed to advance stage", { description: "Please refresh and try again." });
-    }
+  function makeStageErrorHandler(action: string, on400?: { title: string; description: string }) {
+    return (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("401")) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (raw.startsWith("409")) {
+        toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+      } else if (raw.startsWith("400")) {
+        if (on400) {
+          toast.error(on400.title, { description: on400.description });
+        } else {
+          toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+        }
+      } else {
+        toast.error(`Failed to ${action}`, { description: "Please refresh and try again." });
+      }
+    };
   }
 
   const sustainMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/sustain`),
     onSuccess: () => { toast.success("Marked as sustained"); invalidateBoard(); },
-    onError: onStageAdvanceError,
+    onError: makeStageErrorHandler("advance stage"),
   });
 
   const setApartMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/set-apart`),
     onSuccess: () => { toast.success("Marked as set apart"); invalidateBoard(); },
-    onError: onStageAdvanceError,
+    onError: makeStageErrorHandler("advance stage"),
   });
 
   const revertMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/revert`),
     onSuccess: () => { toast.success("Stage reverted"); invalidateBoard(); },
-    onError: (err: unknown) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("400")) {
-        toast.error("Cannot revert", { description: "Proposal is already at its initial stage." });
-      } else if (raw.startsWith("401")) {
-        toast.error("Session expired", { description: "Please log in again." });
-      } else if (raw.startsWith("409")) {
-        toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
-      } else {
-        toast.error("Failed to revert stage", { description: "Please refresh and try again." });
-      }
-    },
+    onError: makeStageErrorHandler("revert stage", { title: "Cannot revert", description: "Proposal is already at its initial stage." }),
   });
 
   const dragMutating =
@@ -234,8 +231,7 @@ export default function CallingSystem() {
     if (targetColumnId === STAGE_KEY_TO_COLUMN_ID[stageKey]) return;
 
     const isBackward = PREV_COLUMN_ID[stageKey] === targetColumnId;
-    const isForward = NEXT_COLUMN_ID[stageKey] === targetColumnId;
-    if (!isBackward && !isForward) {
+    if (!isBackward && NEXT_COLUMN_ID[stageKey] !== targetColumnId) {
       toast.info("Cards can only move one stage at a time.");
       return;
     }
