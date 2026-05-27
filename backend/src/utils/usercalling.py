@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from typing import Optional
 
 HC_CALLING_NAME = "High Councilor"
+BISHOP_CALLING_NAME = "Bishop"
 
 def get_or_make_user_calling(
     calling_id: int,

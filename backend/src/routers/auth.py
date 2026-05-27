@@ -5,15 +5,16 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select, SQLModel, Field, delete
 from datetime import timedelta, datetime, timezone
 from logging import getLogger
-from ..models import User, ResponseSafeUser, UserSession
+from ..models import User, ResponseSafeUser, UserSession, UserMeResponse
 from ..utils import (
     CallingUser,
-    verify_password, 
+    verify_password,
     create_access_token,
     hash_password,
     get_current_user_session,
     format_datetime_http
                     )
+from ..utils.permissions import get_user_effective_permissions
 from ..db import get_session
 
 logger = getLogger("application")
@@ -23,15 +24,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-# Simple endpoint to get current user info
 @router.get("/me")
 def read_own_data(
-    current_user: ResponseSafeUser = Depends(CallingUser(
-        api_safe=True,
-        allow_unchanged_password=True
-        ))
-    ):
-    return current_user
+    current_user: User = Depends(CallingUser(allow_unchanged_password=True)),
+    session: Session = Depends(get_session),
+) -> UserMeResponse:
+    perms = get_user_effective_permissions(current_user, session)
+    return UserMeResponse(**ResponseSafeUser.from_user(current_user).model_dump(), permissions=perms)
 
 @router.post("/login")
 def login(

@@ -27,6 +27,7 @@ export interface AuthUser {
   bio: string | null;
   profile_image: string | null;
   callings: UserCalling[] | null;
+  permissions: number;
 }
 
 interface AuthState {
