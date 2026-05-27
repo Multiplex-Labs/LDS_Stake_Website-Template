@@ -36,3 +36,17 @@ export const STAGE_LABELS: Record<string, string> = Object.fromEntries(
 export const STAGE_BADGE_CLASS: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.map((s) => [s.key, s.badgeClass]),
 );
+
+export const Permission = {
+  MANAGE_USERS: 1,
+  MANAGE_CALLINGS: 2,
+  MANAGE_ASSIGNMENTS: 4,
+  MANAGE_SPEAKING_SCHEDULE: 8,
+  SUBMIT_CALLING_PROPOSALS: 16,
+  MANAGE_CALLING_PROPOSALS: 32,
+  VIEW_CALLING_PROPOSALS: 64,
+} as const;
+
+export function hasPermission(perms: number, flag: number): boolean {
+  return (perms & flag) !== 0;
+}

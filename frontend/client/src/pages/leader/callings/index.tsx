@@ -1,35 +1,148 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PlusCircle, FileCheck, Settings, Archive, ClipboardList } from "lucide-react";
+import { PlusCircle, FileCheck, Archive, ClipboardList } from "lucide-react";
 import { Link } from "wouter";
+import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
-import type { KanbanBoard, CallingProposal, Ward } from "@/types";
-import { KANBAN_STAGES } from "@/lib/constants";
+import { useAuthStore } from "@/stores/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { KANBAN_STAGES, Permission, hasPermission } from "@/lib/constants";
+import { CallingModal, type ProposalWithStage } from "./CallingModal";
+import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
 
 const STAGE_KEY_TO_COLUMN_ID: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.map((s) => [s.key, s.id]),
 );
 
+// Each stage key maps to the column id of the immediately next stage
+const NEXT_COLUMN_ID: Record<string, string> = {
+  "0": "pending-hc-approval",
+  "1": "pending-interview",
+  "2": "pending-sustainment",
+  "3": "pending-setting-apart",
+  "4": "pending-lcr",
+};
+
 const COLUMNS = KANBAN_STAGES.map((s) => ({
   id: s.id,
   title: `Pending ${s.label}`,
   cssClass: s.cssClass,
+  stageKey: s.key,
 }));
 
+// ---------- DraggableCard ----------
+
+interface DraggableCardProps {
+  item: CallingProposal;
+  stageKey: string;
+  canManage: boolean;
+  wardName: string;
+  onOpen: (item: CallingProposal, stageKey: string) => void;
+}
+
+function DraggableCard({ item, stageKey, canManage, wardName, onOpen }: DraggableCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: item.id,
+    data: { item, stageKey },
+    disabled: !canManage,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      <Card
+        className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-4 ${
+          item.is_release ? "border-l-destructive" : "border-l-primary"
+        }`}
+        onClick={() => onOpen(item, stageKey)}
+      >
+        <CardContent className="p-3 space-y-2">
+          <div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Member Name</div>
+            <div className="font-semibold text-sm">{item.fname} {item.lname}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Calling</div>
+            <div className="text-sm">{item.proposed_calling}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ward</div>
+            <div className="text-sm">{wardName}</div>
+          </div>
+          <div className="flex gap-3 text-xs text-muted-foreground pt-0.5">
+            <span>Submitted {new Date(item.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            <span>Updated {new Date(item.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------- DroppableColumn ----------
+
+interface DroppableColumnProps {
+  id: string;
+  children: React.ReactNode;
+}
+
+function DroppableColumn({ id, children }: DroppableColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 rounded-b-lg border border-t-0 p-2 space-y-2 transition-colors ${
+        isOver ? "ring-2 ring-inset ring-primary/30" : ""
+      }`}
+      style={{
+        backgroundColor: isOver
+          ? "color-mix(in srgb, var(--stage-bg) 85%, var(--primary) 15%)"
+          : "var(--stage-bg)",
+        borderColor: "var(--stage-border)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------- CallingSystem ----------
+
 export default function CallingSystem() {
+  const user = useAuthStore((s) => s.user);
+  const canManage = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+
   const { data: board = {}, isLoading: boardLoading } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
   const { data: wards = [] } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+  const { data: users = [] } = useQuery<ApiUser[]>({
+    queryKey: ["/api/users/"],
+  });
 
   const wardMap = useWardMap(wards);
 
-  // Map board (numeric key) → column items
+  const [selectedProposal, setSelectedProposal] = useState<ProposalWithStage | null>(null);
+  const [activeCard, setActiveCard] = useState<ProposalWithStage | null>(null);
+
   const columnItems = useMemo(() => {
     const map = new Map<string, CallingProposal[]>();
     for (const [key, proposals] of Object.entries(board)) {
@@ -38,6 +151,70 @@ export default function CallingSystem() {
     }
     return map;
   }, [board]);
+
+  function openModal(item: CallingProposal, stageKey: string) {
+    setSelectedProposal({ ...item, stageKey });
+  }
+
+  const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+
+  function onStageAdvanceError(err: unknown) {
+    const raw = err instanceof Error ? err.message : "";
+    if (raw.startsWith("401")) {
+      toast.error("Session expired", { description: "Please log in again." });
+    } else if (raw.startsWith("400") || raw.startsWith("409")) {
+      toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+    } else {
+      toast.error("Failed to advance stage", { description: "Please refresh and try again." });
+    }
+  }
+
+  const sustainMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/sustain`),
+    onSuccess: () => { toast.success("Marked as sustained"); invalidateBoard(); },
+    onError: onStageAdvanceError,
+  });
+
+  const setApartMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/set-apart`),
+    onSuccess: () => { toast.success("Marked as set apart"); invalidateBoard(); },
+    onError: onStageAdvanceError,
+  });
+
+  const dragMutating = sustainMutation.isPending || setApartMutation.isPending;
+
+  function handleDragStart(event: DragStartEvent) {
+    const data = event.active.data.current;
+    if (!data) return;
+    const { item, stageKey } = data as { item: CallingProposal; stageKey: string };
+    setActiveCard({ ...item, stageKey });
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveCard(null);
+    if (!event.over || dragMutating) return;
+
+    const data = event.active.data.current;
+    if (!data) return;
+    const { item, stageKey } = data as { item: CallingProposal; stageKey: string };
+    const targetColumnId = event.over.id as string;
+
+    // Same column — no-op
+    if (targetColumnId === STAGE_KEY_TO_COLUMN_ID[stageKey]) return;
+
+    // Must be exactly the next stage
+    if (NEXT_COLUMN_ID[stageKey] !== targetColumnId) return;
+
+    // Stages 0, 1, 2 → open modal (auto-advance or interview constraints)
+    if (stageKey === "0" || stageKey === "1" || stageKey === "2") {
+      openModal(item, stageKey);
+      return;
+    }
+
+    // Stages 3, 4 → direct API advance (stage 5→done has no board column to drop on)
+    if (stageKey === "3") sustainMutation.mutate(item.id);
+    else if (stageKey === "4") setApartMutation.mutate(item.id);
+  }
 
   return (
     <Layout>
@@ -64,67 +241,62 @@ export default function CallingSystem() {
                 Sustaining Prep
               </Button>
             </Link>
-            <Link href="/leader/callings/manage">
-              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <Settings className="h-4 w-4" />
-                Manage
-              </Button>
-            </Link>
           </div>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto pb-6 min-h-[600px]">
-          {COLUMNS.map((column) => {
-            const items = boardLoading ? [] : (columnItems.get(column.id) ?? []);
-            return (
-              <div key={column.id} className={`min-w-[280px] w-[280px] flex flex-col ${column.cssClass}`}>
-                <div className="p-3 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm"
-                  style={{ borderBottomColor: "var(--stage-border)" }}>
-                  <span className="line-clamp-2">{column.title}</span>
-                  <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border shrink-0 ml-2">
-                    {boardLoading ? "…" : items.length}
-                  </span>
+        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex gap-4 overflow-x-auto pb-6 min-h-[600px]">
+            {COLUMNS.map((column) => {
+              const items = boardLoading ? [] : (columnItems.get(column.id) ?? []);
+              return (
+                <div key={column.id} className={`min-w-[280px] w-[280px] flex flex-col ${column.cssClass}`}>
+                  <div
+                    className="p-3 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm"
+                    style={{ borderBottomColor: "var(--stage-border)" }}
+                  >
+                    <span className="line-clamp-2">{column.title}</span>
+                    <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border shrink-0 ml-2">
+                      {boardLoading ? "…" : items.length}
+                    </span>
+                  </div>
+                  <DroppableColumn id={column.id}>
+                    {boardLoading ? (
+                      <div className="h-24 flex items-center justify-center text-muted-foreground/40 text-sm">
+                        Loading…
+                      </div>
+                    ) : items.length > 0 ? (
+                      items.map((item) => (
+                        <DraggableCard
+                          key={item.id}
+                          item={item}
+                          stageKey={column.stageKey}
+                          canManage={canManage}
+                          wardName={wardMap.get(item.ward_id) ?? `Ward ${item.ward_id}`}
+                          onOpen={openModal}
+                        />
+                      ))
+                    ) : (
+                      <div className="h-24 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center text-muted-foreground/40 text-sm">
+                        No items
+                      </div>
+                    )}
+                  </DroppableColumn>
                 </div>
-                <div className="flex-1 rounded-b-lg border border-t-0 p-2 space-y-2"
-                  style={{ backgroundColor: "var(--stage-bg)", borderColor: "var(--stage-border)" }}>
-                  {boardLoading ? (
-                    <div className="h-24 flex items-center justify-center text-muted-foreground/40 text-sm">
-                      Loading…
-                    </div>
-                  ) : items.length > 0 ? (
-                    items.map((item) => (
-                      <Card
-                        key={item.id}
-                        className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-4 ${
-                          item.is_release ? "border-l-destructive" : "border-l-primary"
-                        }`}
-                      >
-                        <CardContent className="p-3 space-y-2">
-                          <div>
-                            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Member Name</div>
-                            <div className="font-semibold text-sm">{item.fname} {item.lname}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Calling</div>
-                            <div className="text-sm">{item.proposed_calling}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ward</div>
-                            <div className="text-sm">{wardMap.get(item.ward_id) ?? `Ward ${item.ward_id}`}</div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  ) : (
-                    <div className="h-24 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center text-muted-foreground/40 text-sm">
-                      No items
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          <DragOverlay>
+            {activeCard ? (
+              <Card className={`shadow-lg border-l-4 w-[280px] opacity-95 ${activeCard.is_release ? "border-l-destructive" : "border-l-primary"}`}>
+                <CardContent className="p-3 space-y-1">
+                  <div className="font-semibold text-sm">{activeCard.fname} {activeCard.lname}</div>
+                  <div className="text-sm text-muted-foreground">{activeCard.proposed_calling}</div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
         <div className="flex justify-end mt-4">
           <Link href="/leader/callings/archive">
@@ -135,6 +307,14 @@ export default function CallingSystem() {
           </Link>
         </div>
       </div>
+
+      <CallingModal
+        proposal={selectedProposal}
+        canManage={canManage}
+        wards={wards}
+        users={users}
+        onClose={() => setSelectedProposal(null)}
+      />
     </Layout>
   );
 }

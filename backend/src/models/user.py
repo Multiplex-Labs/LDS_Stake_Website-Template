@@ -85,6 +85,9 @@ class ResponseSafeUser(BaseModel):
             callings=user.callings
         )
     
+class UserMeResponse(ResponseSafeUser):
+    permissions: int = 0
+
 class RequestSafeUser(BaseModel):
     email: str
     force_password_reset: bool = Field(default=True)
