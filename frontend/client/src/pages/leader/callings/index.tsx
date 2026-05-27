@@ -33,6 +33,10 @@ const NEXT_COLUMN_ID: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.slice(0, -1).map((s, i) => [s.key, KANBAN_STAGES[i + 1].id]),
 );
 
+const PREV_COLUMN_ID: Record<string, string> = Object.fromEntries(
+  KANBAN_STAGES.slice(1).map((s, i) => [s.key, KANBAN_STAGES[i].id]),
+);
+
 const SK_SP_APPROVAL = KANBAN_STAGES[0].key;
 const SK_HC_APPROVAL = KANBAN_STAGES[1].key;
 const SK_INTERVIEW   = KANBAN_STAGES[2].key;
@@ -103,19 +107,21 @@ function DraggableCard({ item, stageKey, canManage, wardName, onOpen }: Draggabl
 
 interface DroppableColumnProps {
   id: string;
+  isValidTarget: boolean;
   children: React.ReactNode;
 }
 
-function DroppableColumn({ id, children }: DroppableColumnProps) {
+function DroppableColumn({ id, isValidTarget, children }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
+  const highlight = isOver && isValidTarget;
   return (
     <div
       ref={setNodeRef}
       className={`flex-1 rounded-b-lg border border-t-0 p-2 space-y-2 transition-colors ${
-        isOver ? "ring-2 ring-inset ring-primary/30" : ""
+        highlight ? "ring-2 ring-inset ring-primary/30" : ""
       }`}
       style={{
-        backgroundColor: isOver
+        backgroundColor: highlight
           ? "color-mix(in srgb, var(--stage-bg) 85%, var(--primary) 15%)"
           : "var(--stage-bg)",
         borderColor: "var(--stage-border)",
@@ -166,30 +172,53 @@ export default function CallingSystem() {
 
   const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
 
-  function onStageAdvanceError(err: unknown) {
-    const raw = err instanceof Error ? err.message : "";
-    if (raw.startsWith("401")) {
-      toast.error("Session expired", { description: "Please log in again." });
-    } else if (raw.startsWith("400") || raw.startsWith("409")) {
-      toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
-    } else {
-      toast.error("Failed to advance stage", { description: "Please refresh and try again." });
-    }
+  function makeStageErrorHandler(action: string, on400?: { title: string; description: string }) {
+    return (err: unknown) => {
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("401")) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (raw.startsWith("409")) {
+        toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+      } else if (raw.startsWith("400")) {
+        if (on400) {
+          toast.error(on400.title, { description: on400.description });
+        } else {
+          toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
+        }
+      } else {
+        toast.error(`Failed to ${action}`, { description: "Please refresh and try again." });
+      }
+    };
   }
 
   const sustainMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/sustain`),
     onSuccess: () => { toast.success("Marked as sustained"); invalidateBoard(); },
-    onError: onStageAdvanceError,
+    onError: makeStageErrorHandler("advance stage"),
   });
 
   const setApartMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/set-apart`),
     onSuccess: () => { toast.success("Marked as set apart"); invalidateBoard(); },
-    onError: onStageAdvanceError,
+    onError: makeStageErrorHandler("advance stage"),
   });
 
-  const dragMutating = sustainMutation.isPending || setApartMutation.isPending;
+  const revertMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/revert`),
+    onSuccess: () => { toast.success("Stage reverted"); invalidateBoard(); },
+    onError: makeStageErrorHandler("revert stage", { title: "Cannot revert", description: "Proposal is already at its initial stage." }),
+  });
+
+  const advanceMutation = useMutation({
+    mutationFn: ({ id, fromStage }: { id: number; fromStage: string }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/advance?from_stage=${fromStage}`),
+    onSuccess: () => { toast.success("Stage advanced"); invalidateBoard(); },
+    onError: makeStageErrorHandler("advance stage", { title: "Cannot advance", description: "This proposal is already at its final stage." }),
+  });
+
+  const dragMutating =
+    sustainMutation.isPending || setApartMutation.isPending ||
+    revertMutation.isPending || advanceMutation.isPending;
 
   function handleDragStart(event: DragStartEvent) {
     const data = event.active.data.current;
@@ -207,14 +236,28 @@ export default function CallingSystem() {
     const { item, stageKey } = data as { item: CallingProposal; stageKey: string };
     const targetColumnId = event.over.id as string;
 
-    // Same column — no-op
     if (targetColumnId === STAGE_KEY_TO_COLUMN_ID[stageKey]) return;
 
-    // Must be exactly the next stage
-    if (NEXT_COLUMN_ID[stageKey] !== targetColumnId) return;
+    const isBackward = PREV_COLUMN_ID[stageKey] === targetColumnId;
+    if (!isBackward && NEXT_COLUMN_ID[stageKey] !== targetColumnId) {
+      toast.info("Cards can only move one stage at a time.");
+      return;
+    }
 
+    if (isBackward) {
+      // Releases start at INTERVIEW — cannot revert below that
+      const minStageKey = item.is_release ? SK_INTERVIEW : SK_SP_APPROVAL;
+      if (stageKey === minStageKey) {
+        toast.info("Proposal is already at its initial stage.");
+        return;
+      }
+      revertMutation.mutate(item.id);
+      return;
+    }
+
+    // Forward movement
     if (stageKey === SK_SP_APPROVAL || stageKey === SK_HC_APPROVAL) {
-      toast.info("Approvals for this stage are handled on the Review Callings page.");
+      advanceMutation.mutate({ id: item.id, fromStage: stageKey });
       return;
     }
 
@@ -271,7 +314,10 @@ export default function CallingSystem() {
                       {boardLoading ? "…" : boardError ? "!" : items.length}
                     </span>
                   </div>
-                  <DroppableColumn id={column.id}>
+                  <DroppableColumn
+                    id={column.id}
+                    isValidTarget={!activeCard || NEXT_COLUMN_ID[activeCard.stageKey] === column.id || PREV_COLUMN_ID[activeCard.stageKey] === column.id}
+                  >
                     {boardLoading ? (
                       <div className="h-24 flex items-center justify-center text-muted-foreground/40 text-sm">
                         Loading…
