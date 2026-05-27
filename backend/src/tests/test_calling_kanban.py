@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 
 from src.models import (
     CallingProposal, CallingInterview, Calling, UserCalling,
-    KanbanStages,
+    KanbanStages, Permission, Permissions,
 )
 from src.utils.calling_kanban import get_current_proposal_status
 
@@ -67,7 +67,7 @@ def test_create_get_list_proposal(client: TestClient, auth_headers, db_session: 
     assert got["id"] == proposal_id
 
 
-def test_update_proposal_and_permissions(client: TestClient, auth_headers, userpass):
+def test_update_proposal_and_permissions(client: TestClient, auth_headers, userpass, db_session: Session):
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
     assert r.status_code == 200
     proposal = r.json()
@@ -89,11 +89,33 @@ def test_update_proposal_and_permissions(client: TestClient, auth_headers, userp
     unauthorized_token = login_client(client, unauthorized_user.email, unauthorized_password)
     unauthorized_headers = {"Authorization": f"Bearer {unauthorized_token}"}
 
-    # change submitter to ensure permission check path is triggered
-    proposal_update["submitter"] = updated["submitter"]
-
     r = client.put(f"/calling-kanban/proposals/{proposal_id}", json=proposal_update, headers=unauthorized_headers)
     assert r.status_code == 403
+
+    # A user with MANAGE_CALLING_PROPOSALS (but NOT SUBMIT_CALLING_PROPOSALS) must
+    # also be able to update the proposal. This guards against the regression where
+    # the endpoint required SUBMIT permission at the outer CallingUser guard, which
+    # blocked managers who only held the MANAGE permission.
+    manager_user, manager_password = userpass
+    manager_perm = Permissions(
+        foreign_id=str(manager_user.id),
+        is_calling=False,
+        scopes=int(Permission.MANAGE_CALLING_PROPOSALS),  # MANAGE only, not SUBMIT
+    )
+    db_session.add(manager_perm)
+    db_session.commit()
+
+    manager_token = login_client(client, manager_user.email, manager_password)
+    manager_headers = {"Authorization": f"Bearer {manager_token}"}
+
+    proposal_update["fname"] = "ManagedJane"
+    r = client.put(f"/calling-kanban/proposals/{proposal_id}", json=proposal_update, headers=manager_headers)
+    assert r.status_code == 200, f"Manager with MANAGE_CALLING_PROPOSALS should be able to update: {r.text}"
+    assert r.json()["fname"] == "ManagedJane"
+
+    # cleanup the permission row added above
+    db_session.delete(manager_perm)
+    db_session.commit()
 
 
 def test_comment_crud(client: TestClient, auth_headers):

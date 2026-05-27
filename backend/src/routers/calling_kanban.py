@@ -1,10 +1,12 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from collections import defaultdict
+from sqlmodel import Session, col, select
 from datetime import datetime, timezone
 
 from ..utils import (
     CallingUser,
+    BISHOP_CALLING_NAME,
     can_approve_proposal,
     get_current_proposal_status,
     create_kanban_update,
@@ -27,6 +29,16 @@ from ..models import (
 
 logger = getLogger("application")
 router = APIRouter(prefix="/calling-kanban", tags=["calling-kanban"])
+
+
+def _proposal_statement_for_user(current_user: User, session: Session):
+    """Return a SELECT scoped to what current_user is allowed to see, or raise 403."""
+    if user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session):
+        return select(CallingProposal)
+    if user_has_calling(current_user, BISHOP_CALLING_NAME):
+        bishop_ward = get_bishops_ward(session, current_user)
+        return select(CallingProposal).where(CallingProposal.ward_id == bishop_ward.id)
+    raise HTTPException(status_code=403, detail="Not authorized to view calling proposals")
 
 
 # CallingProposal endpoints
@@ -73,20 +85,9 @@ def list_proposals(
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser())
 ):
-    """List all calling proposals"""
+    """List calling proposals visible to current_user."""
     # TODO: Who should be allowed to view calling proposals?
-    # User must either be a bishop or have permission to view proposals
-    if user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session):
-        logger.debug(f"User {current_user.id} is listing all calling proposals with permission {Permission.VIEW_CALLING_PROPOSALS}")
-        statement = select(CallingProposal)
-    elif user_has_calling(current_user, "Bishop"):
-        # Bishops can only view proposals from their own ward
-        bishop_ward = get_bishops_ward(session, current_user)
-        logger.debug(f"User {current_user.id} is listing calling proposals for their ward as they have the Bishop calling")
-        statement = select(CallingProposal).where(CallingProposal.ward_id == bishop_ward.id)
-    else:
-        raise HTTPException(status_code=403, detail="Not authorized to view calling proposals")
-    proposals = session.exec(statement).all()
+    proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
     return proposals
 
 
@@ -98,8 +99,7 @@ def get_proposal(
 ):
     """Get a specific calling proposal by ID"""
     proposal = session.get(CallingProposal, proposal_id)
-    if user_has_calling(current_user, "Bishop"):
-        # Bishops can only view proposals from their own ward
+    if user_has_calling(current_user, BISHOP_CALLING_NAME):
         bishop_ward = get_bishops_ward(session, current_user)
         if not proposal or proposal.ward_id != bishop_ward.ward_id:
             raise HTTPException(status_code=404, detail="Proposal not found")
@@ -113,17 +113,16 @@ def update_proposal(
     proposal_id: int,
     proposal_data: CallingProposal,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.SUBMIT_CALLING_PROPOSALS))
+    current_user: User = Depends(CallingUser())
 ):
-    """Update an existing calling proposal"""
-    # TODO: Should updating a calling proposal reset its stage back to submitted?
+    """Update an existing calling proposal."""
     logger.debug(f"User {current_user.id} is attempting to update calling proposal with ID {proposal_id}, submitter {proposal_data.submitter}, and data: {proposal_data}")
-    if current_user.id != proposal_data.submitter and not user_has_permission(current_user, Permission.MANAGE_CALLING_PROPOSALS, session):
-        raise HTTPException(status_code=403, detail="Not authorized to update this proposal")
+    # Compare against DB submitter — proposal_data.submitter is client-supplied and untrusted.
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
-    # Update fields
+    if current_user.id != proposal.submitter and not user_has_permission(current_user, Permission.MANAGE_CALLING_PROPOSALS, session):
+        raise HTTPException(status_code=403, detail="Not authorized to update this proposal")
     proposal.fname = proposal_data.fname
     proposal.lname = proposal_data.lname
     proposal.spouse_name = proposal_data.spouse_name
@@ -454,11 +453,26 @@ def get_kanban_board(
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser())
 ):
-    """Get kanban board view with proposals grouped by stage"""
-    proposals = session.exec(select(CallingProposal)).all()
-    board = {stage: [] for stage in KanbanStages}
+    """Return active proposals grouped by kanban stage; access mirrors list_proposals."""
+    proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
+    board: dict[KanbanStages, list[CallingProposal]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
+    if not proposals:
+        return board
+
+    proposal_ids = [p.id for p in proposals]
+    all_updates = session.exec(
+        select(KanbanUpdate).where(col(KanbanUpdate.proposal_id).in_(proposal_ids))
+    ).all()
+    updates_by_proposal: dict[int, list[KanbanUpdate]] = defaultdict(list)
+    for u in all_updates:
+        updates_by_proposal[u.proposal_id].append(u)
+
     for proposal in proposals:
-        stage = get_current_proposal_status(proposal, session)
-        board[stage].append(proposal)
+        updates = updates_by_proposal.get(proposal.id, [])
+        if not updates:
+            continue
+        stage = max(updates, key=lambda u: u.to_stage.value).to_stage
+        if stage in board:
+            board[stage].append(proposal)
     return board
 

@@ -128,7 +128,7 @@ export default function CallingSystem() {
   const user = useAuthStore((s) => s.user);
   const canManage = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
 
-  const { data: board = {}, isLoading: boardLoading } = useQuery<KanbanBoard>({
+  const { data: board = {}, isLoading: boardLoading, isError: boardError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
   const { data: wards = [] } = useQuery<Ward[]>({
@@ -256,13 +256,17 @@ export default function CallingSystem() {
                   >
                     <span className="line-clamp-2">{column.title}</span>
                     <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border shrink-0 ml-2">
-                      {boardLoading ? "…" : items.length}
+                      {boardLoading ? "…" : boardError ? "!" : items.length}
                     </span>
                   </div>
                   <DroppableColumn id={column.id}>
                     {boardLoading ? (
                       <div className="h-24 flex items-center justify-center text-muted-foreground/40 text-sm">
                         Loading…
+                      </div>
+                    ) : boardError ? (
+                      <div className="h-24 flex items-center justify-center text-destructive/60 text-sm">
+                        Could not load
                       </div>
                     ) : items.length > 0 ? (
                       items.map((item) => (

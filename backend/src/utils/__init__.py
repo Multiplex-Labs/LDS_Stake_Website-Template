@@ -18,7 +18,7 @@ from .time import format_datetime_http
 
 from .permissions import user_has_permission
 
-from .usercalling import get_or_make_user_calling, get_or_make_hc_assignment, user_has_calling, HC_CALLING_NAME
+from .usercalling import get_or_make_user_calling, get_or_make_hc_assignment, user_has_calling, HC_CALLING_NAME, BISHOP_CALLING_NAME
 
 from .speaking_assignments import (
     load_speaking_schedule,

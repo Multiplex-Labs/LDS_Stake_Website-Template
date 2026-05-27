@@ -129,7 +129,17 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
         updated_at: original.updated_at,
       }),
     onSuccess: () => { toast.success("Proposal updated"); invalidateBoard(); closeDialog(); },
-    onError: () => toast.error("Update failed", { description: "Could not save changes." }),
+    onError: (err: unknown) => {
+      console.error("[CallingModal] updateMutation error:", err);
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) {
+        toast.error("Not authorized", { description: "You don't have permission to edit this proposal." });
+      } else if (raw.startsWith("401")) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Update failed", { description: "Could not save changes." });
+      }
+    },
   });
 
   const scheduleInterviewMutation = useMutation({
