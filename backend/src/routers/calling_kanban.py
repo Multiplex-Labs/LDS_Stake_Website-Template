@@ -220,14 +220,22 @@ def force_advance_proposal(
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=400, detail="Proposal is already at final stage")
     # Create kanban update to next stage
-    next_stage = KanbanStages(current_stage + 1)
+    next_stage = KanbanStages(current_stage.value + 1)
     create_kanban_update(
         session=session,
         proposal_id=proposal_id,
         updater_id=current_user.id,
         from_stage=current_stage,
-        to_stage=next_stage
+        to_stage=next_stage,
     )
+    # Mirror the CallingInterview row creation that update_proposal_status performs
+    if next_stage == KanbanStages.INTERVIEW:
+        existing = session.exec(
+            select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+        ).first()
+        if not existing:
+            session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
+            session.commit()
     return {"detail": f"Proposal advanced to {next_stage}"}
 
 # CallingApproval endpoints
@@ -447,6 +455,62 @@ def update_lcr_proposal(
     )
     return proposal
 
+@router.post("/proposals/{proposal_id}/revert", response_model=CallingProposal)
+def revert_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Revert a calling proposal one stage backwards.
+
+    Releases may not be reverted below INTERVIEW (their starting stage).
+    New callings may not be reverted below SP_APPROVAL.
+    DONE proposals are terminal and cannot be reverted.
+    Reverting to INTERVIEW resets the CallingInterview record so a new
+    interviewer can be assigned.
+    """
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    current_stage = get_current_proposal_status(proposal, session)
+
+    if current_stage == KanbanStages.DONE:
+        raise HTTPException(status_code=400, detail="Cannot revert a completed proposal")
+
+    # Releases start at INTERVIEW; new callings start at SP_APPROVAL
+    min_stage = KanbanStages.INTERVIEW if proposal.is_release else KanbanStages.SP_APPROVAL
+    if current_stage == min_stage:
+        raise HTTPException(status_code=400, detail="Proposal is already at its initial stage")
+
+    prev_stage = KanbanStages(current_stage.value - 1)
+
+    # Reset the interview whenever INTERVIEW is either end of the transition:
+    # - leaving INTERVIEW backward (current=INTERVIEW → prev=HC_APPROVAL): cancels it
+    # - entering INTERVIEW backward (current=SUSTAIN → prev=INTERVIEW): clears completion
+    # If no CallingInterview row exists (e.g. after a force-advance), create one
+    # so that schedule_interview does not 404.
+    if KanbanStages.INTERVIEW in (current_stage, prev_stage):
+        statement = select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+        interview = session.exec(statement).first()
+        if interview:
+            interview.interviewer_id = None
+            interview.interview_date = None
+            session.add(interview)
+        else:
+            session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
+        session.commit()
+
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=current_stage,
+        to_stage=prev_stage,
+    )
+    return proposal
+
+
 # Kanban board view
 @router.get("/board")
 def get_kanban_board(
@@ -471,7 +535,7 @@ def get_kanban_board(
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
             continue
-        stage = max(updates, key=lambda u: u.to_stage.value).to_stage
+        stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
             board[stage].append(proposal)
     return board
