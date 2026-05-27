@@ -33,8 +33,11 @@ const NEXT_COLUMN_ID: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.slice(0, -1).map((s, i) => [s.key, KANBAN_STAGES[i + 1].id]),
 );
 
-const [SK_SP_APPROVAL, SK_HC_APPROVAL, SK_INTERVIEW, SK_SUSTAIN, SK_SET_APART] =
-  KANBAN_STAGES.map((s) => s.key);
+const SK_SP_APPROVAL = KANBAN_STAGES[0].key;
+const SK_HC_APPROVAL = KANBAN_STAGES[1].key;
+const SK_INTERVIEW   = KANBAN_STAGES[2].key;
+const SK_SUSTAIN     = KANBAN_STAGES[3].key;
+const SK_SET_APART   = KANBAN_STAGES[4].key;
 
 const COLUMNS = KANBAN_STAGES.map((s) => ({
   id: s.id,
@@ -197,7 +200,7 @@ export default function CallingSystem() {
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveCard(null);
-    if (!event.over || dragMutating) return;
+    if (!event.over || dragMutating || !canManage) return;
 
     const data = event.active.data.current;
     if (!data) return;
