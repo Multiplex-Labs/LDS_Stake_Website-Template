@@ -349,6 +349,11 @@ def complete_interview(
     interview = session.exec(statement).first()
     if not interview:
         raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if get_current_proposal_status(proposal, session) != KanbanStages.INTERVIEW:
+        raise HTTPException(status_code=400, detail="Proposal is not at interview stage")
     if interview.interviewer_id is None:
         raise HTTPException(status_code=400, detail="Interview has not been scheduled with an interviewer yet")
     interview.interview_date = completion_date or datetime.now(timezone.utc)

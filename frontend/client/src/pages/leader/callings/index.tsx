@@ -247,7 +247,10 @@ export default function CallingSystem() {
     if (isBackward) {
       // Releases start at INTERVIEW — cannot revert below that
       const minStageKey = item.is_release ? SK_INTERVIEW : SK_SP_APPROVAL;
-      if (stageKey === minStageKey) return;
+      if (stageKey === minStageKey) {
+        toast.info("Proposal is already at its initial stage.");
+        return;
+      }
       revertMutation.mutate(item.id);
       return;
     }

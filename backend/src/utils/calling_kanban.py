@@ -213,16 +213,20 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
         - May create CallingInterview records
         - Modifies the proposal's effective status through updates
     """
-    status = get_current_proposal_status(proposal, session)
+    kanban_updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal.id)
+    ).all()
+    if not kanban_updates:
+        return []
+    status = _latest_update(kanban_updates).to_stage
     updates = []
     all_approvals = session.exec(
         select(CallingApproval).where(CallingApproval.proposal_id == proposal.id)
     ).all()
 
     if status == KanbanStages.SP_APPROVAL:
-        # Only count approvals submitted after the proposal last entered this stage.
-        # This prevents historical pre-revert votes from auto-advancing on the next approval event.
-        stage_entry_time = _get_stage_last_entered_at(proposal.id, KanbanStages.SP_APPROVAL, session)
+        sp_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.SP_APPROVAL]
+        stage_entry_time = _latest_update(sp_entries).updated_at if sp_entries else None
         logger.debug(f"Checking SP approvals for proposal {proposal.id} since {stage_entry_time}")
         sp_approvals = [
             a for a in all_approvals
@@ -243,9 +247,12 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
                 session=session
             )
             updates.append(update)
+            kanban_updates = list(kanban_updates) + [update]
             status = KanbanStages.HC_APPROVAL
+
     if status == KanbanStages.HC_APPROVAL:
-        stage_entry_time = _get_stage_last_entered_at(proposal.id, KanbanStages.HC_APPROVAL, session)
+        hc_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.HC_APPROVAL]
+        stage_entry_time = _latest_update(hc_entries).updated_at if hc_entries else None
         hc_approvals = [
             a for a in all_approvals
             if a.approver_user

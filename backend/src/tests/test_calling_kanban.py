@@ -447,6 +447,60 @@ def test_revert_release_cannot_go_below_interview(client: TestClient, auth_heade
     assert r.status_code == 400
 
 
+def test_revert_sustain_to_interview_resets_interview(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    """Reverting from SUSTAIN to INTERVIEW clears the CallingInterview record."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Advance to INTERVIEW
+    client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → HC_APPROVAL
+    client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → INTERVIEW
+
+    # Schedule and complete the interview so the proposal reaches SUSTAIN
+    interviewer, _ = create_user()
+    db_session.add(interviewer)
+    db_session.commit()
+    db_session.refresh(interviewer)
+
+    r = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/interview?interviewer_id={interviewer.id}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/interview/complete",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.SUSTAIN
+    )
+
+    # Revert from SUSTAIN → INTERVIEW
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.INTERVIEW
+    )
+
+    interview = db_session.exec(
+        select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    ).first()
+    assert interview is not None
+    assert interview.interviewer_id is None
+    assert interview.interview_date is None
+
+
 def test_kanban_flow_release_call(
         client: TestClient,
         auth_headers,
