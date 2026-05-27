@@ -128,7 +128,8 @@ export function UserAdminContent() {
   const [resetPasswordErrors, setResetPasswordErrors] = useState<{ password?: string; confirm?: string }>({});
 
   // --- Edit dialog state ---
-  const [editingUser, setEditingUser] = useState<ApiUser | null>(null);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const editingUser = useMemo(() => users.find((u) => u.id === editingUserId) ?? null, [users, editingUserId]);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editCallingId, setEditCallingId] = useState<number | "">("");
   const [editSlotNumber, setEditSlotNumber] = useState<number | "">("");
@@ -483,7 +484,7 @@ export function UserAdminContent() {
   };
 
   const handleOpenEdit = (user: ApiUser) => {
-    setEditingUser(user);
+    setEditingUserId(user.id);
     setEditForm({
       fname: user.fname,
       lname: user.lname,
@@ -498,7 +499,7 @@ export function UserAdminContent() {
 
   const handleCloseEdit = () => {
     releaseCropState();
-    setEditingUser(null);
+    setEditingUserId(null);
     setEditForm(null);
     setEditCallingId("");
     setEditSlotNumber("");
