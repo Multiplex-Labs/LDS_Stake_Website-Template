@@ -16,6 +16,8 @@ from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import Modal, TextInput, View, button, Button
 from discord.ext.commands import Cog, Context, hybrid_command
 
+from ..utils import ensure_user_roles
+
 from ..bot import LDSStakeBot
 
 from ...db import get_session
@@ -99,9 +101,10 @@ class UserMappingCog(Cog):
         self.bot.logger.info("Registering user-mapping listeners")
         self.logger = self.bot.logger.getChild("UserMappingCog")
 
-    async def _welcome_channel_already_sent(self, channel: TextChannel) -> bool:
+    async def _clear_welcome_channel(self, channel: TextChannel) -> bool:
         async for message in channel.history(limit=100):
             if message.author == self.bot.user and self.WELCOME_MESSAGE_MARKER in (message.content or ""):
+                await message.delete()
                 return True
         return False
 
@@ -117,13 +120,13 @@ class UserMappingCog(Cog):
 
             if welcome_channel is not None:
                 try:
-                    if not await self._welcome_channel_already_sent(welcome_channel):
-                        welcome_view = WizardView()
-                        self.bot.add_view(welcome_view)
-                        await welcome_channel.send(
-                            "Welcome to the server! To complete registration, click the button below or use `/update_email`.",
-                            view=welcome_view,
-                        )
+                    await self._clear_welcome_channel(welcome_channel)
+                    welcome_view = WizardView()
+                    self.bot.add_view(welcome_view)
+                    await welcome_channel.send(
+                        "Welcome to the server! To complete registration, click the button below or use `/update_email`.",
+                        view=welcome_view,
+                    )
                 except Exception:
                     self.logger.exception(
                         "Failed to send welcome message in channel %s in guild %s.",
@@ -162,6 +165,31 @@ class UserMappingCog(Cog):
     @hybrid_command(name="update_email", description="Update your email registration for stake website syncing")
     async def update_email(self, interaction: Context, email: str):
         self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) initiated email update process.")
+        be_user = await self.bot.backend_client.get_user_by_email(email)
+        if not be_user:
+            await interaction.send(f"The email `{email}` is not registered on the stake website. Please register on the website first or provide a different email address.", ephemeral=True)
+            self.logger.warning(f"Email update failed for user {interaction.author.id}: email {email} not found in backend.")
+            return
+        # Set user nickname to match the name on the stake website
+        guilds = self.bot.guilds
+        for guild in guilds:
+            member = guild.get_member(interaction.author.id)
+            if member:
+                try:
+                    await member.edit(nick=be_user["name"])
+                    self.logger.info(f"Updated nickname for user {interaction.author.id} to {be_user['name']} in guild {guild.name}.")
+                except Exception:
+                    self.logger.exception(f"Failed to update nickname for user {interaction.author.id} in guild {guild.name}.")
+        # Set user's roles to match their roles on the stake website
+        for guild in guilds:
+            member = guild.get_member(interaction.author.id)
+            if member:
+                try:
+                    await ensure_user_roles(guild, be_user["callings"], member)
+                    self.logger.info(f"Updated roles for user {interaction.author.id} in guild {guild.name} to match backend roles.")
+                except Exception:
+                    self.logger.exception(f"Failed to update roles for user {interaction.author.id} in guild {guild.name}.")
+        # Set user mapping in database
         with get_session() as db:
             statement = select(UserMapping).where(UserMapping.discord_user_id == interaction.author.id)
             result = db.exec(statement)
@@ -170,6 +198,7 @@ class UserMappingCog(Cog):
                 user_mapping.user_email = email
                 db.add(user_mapping)
                 db.commit()
+                be_user = self.bot.backend_client.get_user_by_email(email)
                 await interaction.send(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
             else:
                 user_mapping = UserMapping(discord_user_id=interaction.author.id, user_email=email)

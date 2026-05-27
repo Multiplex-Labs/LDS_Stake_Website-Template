@@ -4,7 +4,7 @@ import secrets
 import mimetypes
 
 from logging import getLogger
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlmodel import Field, SQLModel, Session, delete, func, select
@@ -202,6 +202,31 @@ def delete_user(
     session.delete(db_user)
     session.commit()
     return None
+class DiscordUserEmailResponse(SQLModel):
+    email: str
+    callings: List[str]
+    name: str
+
+@router.get("/email/{email}")
+def get_user_by_email(
+    email: str,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser())
+):
+    user = DiscordUserEmailResponse(
+        email=email,
+        callings=[],
+        name=""
+    )
+    db_user = session.exec(select(User).where(User.email == email)).first()
+    if not db_user:
+        logger.warning(f"get_user_by_email: No user found with email {email}")
+        raise HTTPException(status_code=404, detail=f"User {email} not found.")
+    callings = [uc.calling.name for uc in db_user.callings]
+    user.callings = callings
+    user.name = db_user.fname + " " + db_user.lname
+    return user
+
 
 class UserCreateRequest(RequestSafeUser):
     password: str

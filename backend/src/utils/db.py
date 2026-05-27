@@ -129,6 +129,12 @@ def create_default_admin_user():
 
 def create_discord_bot_user():
     """Creates a default discord bot user if it doesn't exist."""
+    discord_bot_password = os.getenv("DISCORD_BOT_PASSWORD", None)
+    if discord_bot_password is None:
+        logger.error(
+            "DISCORD_BOT_PASSWORD is not set. Cannot create discord bot user.")
+        raise ValueError(
+            "DISCORD_BOT_PASSWORD environment variable must be set to create discord bot user.")
     orm = ORM()
     with Session(orm.engine) as db:
         statement = select(
@@ -145,7 +151,7 @@ def create_discord_bot_user():
                 fname="Discord",
                 lname="Bot",
                 # TODO: Get the password from an environment variable
-                password_hash=hash_password("discord-bot-password"),  # Replace with actual password
+                password_hash=hash_password(discord_bot_password),  # Replace with actual password
                 force_password_reset=False,
                 active=True,
             )
