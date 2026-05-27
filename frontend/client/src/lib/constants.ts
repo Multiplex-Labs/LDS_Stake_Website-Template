@@ -47,6 +47,8 @@ export const Permission = {
   VIEW_CALLING_PROPOSALS: 64,
 } as const;
 
-export function hasPermission(perms: number, flag: number): boolean {
+type PermissionFlag = typeof Permission[keyof typeof Permission];
+
+export function hasPermission(perms: number, flag: PermissionFlag): boolean {
   return (perms & flag) !== 0;
 }

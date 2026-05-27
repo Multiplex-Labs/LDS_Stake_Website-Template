@@ -101,7 +101,7 @@ def get_proposal(
     proposal = session.get(CallingProposal, proposal_id)
     if user_has_calling(current_user, BISHOP_CALLING_NAME):
         bishop_ward = get_bishops_ward(session, current_user)
-        if not proposal or proposal.ward_id != bishop_ward.ward_id:
+        if not proposal or proposal.ward_id != bishop_ward.id:
             raise HTTPException(status_code=404, detail="Proposal not found")
         return proposal
     if not user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session) or not proposal:
