@@ -210,14 +210,19 @@ def delete_comment(
 @router.post("/proposals/{proposal_id}/advance")
 def force_advance_proposal(
     proposal_id: int,
+    from_stage: KanbanStages | None = None,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS))
 ):
-    """Force advance a calling proposal to the next stage (for testing/admin purposes)"""
+    """If from_stage is provided and does not match the proposal's current stage, a 409 is
+    returned so the caller can detect a race between auto-advance and a concurrent drag.
+    """
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     current_stage = get_current_proposal_status(proposal, session)
+    if from_stage is not None and current_stage != from_stage:
+        raise HTTPException(status_code=409, detail="Proposal has moved since you last loaded the board")
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=400, detail="Proposal is already at final stage")
     next_stage = KanbanStages(current_stage.value + 1)

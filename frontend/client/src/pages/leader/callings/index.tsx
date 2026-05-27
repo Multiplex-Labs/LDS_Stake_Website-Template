@@ -209,8 +209,16 @@ export default function CallingSystem() {
     onError: makeStageErrorHandler("revert stage", { title: "Cannot revert", description: "Proposal is already at its initial stage." }),
   });
 
+  const advanceMutation = useMutation({
+    mutationFn: ({ id, fromStage }: { id: number; fromStage: string }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/advance?from_stage=${fromStage}`),
+    onSuccess: () => { toast.success("Stage advanced"); invalidateBoard(); },
+    onError: makeStageErrorHandler("advance stage", { title: "Cannot advance", description: "This proposal is already at its final stage." }),
+  });
+
   const dragMutating =
-    sustainMutation.isPending || setApartMutation.isPending || revertMutation.isPending;
+    sustainMutation.isPending || setApartMutation.isPending ||
+    revertMutation.isPending || advanceMutation.isPending;
 
   function handleDragStart(event: DragStartEvent) {
     const data = event.active.data.current;
@@ -246,7 +254,7 @@ export default function CallingSystem() {
 
     // Forward movement
     if (stageKey === SK_SP_APPROVAL || stageKey === SK_HC_APPROVAL) {
-      toast.info("Approvals for this stage are handled on the Review Callings page.");
+      advanceMutation.mutate({ id: item.id, fromStage: stageKey });
       return;
     }
 

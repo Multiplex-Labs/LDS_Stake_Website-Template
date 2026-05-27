@@ -1,10 +1,10 @@
 from sqlmodel import Field, Relationship
 from typing import List
-from enum import Enum, auto
+from enum import IntEnum, auto
 from datetime import datetime, timezone
 from .base import BaseModel
 
-class KanbanStages(Enum):
+class KanbanStages(IntEnum):
     SP_APPROVAL = 0
     HC_APPROVAL = auto()
     INTERVIEW = auto()

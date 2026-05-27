@@ -275,6 +275,36 @@ def test_kanban_flow_call(
     assert current_stage == KanbanStages.DONE
 
 
+def test_advance_from_stage_precondition(client: TestClient, auth_headers, userpass, db_session: Session):
+    """from_stage precondition: match succeeds, mismatch returns 409, omitting skips check."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Correct from_stage (SP_APPROVAL = 0) — should advance
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
+    assert r.status_code == 200
+    db_session.expire_all()
+    assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.HC_APPROVAL
+
+    # Stale from_stage (still 0, but proposal is now at HC_APPROVAL = 1) — should 409
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
+    assert r.status_code == 409
+
+    # No from_stage — bypasses precondition check, advances freely
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+    assert r.status_code == 200
+    db_session.expire_all()
+    assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.INTERVIEW
+
+    # 403 without permission
+    user, password = userpass
+    token_no_perm = login_client(client, user.email, password)
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance",
+                    headers={"Authorization": f"Bearer {token_no_perm}"})
+    assert r.status_code == 403
+
+
 def test_revert_proposal(client: TestClient, auth_headers, userpass, db_session: Session, create_user):
     """Revert moves a proposal back one stage and correctly resets interview state."""
     # Create proposal (starts at SP_APPROVAL)
