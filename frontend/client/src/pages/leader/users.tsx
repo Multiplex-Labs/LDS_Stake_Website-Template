@@ -168,8 +168,8 @@ export function UserAdminContent() {
   }, [users]);
 
   const editingUserCallings = useMemo(
-    () => (editingUser ? (users.find((u) => u.id === editingUser.id)?.callings ?? []) : []),
-    [editingUser, users],
+    () => editingUser?.callings ?? [],
+    [editingUser],
   );
 
   const filteredUsers = useMemo(() => {
