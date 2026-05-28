@@ -170,22 +170,21 @@ class UserMappingCog(Cog):
             await interaction.send(f"The email `{email}` is not registered on the stake website. Please register on the website first or provide a different email address.", ephemeral=True)
             self.logger.warning(f"Email update failed for user {interaction.author.id}: email {email} not found in backend.")
             return
-        # Set user nickname to match the name on the stake website
+        # Do not change user nicknames here. Nickname changes are disallowed for regular users.
         guilds = self.bot.guilds
-        for guild in guilds:
-            member = guild.get_member(interaction.author.id)
-            if member:
-                try:
-                    await member.edit(nick=be_user["name"])
-                    self.logger.info(f"Updated nickname for user {interaction.author.id} to {be_user['name']} in guild {guild.name}.")
-                except Exception:
-                    self.logger.exception(f"Failed to update nickname for user {interaction.author.id} in guild {guild.name}.")
         # Set user's roles to match their roles on the stake website
+        channels_cog = self.bot.get_cog("ChannelsAndRolesCog")
+        managed_role_names = list(channels_cog.ROLE_CONFIG.keys()) if channels_cog else []
         for guild in guilds:
             member = guild.get_member(interaction.author.id)
             if member:
                 try:
-                    await ensure_user_roles(guild, be_user["callings"], member)
+                    await ensure_user_roles(
+                        guild,
+                        be_user["callings"],
+                        member,
+                        managed_role_names=managed_role_names,
+                    )
                     self.logger.info(f"Updated roles for user {interaction.author.id} in guild {guild.name} to match backend roles.")
                 except Exception:
                     self.logger.exception(f"Failed to update roles for user {interaction.author.id} in guild {guild.name}.")
@@ -198,10 +197,83 @@ class UserMappingCog(Cog):
                 user_mapping.user_email = email
                 db.add(user_mapping)
                 db.commit()
-                be_user = self.bot.backend_client.get_user_by_email(email)
+                be_user = await self.bot.backend_client.get_user_by_email(email)
                 await interaction.send(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
             else:
                 user_mapping = UserMapping(discord_user_id=interaction.author.id, user_email=email)
                 db.add(user_mapping)
                 db.commit()
                 await interaction.send(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`", ephemeral=True)
+
+    @hybrid_command(name="sync_my_role", description="Sync your Discord roles with your stake website assignments")
+    async def sync_my_role(self, interaction: Context):
+        self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) requested role sync.")
+        email = get_email_from_discord_user_id(interaction.author.id)
+        if not email:
+            await interaction.send(
+                "I could not find your email mapping. Use `/update_email` to register your stake website email before syncing roles.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            be_user = await self.bot.backend_client.get_user_by_email(email)
+        except Exception:
+            self.logger.exception("Failed to fetch backend user for email %s", email)
+            await interaction.send(
+                "I could not fetch your stake website data. Please try again later.",
+                ephemeral=True,
+            )
+            return
+
+        if not be_user:
+            await interaction.send(
+                f"The email `{email}` is not registered on the stake website. Please verify your email or use `/update_email`.",
+                ephemeral=True,
+            )
+            return
+
+        channels_cog = self.bot.get_cog("ChannelsAndRolesCog")
+        managed_role_names = list(channels_cog.ROLE_CONFIG.keys()) if channels_cog else []
+        synced_guilds = []
+        errors = []
+
+        for guild in self.bot.guilds:
+            member = guild.get_member(interaction.author.id)
+            if not member:
+                continue
+
+            try:
+                await ensure_user_roles(
+                    guild,
+                    be_user["callings"],
+                    member,
+                    managed_role_names=managed_role_names,
+                )
+                synced_guilds.append(guild.name)
+            except ValueError as exc:
+                self.logger.warning(
+                    "Role sync for user %s failed in guild %s: %s",
+                    interaction.author.id,
+                    guild.name,
+                    exc,
+                )
+                errors.append(f"{guild.name}: {exc}")
+            except Exception:
+                self.logger.exception("Unexpected error while syncing roles for user %s in guild %s", interaction.author.id, guild.name)
+                errors.append(f"{guild.name}: unexpected error")
+
+        if not synced_guilds and not errors:
+            await interaction.send(
+                "I could not find you in any of my guilds to sync roles.",
+                ephemeral=True,
+            )
+            return
+
+        summary = []
+        if synced_guilds:
+            summary.append(f"Synced roles in: {', '.join(synced_guilds)}")
+        if errors:
+            summary.append(f"Errors: {'; '.join(errors)}")
+
+        await interaction.send(".\n".join(summary), ephemeral=True)
