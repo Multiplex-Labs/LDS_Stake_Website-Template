@@ -11,6 +11,7 @@ from ..utils import (
     get_current_proposal_status,
     create_kanban_update,
     update_proposal_status,
+    ensure_interview_row,
     user_has_calling,
     user_has_permission,
     get_bishops_ward
@@ -217,18 +218,24 @@ def delete_comment(
 def force_advance_proposal(
     proposal_id: int,
     request: Request,
+    from_stage: KanbanStages | None = None,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
-    """Force advance a calling proposal to the next stage (for testing/admin purposes)"""
+    """If from_stage is provided and does not match the proposal's current stage, a 409 is
+    returned so the caller can detect a race between auto-advance and a concurrent drag.
+    """
     proposal = session.get(CallingProposal, proposal_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
     current_stage = get_current_proposal_status(proposal, session)
+    if from_stage is not None and current_stage != from_stage:
+        raise HTTPException(status_code=409, detail="Proposal has moved since you last loaded the board")
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=400, detail="Proposal is already at final stage")
-    # Create kanban update to next stage
-    next_stage = KanbanStages(current_stage + 1)
+    next_stage = KanbanStages(current_stage.value + 1)
+    if next_stage == KanbanStages.INTERVIEW:
+        ensure_interview_row(proposal_id, session)
     create_kanban_update(
         session=session,
         proposal_id=proposal_id,
@@ -354,6 +361,11 @@ def complete_interview(
     interview = session.exec(statement).first()
     if not interview:
         raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if get_current_proposal_status(proposal, session) != KanbanStages.INTERVIEW:
+        raise HTTPException(status_code=400, detail="Proposal is not at interview stage")
     if interview.interviewer_id is None:
         raise HTTPException(status_code=400, detail="Interview has not been scheduled with an interviewer yet")
     interview.interview_date = completion_date or datetime.now(timezone.utc)
@@ -467,6 +479,51 @@ def update_lcr_proposal(
     )
     return proposal
 
+@router.post("/proposals/{proposal_id}/revert", response_model=CallingProposal)
+def revert_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Revert a calling proposal one stage backwards.
+
+    Releases may not be reverted below INTERVIEW (their starting stage).
+    New callings may not be reverted below SP_APPROVAL.
+    DONE proposals are terminal and cannot be reverted.
+    Reverting to INTERVIEW resets the CallingInterview record so a new
+    interviewer can be assigned.
+    """
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    current_stage = get_current_proposal_status(proposal, session)
+
+    if current_stage == KanbanStages.DONE:
+        raise HTTPException(status_code=400, detail="Cannot revert a completed proposal")
+
+    # Releases start at INTERVIEW; new callings start at SP_APPROVAL
+    min_stage = KanbanStages.INTERVIEW if proposal.is_release else KanbanStages.SP_APPROVAL
+    if current_stage == min_stage:
+        raise HTTPException(status_code=400, detail="Proposal is already at its initial stage")
+
+    prev_stage = KanbanStages(current_stage.value - 1)
+
+    # Reset the interview whenever INTERVIEW is either end of the transition so a
+    # new interviewer can be assigned. Committed atomically with the stage revert below.
+    if KanbanStages.INTERVIEW in (current_stage, prev_stage):
+        ensure_interview_row(proposal_id, session, reset=True)
+
+    create_kanban_update(
+        session=session,
+        proposal_id=proposal_id,
+        updater_id=current_user.id,
+        from_stage=current_stage,
+        to_stage=prev_stage,
+    )
+    return proposal
+
+
 # Kanban board view
 @router.get("/board")
 def get_kanban_board(
@@ -491,7 +548,7 @@ def get_kanban_board(
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
             continue
-        stage = max(updates, key=lambda u: u.to_stage.value).to_stage
+        stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
             board[stage].append(proposal)
     return board

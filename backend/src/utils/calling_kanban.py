@@ -95,40 +95,55 @@ def is_stake_presidency(user: User) -> bool:
         callings = []
     return any(calling in ["stake president", "first counselor", "second counselor"] for calling in callings)
 
+def _latest_update(updates: list) -> KanbanUpdate:
+    return max(updates, key=lambda u: (u.updated_at, u.id))
+
+
+def _get_stage_last_entered_at(proposal_id: int, stage: KanbanStages, session: Session):
+    """Return the updated_at of the most recent KanbanUpdate that moved this proposal TO stage."""
+    updates = session.exec(
+        select(KanbanUpdate).where(
+            KanbanUpdate.proposal_id == proposal_id,
+            KanbanUpdate.to_stage == stage,
+        )
+    ).all()
+    if not updates:
+        return None
+    return _latest_update(updates).updated_at
+
+
 def get_current_proposal_status(proposal: CallingProposal, session: Session) -> KanbanStages:
+    """Return the current kanban stage of a calling proposal.
+
+    The current stage is the `to_stage` of the most recent KanbanUpdate row,
+    ordered by (updated_at, id). Using timestamp + id rather than the numeric
+    stage value means backward-movement updates are correctly reflected — a
+    revert creates a new row with a lower stage value but a later timestamp.
     """
-    Retrieve the current kanban stage of a calling proposal.
-    
-    This function queries the KanbanUpdate table to find the most recent stage
-    change for the given proposal. The current status is determined by the
-    'to_stage' of the latest update record, ordered by the stage value in
-    descending order (which corresponds to the enum's auto-incrementing values).
-    
-    Args:
-        proposal (CallingProposal): The calling proposal to check the status for.
-        session (Session): The database session to use for the query.
-        
-    Returns:
-        KanbanStages: The current stage of the proposal. If no updates exist,
-        this will raise an exception as the query assumes updates are present.
-        
-    Raises:
-        This function may raise database-related exceptions if the query fails.
-        
-    Note:
-        The ordering by 'to_stage' assumes that higher enum values represent
-        later stages in the process. This works because KanbanStages uses
-        auto() which increments from 0.
-    """
-    statement = (
-        select(KanbanUpdate)
-        .where(KanbanUpdate.proposal_id == proposal.id)
-    )
-    updates = session.exec(statement).all()
+    updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal.id)
+    ).all()
     if not updates:
         raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
-    latest_stage = max(updates, key=lambda u: u.to_stage.value)
-    return latest_stage.to_stage
+    return _latest_update(updates).to_stage
+
+
+def ensure_interview_row(proposal_id: int, session: Session, *, reset: bool = False) -> None:
+    """Ensure a CallingInterview row exists for the proposal.
+
+    If reset=True, clears interviewer_id and interview_date so a new interview
+    can be scheduled. Does not commit — caller is responsible for committing.
+    """
+    interview = session.exec(
+        select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    ).first()
+    if interview:
+        if reset:
+            interview.interviewer_id = None
+            interview.interview_date = None
+            session.add(interview)
+    else:
+        session.add(CallingInterview(proposal_id=proposal_id, interviewer_id=None))
 
 def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanStages, to_stage: KanbanStages, session: Session, discord_bot: DiscordBotHandle) -> KanbanUpdate:
     """
@@ -207,20 +222,29 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
         - May create CallingInterview records
         - Modifies the proposal's effective status through updates
     """
-    status = get_current_proposal_status(proposal, session)
+    kanban_updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal.id)
+    ).all()
+    if not kanban_updates:
+        return []
+    status = _latest_update(kanban_updates).to_stage
     updates = []
+    all_approvals = session.exec(
+        select(CallingApproval).where(CallingApproval.proposal_id == proposal.id)
+    ).all()
+
     if status == KanbanStages.SP_APPROVAL:
-        # Check to see if enough stake presidency approvals have been received
-        logger.debug(f"Checking SP approvals for proposal {proposal.id}")
-        statement = select(CallingApproval).where(
-            CallingApproval.proposal_id == proposal.id
-        )
-        approvals = session.exec(statement).all()
-        logger.debug(f"Found {len(approvals)} total approvals for proposal {proposal.id}")
-        sp_approvals = [a for a in approvals if a.approver_user and is_stake_presidency(a.approver_user)]
+        sp_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.SP_APPROVAL]
+        stage_entry_time = _latest_update(sp_entries).updated_at if sp_entries else None
+        logger.debug(f"Checking SP approvals for proposal {proposal.id} since {stage_entry_time}")
+        sp_approvals = [
+            a for a in all_approvals
+            if a.approver_user
+            and is_stake_presidency(a.approver_user)
+            and (stage_entry_time is None or a.created_at >= stage_entry_time)
+        ]
         logger.debug(f"Found {len(sp_approvals)} SP approvals for proposal {proposal.id}")
-        if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD","2")) and all(a.approved for a in sp_approvals):
-            # updater should be most recent person to approve
+        if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD", "2")) and all(a.approved for a in sp_approvals):
             logger.debug(f"Found enough SP approvals for proposal {proposal.id}")
             sorted_approvals = sorted(sp_approvals, key=lambda a: a.created_at, reverse=True)
             latest_approver_id = sorted_approvals[0].approver_id
@@ -233,18 +257,22 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
                 discord_bot=discord_bot
             )
             updates.append(update)
+            kanban_updates = list(kanban_updates) + [update]
             status = KanbanStages.HC_APPROVAL
+
     if status == KanbanStages.HC_APPROVAL:
-        # Check to see if enough high council approvals have been received
-        statement = select(CallingApproval).where(
-            CallingApproval.proposal_id == proposal.id
-        )
-        approvals = session.exec(statement).all()
-        hc_approvals = [a for a in approvals if a.approver_user and is_high_councilor(a.approver_user)]
-        if len(hc_approvals) >= int(os.getenv("HC_APPROVAL_THRESHOLD","3")) and all(a.approved for a in hc_approvals):
-            # updater should be most recent person to approve
+        hc_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.HC_APPROVAL]
+        stage_entry_time = _latest_update(hc_entries).updated_at if hc_entries else None
+        hc_approvals = [
+            a for a in all_approvals
+            if a.approver_user
+            and is_high_councilor(a.approver_user)
+            and (stage_entry_time is None or a.created_at >= stage_entry_time)
+        ]
+        if len(hc_approvals) >= int(os.getenv("HC_APPROVAL_THRESHOLD", "3")) and all(a.approved for a in hc_approvals):
             sorted_approvals = sorted(hc_approvals, key=lambda a: a.created_at, reverse=True)
             latest_approver_id = sorted_approvals[0].approver_id
+            ensure_interview_row(proposal.id, session)
             update = create_kanban_update(
                 proposal_id=proposal.id,
                 updater_id=latest_approver_id,
@@ -254,13 +282,6 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
                 discord_bot=discord_bot
             )
             updates.append(update)
-            # Create interview slots for the proposal
-            interview = CallingInterview(
-                proposal_id=proposal.id,
-                interviewer_id = None,
-            )
-            session.add(interview)
-            session.commit()
             status = KanbanStages.INTERVIEW
 
     if status == KanbanStages.INTERVIEW:

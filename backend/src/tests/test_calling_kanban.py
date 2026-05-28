@@ -275,6 +275,232 @@ def test_kanban_flow_call(
     assert current_stage == KanbanStages.DONE
 
 
+def test_advance_from_stage_precondition(client: TestClient, auth_headers, userpass, db_session: Session):
+    """from_stage precondition: match succeeds, mismatch returns 409, omitting skips check."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Correct from_stage (SP_APPROVAL = 0) — should advance
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
+    assert r.status_code == 200
+    db_session.expire_all()
+    assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.HC_APPROVAL
+
+    # Stale from_stage (still 0, but proposal is now at HC_APPROVAL = 1) — should 409
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
+    assert r.status_code == 409
+
+    # No from_stage — bypasses precondition check, advances freely
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+    assert r.status_code == 200
+    db_session.expire_all()
+    assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.INTERVIEW
+
+    # 403 without permission
+    user, password = userpass
+    token_no_perm = login_client(client, user.email, password)
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance",
+                    headers={"Authorization": f"Bearer {token_no_perm}"})
+    assert r.status_code == 403
+
+
+def test_revert_proposal(client: TestClient, auth_headers, userpass, db_session: Session, create_user):
+    """Revert moves a proposal back one stage and correctly resets interview state."""
+    # Create proposal (starts at SP_APPROVAL)
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Force-advance to HC_APPROVAL
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.HC_APPROVAL
+
+    # Revert back to SP_APPROVAL
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.SP_APPROVAL
+
+    # Cannot revert a new calling below SP_APPROVAL
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 400
+
+    # Force-advance to INTERVIEW and verify CallingInterview is created/reset
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → HC_APPROVAL
+    assert r.status_code == 200
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → INTERVIEW
+    assert r.status_code == 200
+
+    # Set an interviewer so we can verify it gets cleared on revert
+    sp, sp_pass = create_user()
+    db_session.add(sp)
+    db_session.commit()
+    db_session.refresh(sp)
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/interview?interviewer_id={sp.id}", headers=auth_headers)
+    assert r.status_code == 200
+
+    # Revert to HC_APPROVAL — must reset CallingInterview
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.HC_APPROVAL
+
+    interview = db_session.exec(
+        select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    ).first()
+    assert interview is not None
+    assert interview.interviewer_id is None
+    assert interview.interview_date is None
+
+
+def test_revert_proposal_permission_and_terminal(client: TestClient, auth_headers, userpass, db_session: Session):
+    """Revert returns 403 without MANAGE_CALLING_PROPOSALS and 400 on DONE proposals."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # 403 without permission
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert",
+                    headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+
+    # Advance all the way to DONE
+    for _ in range(6):
+        client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.DONE
+
+    # 400 on DONE
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 400
+
+
+def test_revert_does_not_re_advance_on_next_approval(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    """After a revert, pre-existing approvals must NOT auto-advance the proposal."""
+    # Set up stake presidency
+    sp, sp_pass = create_user()
+    fc, fc_pass = create_user()
+    for u in (sp, fc):
+        db_session.add(u)
+    db_session.commit()
+    for u in (sp, fc):
+        db_session.refresh(u)
+
+    sp_calling = db_session.exec(select(Calling).where(Calling.name == "Stake President")).first()
+    fc_calling = db_session.exec(select(Calling).where(Calling.name == "First Counselor")).first()
+    db_session.add(UserCalling(user_id=sp.id, calling_id=sp_calling.id, slot_number=1))
+    db_session.add(UserCalling(user_id=fc.id, calling_id=fc_calling.id, slot_number=1))
+    db_session.commit()
+
+    # Create proposal and collect 2 SP approvals → auto-advances to HC_APPROVAL
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    proposal_id = r.json()["id"]
+
+    sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
+    fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
+    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
+    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=fc_headers)
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.HC_APPROVAL
+
+    # Revert back to SP_APPROVAL
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.SP_APPROVAL
+
+    # Changing an existing SP approval must NOT re-advance (old approvals predate stage re-entry)
+    r = client.patch(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
+    assert r.status_code == 200
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.SP_APPROVAL, (
+        "Historical pre-revert approvals must not count toward the threshold after a revert"
+    )
+
+
+def test_revert_release_cannot_go_below_interview(client: TestClient, auth_headers, db_session: Session):
+    """A release proposal cannot be reverted below INTERVIEW (its initial stage)."""
+    payload = {**create_proposal_payload(), "is_release": True}
+    r = client.post("/calling-kanban/proposals", json=payload, headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+    assert current_stage == KanbanStages.INTERVIEW
+
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 400
+
+
+def test_revert_sustain_to_interview_resets_interview(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    """Reverting from SUSTAIN to INTERVIEW clears the CallingInterview record."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Advance to INTERVIEW
+    client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → HC_APPROVAL
+    client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)  # → INTERVIEW
+
+    # Schedule and complete the interview so the proposal reaches SUSTAIN
+    interviewer, _ = create_user()
+    db_session.add(interviewer)
+    db_session.commit()
+    db_session.refresh(interviewer)
+
+    r = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/interview?interviewer_id={interviewer.id}",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/interview/complete",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.SUSTAIN
+    )
+
+    # Revert from SUSTAIN → INTERVIEW
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.INTERVIEW
+    )
+
+    interview = db_session.exec(
+        select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)
+    ).first()
+    assert interview is not None
+    assert interview.interviewer_id is None
+    assert interview.interview_date is None
+
+
 def test_kanban_flow_release_call(
         client: TestClient,
         auth_headers,
