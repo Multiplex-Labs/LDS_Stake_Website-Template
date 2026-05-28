@@ -12,7 +12,8 @@ from .utils import (
     create_default_admin_user,
     load_speaking_schedule,
     speaking_assignment_cleanup_loop,
-    load_wards
+    load_wards,
+    create_discord_bot_user
 )
 import os
 import asyncio
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     ORM(engine_kind)
     ## On first launch, create a default admin user if none exist
     create_default_admin_user()
+    ## Create a system user for the Discord bot if it doesn't exist
+    create_discord_bot_user()
     ## Create system callings and assignments if they don't exist
     create_system_callings_and_assignments()
     ## Load wards from file and create bishop callings and slots for each ward

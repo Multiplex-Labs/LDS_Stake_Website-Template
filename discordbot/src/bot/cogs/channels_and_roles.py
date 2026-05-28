@@ -2,9 +2,13 @@ import logging
 from typing import Dict, List
 
 from discord import Forbidden, Guild, HTTPException, PermissionOverwrite, Permissions
-from discord.ext.commands import Cog
+from discord.ext.commands import Cog, Context, hybrid_command, hybrid_command
+from sqlmodel import select
 
 from ..bot import LDSStakeBot
+from ..utils import ensure_user_roles
+from ...db import get_session
+from ...models import UserMapping
 
 
 class ChannelsAndRolesCog(Cog):
@@ -87,14 +91,46 @@ class ChannelsAndRolesCog(Cog):
 
         existing_roles = {role.name: role for role in guild.roles}
         created_roles: Dict[str, object] = {}
+        # Ensure the @everyone role cannot change nicknames or manage nicknames
+        try:
+            everyone = guild.default_role
+            if everyone is not None:
+                default_perms = everyone.permissions
+                # sanitize default role permissions
+                if getattr(default_perms, "change_nickname", False) or getattr(default_perms, "manage_nicknames", False):
+                    sanitized = Permissions(default_perms.value)
+                    try:
+                        sanitized.change_nickname = False
+                        sanitized.manage_nicknames = False
+                    except Exception:
+                        # best effort; continue if attributes not present
+                        pass
+                    try:
+                        await everyone.edit(permissions=sanitized, reason="Disallow nickname changes for regular members")
+                        self.logger.info("Removed nickname-change permissions from @everyone in guild %s.", guild.name)
+                    except Exception:
+                        self.logger.exception("Failed to sanitize @everyone permissions in guild %s", guild.name)
+        except Exception:
+            self.logger.exception("Unexpected error while sanitizing @everyone role in guild %s", guild.name)
 
         for role_name, permissions in self.ROLE_CONFIG.items():
             role = existing_roles.get(role_name)
+            # sanitize configured permissions to ensure no nickname management is granted
+            try:
+                sanitized_permissions = Permissions(permissions.value)
+                try:
+                    sanitized_permissions.change_nickname = False
+                    sanitized_permissions.manage_nicknames = False
+                except Exception:
+                    pass
+            except Exception:
+                # fallback to original permissions if construction fails
+                sanitized_permissions = permissions
             if role is None:
                 try:
                     role = await guild.create_role(
                         name=role_name,
-                        permissions=permissions,
+                        permissions=sanitized_permissions,
                         reason="Create stake leadership role for channel permission provisioning",
                     )
                     self.logger.info("Created role %s in guild %s.", role_name, guild.name)
@@ -104,9 +140,9 @@ class ChannelsAndRolesCog(Cog):
                 except HTTPException:
                     self.logger.exception("Failed to create role %s in guild %s.", role_name, guild.name)
                     continue
-            elif role.permissions != permissions:
+            elif role.permissions != sanitized_permissions:
                 try:
-                    await role.edit(permissions=permissions)
+                    await role.edit(permissions=sanitized_permissions)
                     self.logger.info("Updated permissions for role %s in guild %s.", role_name, guild.name)
                 except Forbidden:
                     self.logger.warning(

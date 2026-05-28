@@ -16,6 +16,8 @@ from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import Modal, TextInput, View, button, Button
 from discord.ext.commands import Cog, Context, hybrid_command
 
+from ..utils import ensure_user_roles
+
 from ..bot import LDSStakeBot
 
 from ...db import get_session
@@ -99,9 +101,10 @@ class UserMappingCog(Cog):
         self.bot.logger.info("Registering user-mapping listeners")
         self.logger = self.bot.logger.getChild("UserMappingCog")
 
-    async def _welcome_channel_already_sent(self, channel: TextChannel) -> bool:
+    async def _clear_welcome_channel(self, channel: TextChannel) -> bool:
         async for message in channel.history(limit=100):
             if message.author == self.bot.user and self.WELCOME_MESSAGE_MARKER in (message.content or ""):
+                await message.delete()
                 return True
         return False
 
@@ -117,13 +120,13 @@ class UserMappingCog(Cog):
 
             if welcome_channel is not None:
                 try:
-                    if not await self._welcome_channel_already_sent(welcome_channel):
-                        welcome_view = WizardView()
-                        self.bot.add_view(welcome_view)
-                        await welcome_channel.send(
-                            "Welcome to the server! To complete registration, click the button below or use `/update_email`.",
-                            view=welcome_view,
-                        )
+                    await self._clear_welcome_channel(welcome_channel)
+                    welcome_view = WizardView()
+                    self.bot.add_view(welcome_view)
+                    await welcome_channel.send(
+                        "Welcome to the server! To complete registration, click the button below or use `/update_email`.",
+                        view=welcome_view,
+                    )
                 except Exception:
                     self.logger.exception(
                         "Failed to send welcome message in channel %s in guild %s.",
@@ -162,6 +165,30 @@ class UserMappingCog(Cog):
     @hybrid_command(name="update_email", description="Update your email registration for stake website syncing")
     async def update_email(self, interaction: Context, email: str):
         self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) initiated email update process.")
+        be_user = await self.bot.backend_client.get_user_by_email(email)
+        if not be_user:
+            await interaction.send(f"The email `{email}` is not registered on the stake website. Please register on the website first or provide a different email address.", ephemeral=True)
+            self.logger.warning(f"Email update failed for user {interaction.author.id}: email {email} not found in backend.")
+            return
+        # Do not change user nicknames here. Nickname changes are disallowed for regular users.
+        guilds = self.bot.guilds
+        # Set user's roles to match their roles on the stake website
+        channels_cog = self.bot.get_cog("ChannelsAndRolesCog")
+        managed_role_names = list(channels_cog.ROLE_CONFIG.keys()) if channels_cog else []
+        for guild in guilds:
+            member = guild.get_member(interaction.author.id)
+            if member:
+                try:
+                    await ensure_user_roles(
+                        guild,
+                        be_user["callings"],
+                        member,
+                        managed_role_names=managed_role_names,
+                    )
+                    self.logger.info(f"Updated roles for user {interaction.author.id} in guild {guild.name} to match backend roles.")
+                except Exception:
+                    self.logger.exception(f"Failed to update roles for user {interaction.author.id} in guild {guild.name}.")
+        # Set user mapping in database
         with get_session() as db:
             statement = select(UserMapping).where(UserMapping.discord_user_id == interaction.author.id)
             result = db.exec(statement)
@@ -170,9 +197,83 @@ class UserMappingCog(Cog):
                 user_mapping.user_email = email
                 db.add(user_mapping)
                 db.commit()
+                be_user = await self.bot.backend_client.get_user_by_email(email)
                 await interaction.send(f"Your email mapping has been updated to: `{email}`", ephemeral=True)
             else:
                 user_mapping = UserMapping(discord_user_id=interaction.author.id, user_email=email)
                 db.add(user_mapping)
                 db.commit()
                 await interaction.send(f"You did not have an existing email mapping, but one has been created for you with the email: `{email}`", ephemeral=True)
+
+    @hybrid_command(name="sync_my_role", description="Sync your Discord roles with your stake website assignments")
+    async def sync_my_role(self, interaction: Context):
+        self.logger.info(f"User {interaction.author.name} (ID: {interaction.author.id}) requested role sync.")
+        email = get_email_from_discord_user_id(interaction.author.id)
+        if not email:
+            await interaction.send(
+                "I could not find your email mapping. Use `/update_email` to register your stake website email before syncing roles.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            be_user = await self.bot.backend_client.get_user_by_email(email)
+        except Exception:
+            self.logger.exception("Failed to fetch backend user for email %s", email)
+            await interaction.send(
+                "I could not fetch your stake website data. Please try again later.",
+                ephemeral=True,
+            )
+            return
+
+        if not be_user:
+            await interaction.send(
+                f"The email `{email}` is not registered on the stake website. Please verify your email or use `/update_email`.",
+                ephemeral=True,
+            )
+            return
+
+        channels_cog = self.bot.get_cog("ChannelsAndRolesCog")
+        managed_role_names = list(channels_cog.ROLE_CONFIG.keys()) if channels_cog else []
+        synced_guilds = []
+        errors = []
+
+        for guild in self.bot.guilds:
+            member = guild.get_member(interaction.author.id)
+            if not member:
+                continue
+
+            try:
+                await ensure_user_roles(
+                    guild,
+                    be_user["callings"],
+                    member,
+                    managed_role_names=managed_role_names,
+                )
+                synced_guilds.append(guild.name)
+            except ValueError as exc:
+                self.logger.warning(
+                    "Role sync for user %s failed in guild %s: %s",
+                    interaction.author.id,
+                    guild.name,
+                    exc,
+                )
+                errors.append(f"{guild.name}: {exc}")
+            except Exception:
+                self.logger.exception("Unexpected error while syncing roles for user %s in guild %s", interaction.author.id, guild.name)
+                errors.append(f"{guild.name}: unexpected error")
+
+        if not synced_guilds and not errors:
+            await interaction.send(
+                "I could not find you in any of my guilds to sync roles.",
+                ephemeral=True,
+            )
+            return
+
+        summary = []
+        if synced_guilds:
+            summary.append(f"Synced roles in: {', '.join(synced_guilds)}")
+        if errors:
+            summary.append(f"Errors: {'; '.join(errors)}")
+
+        await interaction.send(".\n".join(summary), ephemeral=True)

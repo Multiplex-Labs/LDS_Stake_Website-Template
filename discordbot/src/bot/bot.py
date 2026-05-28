@@ -7,6 +7,8 @@ from discord.ext.commands import Bot, Cog
 from dotenv import load_dotenv
 from rich.console import Console
 
+from .utils import BackendClient
+
 class LDSStakeBot(Bot):
     def __init__(self):
         intents = Intents.default()
@@ -14,6 +16,12 @@ class LDSStakeBot(Bot):
         intents.members = True  # Enable the members intent to receive member join events
         super().__init__(intents=intents, command_prefix="!")
         self.logger = logging.getLogger("application")
+        backend_url = os.getenv("BACKEND_URL")
+        backend_token = os.getenv("BACKEND_TOKEN")
+        if not backend_url or not backend_token:
+            self.logger.error("BACKEND_URL and BACKEND_TOKEN environment variables must be set")
+            raise RuntimeError("BACKEND_URL and BACKEND_TOKEN environment variables are required")
+        self.backend_client = BackendClient(backend_url, backend_token)
         self.logger.debug("LDSStakeBot initialized with intents: %s", self.intents)
 
     async def setup_hook(self):
@@ -77,6 +85,9 @@ async def initialize_bot() -> LDSStakeBot:
     # Wait for bot to be ready before returning the client
     with console.status("[bold magenta]Starting Bot...[/] [yellow]🤖[/]", spinner="point") as status:
         while not client.is_ready():
+            if bot_task.done():
+                logger.error("Discord bot task completed before bot was ready")
+                raise RuntimeError("Discord bot failed to start")
             status.update("[bold cyan]Connecting to Discord...[/] [green]🌐[/]")
             await asyncio.sleep(0.2)
 

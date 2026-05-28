@@ -14,7 +14,7 @@ def main():
 
     log_cfg = setup_logging("DEBUG" if debug else "INFO")
 
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8001))
     # configure uvicorn programmatically
     uvicorn.run("src.app:app", host=host, port=port, reload=debug, log_config=log_cfg)
 
