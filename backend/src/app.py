@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from logging import getLogger
+from logging import getLogger, WARNING
 from sqlmodel import Session, select, func
 from .db.orm import ORM
 from .models import User
@@ -13,7 +13,7 @@ from .utils import (
     load_speaking_schedule,
     speaking_assignment_cleanup_loop,
     load_wards,
-    create_discord_bot_user
+    DiscordBotHandle,
 )
 import os
 import asyncio
@@ -29,8 +29,15 @@ async def lifespan(app: FastAPI):
     ORM(engine_kind)
     ## On first launch, create a default admin user if none exist
     create_default_admin_user()
-    ## Create a system user for the Discord bot if it doesn't exist
-    create_discord_bot_user()
+    ## Enable Discord Bot interactions
+    app.state.discord_bot = DiscordBotHandle()
+
+    # SQLAlchemy emits engine info logs when `echo=True` or if its loggers are not fully suppressed.
+    # Override them here after Uvicorn has applied its logging configuration.
+    for logger_name in ("sqlalchemy", "sqlalchemy.engine", "sqlalchemy.engine.Engine", "sqlalchemy.engine.base.Engine", "sqlalchemy.pool", "sqlalchemy.orm"):
+        getLogger(logger_name).setLevel(WARNING)
+        getLogger(logger_name).propagate = False
+
     ## Create system callings and assignments if they don't exist
     create_system_callings_and_assignments()
     ## Load wards from file and create bishop callings and slots for each ward

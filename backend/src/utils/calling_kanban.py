@@ -9,13 +9,16 @@ from logging import getLogger
 logger = getLogger("application")
 
 from ..models import (
-    CallingProposal, 
+    CallingProposal,
     User,
+    Ward,
     KanbanUpdate,
     KanbanStages,
     CallingApproval,
     CallingInterview
 )
+
+from .discord_bot import DiscordBotHandle
 
 
 def can_approve_proposal(
@@ -127,7 +130,7 @@ def get_current_proposal_status(proposal: CallingProposal, session: Session) -> 
     latest_stage = max(updates, key=lambda u: u.to_stage.value)
     return latest_stage.to_stage
 
-def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanStages, to_stage: KanbanStages, session: Session):
+def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanStages, to_stage: KanbanStages, session: Session, discord_bot: DiscordBotHandle) -> KanbanUpdate:
     """
     Create and persist a new KanbanUpdate record for a proposal stage change.
     
@@ -160,9 +163,15 @@ def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanSt
     session.add(update)
     session.commit()
     session.refresh(update)
-    return update
 
-def update_proposal_status(proposal:CallingProposal, session: Session) -> List[KanbanUpdate]:
+    ward = session.get(Ward, update.proposal.ward_id) if update.proposal and update.proposal.ward_id else None
+
+    discord_bot.submit_kanban_update(
+        update,
+        ward=ward.name if ward else "(unknown)",
+    )
+    return update
+def update_proposal_status(proposal:CallingProposal, session: Session, discord_bot: DiscordBotHandle) -> List[KanbanUpdate]:
     """
     Automatically advance a calling proposal through the kanban workflow based on business rules.
     
@@ -220,7 +229,8 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
                 updater_id=latest_approver_id,
                 from_stage=status,
                 to_stage=KanbanStages.HC_APPROVAL,
-                session=session
+                session=session,
+                discord_bot=discord_bot
             )
             updates.append(update)
             status = KanbanStages.HC_APPROVAL
@@ -240,7 +250,8 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
                 updater_id=latest_approver_id,
                 from_stage=status,
                 to_stage=KanbanStages.INTERVIEW,
-                session=session
+                session=session,
+                discord_bot=discord_bot
             )
             updates.append(update)
             # Create interview slots for the proposal
@@ -268,7 +279,8 @@ def update_proposal_status(proposal:CallingProposal, session: Session) -> List[K
                 updater_id=interview.interviewer_id,
                 from_stage=status,
                 to_stage=KanbanStages.SUSTAIN,
-                session=session
+                session=session,
+                discord_bot=discord_bot
             )
             updates.append(update)
             status = KanbanStages.SUSTAIN

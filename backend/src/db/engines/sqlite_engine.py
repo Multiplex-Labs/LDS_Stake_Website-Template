@@ -10,9 +10,10 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 def get_engine_sqlite():
     database_path = os.getenv("DATABASE_PATH", "./database.db")
     debug = os.environ.get("DEV", "false").lower() == "true"
+    echo = os.environ.get("SQLALCHEMY_ECHO", "false").lower() == "true"
     database_url = f"sqlite:///{database_path}"
     connection_args = {"check_same_thread": False}
-    engine = create_engine(database_url, echo=debug, connect_args=connection_args)
+    engine = create_engine(database_url, echo=echo, connect_args=connection_args)
 
     event.listen(engine, "connect", set_sqlite_pragma)
 

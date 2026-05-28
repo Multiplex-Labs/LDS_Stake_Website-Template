@@ -23,7 +23,9 @@ class LDSStakeBot(Bot):
             raise RuntimeError("BACKEND_URL and BACKEND_TOKEN environment variables are required")
         self.backend_client = BackendClient(backend_url, backend_token)
         self.logger.debug("LDSStakeBot initialized with intents: %s", self.intents)
-
+        # set up Hook Objects
+        from .hooks import KanbanHook
+        self.kanban_hook = KanbanHook(self)
     async def setup_hook(self):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')

@@ -20,11 +20,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Instantiating ORM")
     orm = ORM("sqlite")
-    # State object
-    yield {
-        "bot": bot,
-        "orm": orm
-    }
+    app.state.bot = bot
+    app.state.orm = orm
+    yield
     # Cleanup
     logger.info("Shutting down Application")
     await shutdown_bot(bot)
@@ -34,6 +32,8 @@ app = FastAPI(title="lds-stake-discordbot", lifespan=lifespan)
 
 from .routes import (
     hello_router,
+    kanban_update_router,
 )
 
 app.include_router(hello_router)
+app.include_router(kanban_update_router)
