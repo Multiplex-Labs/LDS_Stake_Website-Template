@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import IntFlag
-from typing import Any, Type, List
+from typing import Any, Optional, Type, List
 from fastapi import HTTPException
 from sqlmodel import SQLModel, select, delete, Session, func
 from ..db import ORM
@@ -127,24 +127,23 @@ def create_default_admin_user():
                         " and password from INITIAL_ADMIN_PASSWORD environment variable."
                         " Please change the password upon first login.")
 
-def create_discord_bot_user():
+def create_discord_bot_user() -> Optional[User]:
     """Creates a default discord bot user if it doesn't exist."""
     discord_bot_password = os.getenv("DISCORD_BOT_PASSWORD", None)
     if discord_bot_password is None:
         logger.warning(
             "DISCORD_BOT_PASSWORD is not set. Cannot create discord bot user.")
+        return None
     orm = ORM()
     with Session(orm.engine) as db:
-        statement = select(
-            func.count()
-            ).select_from(User).where(
+        statement = select(User).where(
                 User.email == "discord-bot@localhost")
-        user_count = db.exec(statement).one()
-        if user_count == 0:
+        user = db.exec(statement).one_or_none()
+        if not user:
             # Create a default discord bot user
-            logger.warning(
+            logger.info(
                 "Discord bot user not found. Creating default discord bot user.")
-            discord_bot = User(
+            user = User(
                 email="discord-bot@localhost",
                 fname="Discord",
                 lname="Bot",
@@ -153,9 +152,10 @@ def create_discord_bot_user():
                 force_password_reset=False,
                 active=True,
             )
-            db.add(discord_bot)
+            db.add(user)
             db.commit()
-            db.refresh(discord_bot)
+            db.refresh(user)
+        return user
 
 def _create_calling_if_not_exists(
         session: Session,

@@ -38,3 +38,5 @@ from .calling_kanban import (
 )
 
 from .ward import load_wards, get_bishops_ward
+
+from .discord_bot import DiscordBotHandle

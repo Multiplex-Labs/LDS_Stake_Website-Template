@@ -1,5 +1,5 @@
 from logging import getLogger
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
 from sqlmodel import Session, col, select
 from datetime import datetime, timezone
@@ -25,6 +25,7 @@ from ..models import (
     CallingApproval,
     CallingInterview,
     User,
+    Ward,
     Permission
 )
 
@@ -45,6 +46,7 @@ def _proposal_statement_for_user(current_user: User, session: Session):
 # CallingProposal endpoints
 @router.post("/proposals", response_model=CallingProposal)
 def create_proposal(
+    request: Request,
     proposal: CallingProposal,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.SUBMIT_CALLING_PROPOSALS))
@@ -77,6 +79,11 @@ def create_proposal(
 
     session.add(initial_update)
     session.commit()
+    ward = session.get(Ward, proposal.ward_id) if proposal.ward_id else None
+    request.app.state.discord_bot.submit_kanban_update(
+        initial_update,
+        ward=ward.name if ward else "(unknown)",
+    )  # Notify Discord bot of new proposal and its initial stage
     logger.debug(f"Created new proposal with ID {proposal.id} and initial kanban stage {to_stage}")
     return proposal
 
@@ -210,9 +217,10 @@ def delete_comment(
 @router.post("/proposals/{proposal_id}/advance")
 def force_advance_proposal(
     proposal_id: int,
+    request: Request,
     from_stage: KanbanStages | None = None,
     session: Session = Depends(get_session),
-    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS))
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """If from_stage is provided and does not match the proposal's current stage, a 409 is
     returned so the caller can detect a race between auto-advance and a concurrent drag.
@@ -234,12 +242,14 @@ def force_advance_proposal(
         updater_id=current_user.id,
         from_stage=current_stage,
         to_stage=next_stage,
+        discord_bot=request.app.state.discord_bot
     )
     return {"detail": f"Proposal advanced to {next_stage}"}
 
 # CallingApproval endpoints
 @router.post("/proposals/{proposal_id}/approvals", response_model=CallingApproval)
 def add_approval(
+    request: Request,
     proposal_id: int,
     approved: bool,
     session: Session = Depends(get_session),
@@ -268,7 +278,7 @@ def add_approval(
     session.add(approval)
     session.commit()
     session.refresh(approval)
-    update_proposal_status(proposal, session)  # Update proposal status based on new approval
+    update_proposal_status(proposal, session, request.app.state.discord_bot)  # Update proposal status based on new approval
     return approval    
 
 
@@ -285,6 +295,7 @@ def get_approvals(
 
 @router.patch("/proposals/{proposal_id}/approvals")
 def change_approval_status(
+    request: Request,
     proposal_id: int,
     approved: bool,
     session: Session = Depends(get_session),
@@ -308,7 +319,7 @@ def change_approval_status(
     session.add(approval)
     session.commit()
     session.refresh(approval)
-    update_proposal_status(proposal, session)  # Update proposal status based on changed approval
+    update_proposal_status(proposal, session, request.app.state.discord_bot)  # Update proposal status based on changed approval
     return approval
 
 # CallingInterview endpoints
@@ -339,6 +350,7 @@ def schedule_interview(
 
 @router.post("/proposals/{proposal_id}/interview/complete", response_model=CallingInterview)
 def complete_interview(
+    request: Request,
     proposal_id: int,
     completion_date: datetime = None,
     session: Session = Depends(get_session),
@@ -366,7 +378,8 @@ def complete_interview(
         proposal_id=proposal_id,
         updater_id=current_user.id,
         from_stage=KanbanStages.INTERVIEW,
-        to_stage=KanbanStages.SUSTAIN
+        to_stage=KanbanStages.SUSTAIN,
+        discord_bot=request.app.state.discord_bot
     )
     return interview
 
@@ -385,6 +398,7 @@ def get_interview(
 
 @router.post("/proposals/{proposal_id}/sustain", response_model=CallingProposal)
 def sustain_proposal(
+    request: Request,
     proposal_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
@@ -403,7 +417,8 @@ def sustain_proposal(
             proposal_id=proposal_id,
             updater_id=current_user.id,
             from_stage=KanbanStages.SUSTAIN,
-            to_stage=KanbanStages.LCR_UPDATE
+            to_stage=KanbanStages.LCR_UPDATE,
+            discord_bot=request.app.state.discord_bot
         )
     else:
         create_kanban_update(
@@ -411,12 +426,14 @@ def sustain_proposal(
             proposal_id=proposal_id,
             updater_id=current_user.id,
             from_stage=KanbanStages.SUSTAIN,
-            to_stage=KanbanStages.SET_APART
+            to_stage=KanbanStages.SET_APART,
+            discord_bot=request.app.state.discord_bot
         )
     return proposal
 
 @router.post("/proposals/{proposal_id}/set-apart", response_model=CallingProposal)
 def set_apart_proposal(
+    request: Request,
     proposal_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
@@ -433,12 +450,14 @@ def set_apart_proposal(
         proposal_id=proposal_id,
         updater_id=current_user.id,
         from_stage=KanbanStages.SET_APART,
-        to_stage=KanbanStages.LCR_UPDATE
+        to_stage=KanbanStages.LCR_UPDATE,
+        discord_bot=request.app.state.discord_bot
     )
     return proposal
 
 @router.post("/proposals/{proposal_id}/lcr", response_model=CallingProposal)
 def update_lcr_proposal(
+    request: Request,
     proposal_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
@@ -455,7 +474,8 @@ def update_lcr_proposal(
         proposal_id=proposal_id,
         updater_id=current_user.id,
         from_stage=KanbanStages.LCR_UPDATE,
-        to_stage=KanbanStages.DONE
+        to_stage=KanbanStages.DONE,
+        discord_bot=request.app.state.discord_bot
     )
     return proposal
 
