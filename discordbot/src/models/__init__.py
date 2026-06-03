@@ -1,2 +1,2 @@
 from .user_mapping import UserMapping
-from .kanban_update_model import KanbanUpdateRequest
+from .kanban_update_model import KanbanUpdateRequest, KanbanApprovalRequest

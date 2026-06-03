@@ -95,6 +95,32 @@ def is_stake_presidency(user: User) -> bool:
         callings = []
     return any(calling in ["stake president", "first counselor", "second counselor"] for calling in callings)
 
+def get_stake_presidency(session: Session) -> List[User]:
+    """
+    Retrieve all users who are currently serving in the stake presidency.
+    
+    The stake presidency is composed of the stake president and his counselors. This
+    function queries the database to find all users who hold any of these callings,
+    which are critical for the approval process in calling proposals.
+    
+    Args:
+        session (Session): The database session to use for the query.
+        
+    Returns:
+        List[User]: A list of User objects representing the members of the stake presidency.
+        
+    Note:
+        The function checks for the callings "stake president", "first counselor",
+        and "second counselor". The search is case-insensitive.
+    """
+    statement = select(User).where(
+        col(User.callings).any(
+            col("name").ilike("stake president") |
+            col("name").ilike("first counselor") |
+            col("name").ilike("second counselor")
+        )
+    )
+    return session.exec(statement).all()
 def _latest_update(updates: list) -> KanbanUpdate:
     return max(updates, key=lambda u: (u.updated_at, u.id))
 

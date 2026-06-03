@@ -27,4 +27,13 @@ class BaseHook:
         channel = self.bot.get_channel(channel_id)
         if channel:
             self.bot.loop.create_task(channel.send(message))
+
+    def _send_dm(self, user_id: int, message: str, **kwargs):
+        """
+        A helper function to send a DM to a user.
+            kwargs are passed to the send method, e.g. embed=embed
+        """
+        user = self.bot.get_user(user_id)
+        if user:
+            self.bot.loop.create_task(user.send(message, **kwargs))
     

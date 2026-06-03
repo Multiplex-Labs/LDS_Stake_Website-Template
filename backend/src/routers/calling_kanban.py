@@ -14,7 +14,8 @@ from ..utils import (
     ensure_interview_row,
     user_has_calling,
     user_has_permission,
-    get_bishops_ward
+    get_bishops_ward,
+    get_stake_presidency,
 )
 from ..db import get_session
 from ..models import (
@@ -84,6 +85,22 @@ def create_proposal(
         initial_update,
         ward=ward.name if ward else "(unknown)",
     )  # Notify Discord bot of new proposal and its initial stage
+    #  Request Approvals from Stake Presidency if this is not release
+    if not proposal.is_release:
+        sp = get_stake_presidency(session)
+        for u in sp:
+            request.app.state.discord_bot.submit_kanban_update(
+                initial_update,
+                ward=ward.name if ward else "(unknown)",
+            )  # Notify Discord bot of new proposal and its initial stage
+            request.app.state.discord_bot.send_approval_request(
+                proposal_id=proposal.id,
+                approver_email=u.email,
+                person=proposal.fname + " " + proposal.lname,
+                calling=proposal.proposed_calling,
+                ward=ward.name if ward else "(unknown)",
+                url=f"{request.base_url}calling-kanban/proposals/{proposal.id}"
+            )
     logger.debug(f"Created new proposal with ID {proposal.id} and initial kanban stage {to_stage}")
     return proposal
 
