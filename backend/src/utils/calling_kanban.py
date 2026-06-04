@@ -9,13 +9,15 @@ from logging import getLogger
 logger = getLogger("application")
 
 from ..models import (
+    Calling,
     CallingProposal,
     User,
     Ward,
     KanbanUpdate,
     KanbanStages,
     CallingApproval,
-    CallingInterview
+    CallingInterview,
+    UserCalling
 )
 
 from .discord_bot import DiscordBotHandle
@@ -114,10 +116,36 @@ def get_stake_presidency(session: Session) -> List[User]:
         and "second counselor". The search is case-insensitive.
     """
     statement = select(User).where(
-        col(User.callings).any(
-            col("name").ilike("stake president") |
-            col("name").ilike("first counselor") |
-            col("name").ilike("second counselor")
+        User.callings.any(
+            UserCalling.calling.has(
+                Calling.name.ilike("stake president") |
+                Calling.name.ilike("first counselor") |
+                Calling.name.ilike("second counselor")
+            )
+        )
+    )
+    return session.exec(statement).all()
+def get_high_councilors(session: Session) -> List[User]:
+    """
+    Retrieve all users who are currently serving as high councilors.
+    
+    High councilors are members of the stake high council, which assists the stake
+    presidency in overseeing stake operations, including the approval process for
+    calling proposals. This function queries the database to find all users with the
+    high councilor calling.
+    
+    Args:
+        session (Session): The database session to use for the query.
+        
+    Returns:
+        List[User]: A list of User objects representing the high councilors.
+        
+    Note:
+        The function checks for the calling "high councilor" in a case-insensitive manner.
+    """
+    statement = select(User).where(
+        User.callings.any(
+            UserCalling.calling.has(Calling.name.ilike("high councilor"))
         )
     )
     return session.exec(statement).all()
@@ -211,6 +239,30 @@ def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanSt
         update,
         ward=ward.name if ward else "(unknown)",
     )
+    if to_stage == KanbanStages.HC_APPROVAL:
+        logger.info(f"Submitting approval request for proposal ID {proposal_id} to high council via discord")
+        hc = get_high_councilors(session)
+        for u in hc:
+            discord_bot.request_kanban_approval(
+                proposal_id=proposal_id,
+                approver_email=u.email,
+                person=update.proposal.fname + " " + update.proposal.lname,
+                calling=update.proposal.proposed_calling,
+                ward=ward.name if ward else "(unknown)",
+                details_url=f"{os.getenv('FRONTEND_BASE_URL', 'http://localhost:3000')}/calling-proposals/{proposal_id}"
+            )
+    elif to_stage == KanbanStages.SP_APPROVAL:
+        logger.info(f"Submitting approval request for proposal ID {proposal_id} to stake presidency via discord")
+        sp = get_stake_presidency(session)
+        for u in sp:
+            discord_bot.request_kanban_approval(
+                proposal_id=proposal_id,
+                approver_email=u.email,
+                person=update.proposal.fname + " " + update.proposal.lname,
+                calling=update.proposal.proposed_calling,
+                ward=ward.name if ward else "(unknown)",
+                details_url=f"{os.getenv('FRONTEND_BASE_URL', 'http://localhost:3000')}/calling-proposals/{proposal_id}"
+            )
     return update
 def update_proposal_status(proposal:CallingProposal, session: Session, discord_bot: DiscordBotHandle) -> List[KanbanUpdate]:
     """

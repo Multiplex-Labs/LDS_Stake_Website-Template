@@ -4,10 +4,13 @@ from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import View, button, Button
 from .base_hook import BaseHook
 from ...models import KanbanUpdateRequest, KanbanApprovalRequest
+from ..bot import LDSStakeBot
 
 class ApprovalView(View):
-    def __init__(self, approval_url: str):
-        self.approval_url = approval_url
+    def __init__(self, proposal_id: str, bot: LDSStakeBot, user_email: str):
+        self.proposal_id = proposal_id
+        self.bot = bot
+        self.email = user_email
         super().__init__(timeout=None)
 
     @button(label="Approve", style=ButtonStyle.green, custom_id="approve_update")
@@ -15,7 +18,7 @@ class ApprovalView(View):
         logger = logging.getLogger("application")
         logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) clicked Approve.")
         # Send Approval to Backend
-        # TODO: add logic to send approval to backend, e.g. via an API call
+        await self.bot.backend_client.submit_approval(self.email, self.proposal_id, True)
         await interaction.response.send_message("You approved the update!", ephemeral=True)
 
     @button(label="Reject", style=ButtonStyle.red, custom_id="reject_update")
@@ -23,7 +26,7 @@ class ApprovalView(View):
         logger = logging.getLogger("application")
         logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) clicked Reject.")
         # Send Rejection to Backend
-        # TODO: add logic to send rejection to backend, e.g. via an API call
+        await self.bot.backend_client.submit_approval(self.email, self.proposal_id, False)
         await interaction.response.send_message("You rejected the update!", ephemeral=True)
 
 
@@ -48,13 +51,13 @@ class KanbanHook(BaseHook):
             )
             self._send_message(channel_id, message)
 
-    def send_approval_request(self, approval: KanbanApprovalRequest):
+    async def send_approval_request(self, approval: KanbanApprovalRequest):
         """
         Send an approval request as a DM to the approver.
         """
-        user_id = self._get_user_id_by_email(approval.approver_email)
-        if user_id:
-            view = ApprovalView(approval.url)
+        user = await self.bot.get_user_by_email(approval.approver_email)
+        if user:
+            view = ApprovalView(approval.proposal_id, self.bot, approval.approver_email)
             message = (
                 f"## 🛠️ Calling Approval Request\n\n"
                 f"**Proposal ID:** `{approval.proposal_id}`\n"
@@ -64,4 +67,4 @@ class KanbanHook(BaseHook):
                 f"**Details URL:** {approval.url}\n\n"
                 f"Please review the update and click Approve or Reject."
             )
-            self._send_dm(user_id, message, view=view)
+            self._send_dm(user.id, message, view=view)

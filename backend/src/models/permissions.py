@@ -14,6 +14,7 @@ class Permission(IntFlag):
     SUBMIT_CALLING_PROPOSALS = auto()
     MANAGE_CALLING_PROPOSALS = auto()
     VIEW_CALLING_PROPOSALS = auto()
+    DISCORD_BOT = auto()  # Special permission for the Discord bot to identify itself
 
 class Permissions(BaseModel, table=True):
     # Composite unique constraint: Prevents User #1 and Calling #1 

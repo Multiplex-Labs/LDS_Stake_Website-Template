@@ -63,6 +63,8 @@ class DiscordBotHandle:
             return None
         except httpx.HTTPStatusError as exc:
             self.logger.warning("Discord bot responded with error: %s %s -> %s", method, url, exc)
+            if params or json:
+                self.logger.debug("Request data: params=%s, json=%s", params, json)
             return None
 
         content_type = resp.headers.get("content-type", "")
