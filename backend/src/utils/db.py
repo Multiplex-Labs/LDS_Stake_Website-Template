@@ -155,6 +155,13 @@ def create_discord_bot_user() -> Optional[User]:
             db.add(user)
             db.commit()
             db.refresh(user)
+            bot_permissions = Permissions(
+                foreign_id=str(user.id),
+                is_calling=False,
+                scopes=Permission.DISCORD_BOT
+            )
+            db.add(bot_permissions)
+            db.commit()
         return user
 
 def _create_calling_if_not_exists(

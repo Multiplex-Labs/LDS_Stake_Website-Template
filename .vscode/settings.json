@@ -1,0 +1,11 @@
+{
+    "sqltools.useNodeRuntime": true,
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "backend_db",
+            "database": "${workspaceFolder:lds_stake_website_template}/backend/database.db"
+        }
+    ]
+}

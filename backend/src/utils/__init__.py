@@ -35,6 +35,8 @@ from .calling_kanban import (
     create_kanban_update,
     update_proposal_status,
     ensure_interview_row,
+    get_stake_presidency,
+    get_high_councilors
 )
 
 from .ward import load_wards, get_bishops_ward

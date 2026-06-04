@@ -14,7 +14,8 @@ from ..utils import (
     ensure_interview_row,
     user_has_calling,
     user_has_permission,
-    get_bishops_ward
+    get_bishops_ward,
+    get_stake_presidency,
 )
 from ..db import get_session
 from ..models import (
@@ -84,6 +85,23 @@ def create_proposal(
         initial_update,
         ward=ward.name if ward else "(unknown)",
     )  # Notify Discord bot of new proposal and its initial stage
+    #  Request Approvals from Stake Presidency if this is not release
+    if not proposal.is_release:
+        logger.info(f"Submitting approval request for proposal ID {proposal.id} to stake presidency via discord")
+        sp = get_stake_presidency(session)
+        for u in sp:
+            request.app.state.discord_bot.submit_kanban_update(
+                initial_update,
+                ward=ward.name if ward else "(unknown)",
+            )  # Notify Discord bot of new proposal and its initial stage
+            request.app.state.discord_bot.request_kanban_approval(
+                proposal_id=proposal.id,
+                approver_email=u.email,
+                person=proposal.fname + " " + proposal.lname,
+                calling=proposal.proposed_calling,
+                ward=ward.name if ward else "(unknown)",
+                details_url=f"{request.base_url}calling-kanban/proposals/{proposal.id}"
+            )
     logger.debug(f"Created new proposal with ID {proposal.id} and initial kanban stage {to_stage}")
     return proposal
 
@@ -281,6 +299,24 @@ def add_approval(
     update_proposal_status(proposal, session, request.app.state.discord_bot)  # Update proposal status based on new approval
     return approval    
 
+@router.post("/proposals/{proposal_id}/approvals/bot", response_model=CallingApproval)
+def add_approval_bot(
+    request: Request,
+    proposal_id: int,
+    approved: bool,
+    approver_email: str,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.DISCORD_BOT))
+):
+    """Add an approval (approve/reject) to a calling proposal"""
+    # Get proposal
+    user = session.exec(select(User).where(User.email == approver_email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Approver not found")
+    if not can_approve_proposal(user):
+        raise HTTPException(status_code=403, detail="Approver is not authorized to approve/reject proposals")
+    
+    return add_approval(request, proposal_id, approved, session, user)
 
 @router.get("/proposals/{proposal_id}/approvals", response_model=list[CallingApproval])
 def get_approvals(
@@ -481,6 +517,7 @@ def update_lcr_proposal(
 
 @router.post("/proposals/{proposal_id}/revert", response_model=CallingProposal)
 def revert_proposal(
+    request: Request,
     proposal_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
@@ -520,6 +557,7 @@ def revert_proposal(
         updater_id=current_user.id,
         from_stage=current_stage,
         to_stage=prev_stage,
+        discord_bot=request.app.state.discord_bot
     )
     return proposal
 

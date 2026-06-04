@@ -90,10 +90,13 @@ class BackendClient:
         start = datetime.datetime.now()
 
         async def do_request(token: Optional[str]) -> httpx.Response:
+            self.logger.info("_request: sending %s request to %s with token=%s", method, url, "present" if token else "none")
             headers = kwargs.pop("headers", {}) or {}
             if token:
                 headers["Authorization"] = f"Bearer {token}"
             headers.setdefault("User-Agent", "discordbot-backend-client/1.0")
+            if "json" in kwargs and kwargs["json"] is not None:
+                headers.setdefault("Content-Type", "application/json")
             async with httpx.AsyncClient() as client:
                 return await client.request(method, url, headers=headers, timeout=kwargs.pop("timeout", 15.0), **kwargs)
 
@@ -156,3 +159,11 @@ class BackendClient:
     async def get_user_by_email(self, email:str):
         """Get the user with the given email."""
         return await self._get(f"/users/email/{email}")
+
+    async def submit_approval(self, approver_email: str, proposal_id: int, approve: bool):
+        """Submit an approval or rejection for the given request."""
+        data = {
+            "approved": approve,
+            "approver_email": approver_email
+        }
+        return await self._post(f"/calling-kanban/proposals/{proposal_id}/approvals/bot?approved={approve}&approver_email={approver_email}", json=data)

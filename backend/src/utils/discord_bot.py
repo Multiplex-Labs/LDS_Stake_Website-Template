@@ -63,6 +63,8 @@ class DiscordBotHandle:
             return None
         except httpx.HTTPStatusError as exc:
             self.logger.warning("Discord bot responded with error: %s %s -> %s", method, url, exc)
+            if params or json:
+                self.logger.debug("Request data: params=%s, json=%s", params, json)
             return None
 
         content_type = resp.headers.get("content-type", "")
@@ -112,3 +114,24 @@ class DiscordBotHandle:
             "updated_at": update.updated_at.isoformat(),
         }
         return self._post("/kanban/", json=body) is not None
+    
+    @require_enabled()
+    def request_kanban_approval(
+        self,
+        proposal_id: int,
+        approver_email: str,
+        person: str,
+        calling: str,
+        ward: str,
+        details_url: str,
+    ) -> bool:
+        """Submit a Kanban update approval request to the Discord bot."""
+        body = {
+            "proposal_id": proposal_id,
+            "approver_email": approver_email,
+            "person": person,
+            "calling": calling,
+            "ward": ward,
+            "url": details_url,
+        }
+        return self._post("/kanban/request-approval/", json=body) is not None

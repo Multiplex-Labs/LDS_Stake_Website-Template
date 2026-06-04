@@ -2,12 +2,15 @@ import asyncio
 import os
 import logging
 
-from discord import Forbidden, Guild, HTTPException, Intents, app_commands
+from discord import Forbidden, Guild, HTTPException, Intents, Member, app_commands
 from discord.ext.commands import Bot, Cog
 from dotenv import load_dotenv
 from rich.console import Console
+from sqlmodel import select
 
 from .utils import BackendClient
+from ..db import get_session
+from ..models import UserMapping
 
 class LDSStakeBot(Bot):
     def __init__(self):
@@ -21,7 +24,7 @@ class LDSStakeBot(Bot):
         if not backend_url or not backend_token:
             self.logger.error("BACKEND_URL and BACKEND_TOKEN environment variables must be set")
             raise RuntimeError("BACKEND_URL and BACKEND_TOKEN environment variables are required")
-        self.backend_client = BackendClient(backend_url, backend_token)
+        self.backend_client = BackendClient(backend_url, backend_token, self.logger)
         self.logger.debug("LDSStakeBot initialized with intents: %s", self.intents)
         # set up Hook Objects
         from .hooks import KanbanHook
@@ -29,6 +32,18 @@ class LDSStakeBot(Bot):
     async def setup_hook(self):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')
+    async def get_user_by_email(self, email: str) -> Member | None:
+        """
+        Get a guild member by their email address.
+        Note: This requires the "Members" intent to be enabled for the bot and may not work for large guilds due to Discord API limitations.
+        """
+        with get_session() as db:
+            user = db.exec(select(UserMapping).where(UserMapping.user_email == email)).first()
+            if user and user.discord_user_id:
+                for guild in self.guilds:
+                    member = guild.get_member(user.discord_user_id)
+                    if member:
+                        return member
 
 from .cogs import UserMappingCog, ChannelsAndRolesCog
 
