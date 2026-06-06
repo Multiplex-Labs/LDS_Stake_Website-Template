@@ -48,10 +48,10 @@ class CallingProposalWithCounts(BaseModel):
     submitted_at: datetime
     updated_at: datetime
     stage_approval_count: int = Field(ge=0)
-    denial_count: int = Field(ge=0)
+    stage_denial_count: int = Field(ge=0)
 
     @classmethod
-    def from_proposal(cls, proposal: CallingProposal, stage_approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
+    def from_proposal(cls, proposal: CallingProposal, stage_approval_count: int, stage_denial_count: int) -> "CallingProposalWithCounts":
         return cls(
             id=proposal.id,
             fname=proposal.fname,
@@ -64,7 +64,7 @@ class CallingProposalWithCounts(BaseModel):
             submitted_at=proposal.submitted_at,
             updated_at=proposal.updated_at,
             stage_approval_count=stage_approval_count,
-            denial_count=denial_count,
+            stage_denial_count=stage_denial_count,
         )
 
 
@@ -634,7 +634,7 @@ def get_kanban_board(
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
             approved, denied = _stage_scoped_approval_counts(proposal_updates, proposal_approvals, stage)
             board[stage].append(CallingProposalWithCounts.from_proposal(
-                proposal, stage_approval_count=approved, denial_count=denied
+                proposal, stage_approval_count=approved, stage_denial_count=denied
             ))
     return board
 

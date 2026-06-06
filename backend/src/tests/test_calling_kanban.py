@@ -11,7 +11,7 @@ from src.utils import DiscordBotHandle
 from src.app import app
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True)
 def mock_discord_bot():
     """Ensure app.state.discord_bot is set for all kanban tests.
 
@@ -762,7 +762,7 @@ def test_board_revert_resets_count_window(
 def test_board_denial_count_is_stage_scoped(
     client: TestClient, auth_headers, db_session: Session, create_user
 ):
-    """Denial cast before a revert does not appear in the current-stage denial_count."""
+    """Denial cast before a revert does not appear in the current-stage stage_denial_count."""
     (sp, sp_pass), (fc, fc_pass) = _setup_sp_users(db_session, create_user)
 
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
@@ -772,7 +772,7 @@ def test_board_denial_count_is_stage_scoped(
     sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
     fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
 
-    # SP votes approved, FC votes denied → board should show denial_count=1 at SP_APPROVAL
+    # SP votes approved, FC votes denied → board should show stage_denial_count=1 at SP_APPROVAL
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=false", headers=fc_headers)
 
@@ -782,7 +782,7 @@ def test_board_denial_count_is_stage_scoped(
     sp_col_before = board_before.get("0", [])
     before_match = [p for p in sp_col_before if p["id"] == proposal_id]
     assert before_match, "Proposal should be in SP_APPROVAL before revert"
-    assert before_match[0]["denial_count"] == 1
+    assert before_match[0]["stage_denial_count"] == 1
 
     # Force-advance to HC_APPROVAL, then revert back to SP_APPROVAL
     r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
@@ -803,8 +803,8 @@ def test_board_denial_count_is_stage_scoped(
     sp_col_after = board_after.get("0", [])
     after_match = [p for p in sp_col_after if p["id"] == proposal_id]
     assert after_match, "Proposal should be back in SP_APPROVAL after revert"
-    assert after_match[0]["denial_count"] == 0, (
-        f"Pre-revert denial should not count in new SP stage window; got {after_match[0]['denial_count']}"
+    assert after_match[0]["stage_denial_count"] == 0, (
+        f"Pre-revert denial should not count in new SP stage window; got {after_match[0]['stage_denial_count']}"
     )
 
 
@@ -847,6 +847,11 @@ def test_board_bishop_scoped_sees_correct_stage_count(
     db_session.expire_all()
     assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.SP_APPROVAL
 
+    # Create a proposal for a different ward — bishop should NOT see this
+    r = client.post("/calling-kanban/proposals", json={**create_proposal_payload(), "ward_id": 2}, headers=auth_headers)
+    assert r.status_code == 200
+    other_ward_proposal_id = r.json()["id"]
+
     # Bishop calls the board
     bishop_headers = {"Authorization": f"Bearer {login_client(client, bishop_user.email, bishop_pass)}"}
     r = client.get("/calling-kanban/board", headers=bishop_headers)
@@ -858,4 +863,10 @@ def test_board_bishop_scoped_sees_correct_stage_count(
     assert matching, f"Bishop should see proposal {proposal_id} in board['0']"
     assert matching[0]["stage_approval_count"] == 1, (
         f"Expected stage_approval_count=1 for bishop-scoped view; got {matching[0]['stage_approval_count']}"
+    )
+
+    # Bishop must not see proposals from other wards
+    all_board_proposals = [p for stage_proposals in board.values() for p in stage_proposals]
+    assert not any(p["id"] == other_ward_proposal_id for p in all_board_proposals), (
+        "Bishop should not see proposals from other wards"
     )

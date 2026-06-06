@@ -31,6 +31,63 @@ import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 const SP_APPROVAL_KEY = "0";
 const HC_APPROVAL_KEY = "1";
 
+interface ProposalTableProps {
+  proposals: CallingProposalWithCounts[];
+  isLoading: boolean;
+  wardMap: Map<number, string>;
+  onSelect: (proposal: CallingProposalWithCounts) => void;
+}
+
+function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTableProps) {
+  return (
+    <div className="rounded-md border bg-card overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Proposed Calling</TableHead>
+            <TableHead>Ward</TableHead>
+            <TableHead>Approvals</TableHead>
+            <TableHead>Date Submitted</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
+            </TableRow>
+          ) : proposals.length > 0 ? (
+            proposals.map((proposal) => (
+              <TableRow
+                key={proposal.id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => onSelect(proposal)}
+              >
+                <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
+                <TableCell>{proposal.proposed_calling}</TableCell>
+                <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
+                <TableCell>
+                  <span className="tabular-nums">
+                    {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
+                    {proposal.stage_denial_count > 0 && (
+                      <span className="text-destructive ml-1">/ {proposal.stage_denial_count} denied</span>
+                    )}
+                  </span>
+                </TableCell>
+                <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export default function ReviewCallings() {
   const [selectedProposal, setSelectedProposal] = useState<CallingProposalWithCounts | null>(null);
   const [selectedStage, setSelectedStage] = useState<"SP" | "HC" | null>(null);
@@ -111,101 +168,23 @@ export default function ReviewCallings() {
             {/* Stake Presidency Review */}
             <div>
               <h2 className="text-xl font-semibold mb-3">Stake Presidency Review</h2>
-              <div className="rounded-md border bg-card overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Proposed Calling</TableHead>
-                      <TableHead>Ward</TableHead>
-                      <TableHead>Approvals</TableHead>
-                      <TableHead>Date Submitted</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
-                      </TableRow>
-                    ) : spProposals.length > 0 ? (
-                      spProposals.map((proposal) => (
-                        <TableRow
-                          key={proposal.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => { setSelectedProposal(proposal); setSelectedStage("SP"); }}
-                        >
-                          <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
-                          <TableCell>{proposal.proposed_calling}</TableCell>
-                          <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
-                          <TableCell>
-                            <span className="tabular-nums">
-                              {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
-                              {proposal.denial_count > 0 && (
-                                <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
-                              )}
-                            </span>
-                          </TableCell>
-                          <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              <ProposalTable
+                proposals={spProposals}
+                isLoading={isLoading}
+                wardMap={wardMap}
+                onSelect={(proposal) => { setSelectedProposal(proposal); setSelectedStage("SP"); }}
+              />
             </div>
 
             {/* High Council Review */}
             <div>
               <h2 className="text-xl font-semibold mb-3">High Council Review</h2>
-              <div className="rounded-md border bg-card overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Proposed Calling</TableHead>
-                      <TableHead>Ward</TableHead>
-                      <TableHead>Approvals</TableHead>
-                      <TableHead>Date Submitted</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
-                      </TableRow>
-                    ) : hcProposals.length > 0 ? (
-                      hcProposals.map((proposal) => (
-                        <TableRow
-                          key={proposal.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => { setSelectedProposal(proposal); setSelectedStage("HC"); }}
-                        >
-                          <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
-                          <TableCell>{proposal.proposed_calling}</TableCell>
-                          <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
-                          <TableCell>
-                            <span className="tabular-nums">
-                              {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
-                              {proposal.denial_count > 0 && (
-                                <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
-                              )}
-                            </span>
-                          </TableCell>
-                          <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              <ProposalTable
+                proposals={hcProposals}
+                isLoading={isLoading}
+                wardMap={wardMap}
+                onSelect={(proposal) => { setSelectedProposal(proposal); setSelectedStage("HC"); }}
+              />
             </div>
           </div>
         </div>
@@ -265,9 +244,9 @@ export default function ReviewCallings() {
                           <span className="text-success font-medium">
                             {selectedProposal.stage_approval_count} approved
                           </span>
-                          {selectedProposal.denial_count > 0 && (
+                          {selectedProposal.stage_denial_count > 0 && (
                             <span className="text-destructive font-medium">
-                              {selectedProposal.denial_count} denied
+                              {selectedProposal.stage_denial_count} denied
                             </span>
                           )}
                         </div>
