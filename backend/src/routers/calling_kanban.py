@@ -1,6 +1,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
+from pydantic import BaseModel as PydanticBaseModel
 from sqlmodel import Session, col, select
 from datetime import datetime, timezone
 
@@ -32,6 +33,21 @@ from ..models import (
 
 logger = getLogger("application")
 router = APIRouter(prefix="/calling-kanban", tags=["calling-kanban"])
+
+
+class CallingProposalWithCounts(PydanticBaseModel):
+    id: int
+    fname: str
+    lname: str
+    spouse_name: str | None
+    proposed_calling: str
+    ward_id: int
+    is_release: bool
+    submitted_at: datetime
+    updated_at: datetime
+    submitter: int
+    approval_count: int
+    denial_count: int
 
 
 def _proposal_statement_for_user(current_user: User, session: Session):
@@ -570,7 +586,7 @@ def get_kanban_board(
 ):
     """Return active proposals grouped by kanban stage; access mirrors list_proposals."""
     proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
-    board: dict[KanbanStages, list[CallingProposal]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
+    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
     if not proposals:
         return board
 
@@ -582,12 +598,24 @@ def get_kanban_board(
     for u in all_updates:
         updates_by_proposal[u.proposal_id].append(u)
 
+    all_approvals = session.exec(
+        select(CallingApproval).where(col(CallingApproval.proposal_id).in_(proposal_ids))
+    ).all()
+    approvals_by_proposal: dict[int, list[CallingApproval]] = defaultdict(list)
+    for a in all_approvals:
+        approvals_by_proposal[a.proposal_id].append(a)
+
     for proposal in proposals:
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
-            board[stage].append(proposal)
+            proposal_approvals = approvals_by_proposal.get(proposal.id, [])
+            board[stage].append(CallingProposalWithCounts(
+                **proposal.model_dump(),
+                approval_count=sum(1 for a in proposal_approvals if a.approved),
+                denial_count=sum(1 for a in proposal_approvals if not a.approved),
+            ))
     return board
 

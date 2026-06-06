@@ -66,6 +66,8 @@ export interface CallingProposal {
   submitted_at: string;
   updated_at: string;
   submitter: number;
+  approval_count?: number;
+  denial_count?: number;
 }
 
 // Keys are KanbanStages enum values serialized as numeric strings:

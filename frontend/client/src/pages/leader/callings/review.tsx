@@ -97,13 +97,14 @@ export default function ReviewCallings() {
                   <TableHead>Name</TableHead>
                   <TableHead>Proposed Calling</TableHead>
                   <TableHead>Ward</TableHead>
+                  <TableHead>Approvals</TableHead>
                   <TableHead>Date Submitted</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
@@ -117,12 +118,20 @@ export default function ReviewCallings() {
                       <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
                       <TableCell>{proposal.proposed_calling}</TableCell>
                       <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
+                      <TableCell>
+                        <span className="tabular-nums">
+                          {proposal.approval_count ?? 0} approved
+                          {(proposal.denial_count ?? 0) > 0 && (
+                            <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
+                          )}
+                        </span>
+                      </TableCell>
                       <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                       No callings pending review.
                     </TableCell>
                   </TableRow>
@@ -172,6 +181,17 @@ export default function ReviewCallings() {
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Submitted</Label>
                         <div>{new Date(selectedProposal.submitted_at).toLocaleDateString()}</div>
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Reviewer Votes</Label>
+                        <div className="flex gap-4 tabular-nums">
+                          <span className="text-green-600 dark:text-green-400 font-medium">
+                            {selectedProposal.approval_count ?? 0} approved
+                          </span>
+                          <span className="text-destructive font-medium">
+                            {selectedProposal.denial_count ?? 0} denied
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
