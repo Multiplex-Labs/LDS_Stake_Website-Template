@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "daisyui" {
+  themes: false;
+  logs: false;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -35,6 +39,23 @@
 
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
+
+  /* DaisyUI base surface tokens — mapped to existing theme variables */
+  --color-base-100: hsl(var(--background));
+  --color-base-200: hsl(var(--card));
+  --color-base-300: hsl(var(--muted));
+  --color-base-content: hsl(var(--foreground));
+
+  /* DaisyUI -content variants for interactive components */
+  --color-primary-content: hsl(var(--primary-foreground));
+  --color-secondary-content: hsl(var(--secondary-foreground));
+  --color-accent-content: hsl(var(--accent-foreground));
+  --color-neutral: hsl(var(--muted));
+  --color-neutral-content: hsl(var(--muted-foreground));
+
+  /* DaisyUI error → destructive alias */
+  --color-error: hsl(var(--destructive));
+  --color-error-content: hsl(var(--destructive-foreground));
   
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
