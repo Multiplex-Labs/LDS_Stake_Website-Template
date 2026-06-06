@@ -33,7 +33,7 @@ const SP_APPROVAL_KEY = "0";
 export default function ReviewCallings() {
   const [selectedProposal, setSelectedProposal] = useState<CallingProposalWithCounts | null>(null);
 
-  const { data: board = {}, isLoading, isError } = useQuery<KanbanBoard>({
+  const { data: board = {}, isLoading, isError, error } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
   const { data: wards = [] } = useQuery<Ward[]>({
@@ -48,7 +48,10 @@ export default function ReviewCallings() {
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
       apiRequest("POST", `/api/calling-kanban/proposals/${id}/approvals?approved=${approved}`),
     onSuccess: (_, { approved }) => {
-      const p = selectedProposal!;
+      const p = selectedProposal;
+      setSelectedProposal(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
+      if (!p) return;
       if (approved) {
         toast.success("Calling Approved", {
           description: `${p.fname} ${p.lname} has been approved for ${p.proposed_calling}.`,
@@ -58,19 +61,29 @@ export default function ReviewCallings() {
           description: `${p.fname} ${p.lname}'s recommendation has been denied.`,
         });
       }
-      setSelectedProposal(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
     },
-    onError: () => {
-      toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
+    onError: (err) => {
+      console.error("[review] approval mutation failed:", err);
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("400")) {
+        toast.error("Already Voted", { description: "You have already submitted a vote for this proposal." });
+      } else if (msg.startsWith("403")) {
+        toast.error("Not Authorized", { description: "You do not have permission to vote on this proposal." });
+      } else {
+        toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
+      }
     },
   });
 
   if (isError) {
+    console.error("[review] board query failed:", error);
+    const is401 = error instanceof Error && error.message.startsWith("401");
     return (
       <Layout>
         <div className="text-center py-16">
-          <p className="text-destructive">Failed to load. Please refresh.</p>
+          <p className="text-destructive">
+            {is401 ? "Your session has expired. Please log in again." : "Failed to load calling proposals. Please refresh."}
+          </p>
         </div>
       </Layout>
     );

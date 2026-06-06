@@ -1,7 +1,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
-from sqlmodel import Session, col, select
+from sqlmodel import Session, Field, col, select
 from datetime import datetime, timezone
 
 from ..utils import (
@@ -46,8 +46,8 @@ class CallingProposalWithCounts(BaseModel):
     is_release: bool
     submitted_at: datetime
     updated_at: datetime
-    approval_count: int
-    denial_count: int
+    approval_count: int = Field(ge=0)
+    denial_count: int = Field(ge=0)
 
     @classmethod
     def from_proposal(cls, proposal: CallingProposal, approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
@@ -596,7 +596,7 @@ def revert_proposal(
 
 
 # Kanban board view
-@router.get("/board")
+@router.get("/board", response_model=dict[KanbanStages, list[CallingProposalWithCounts]])
 def get_kanban_board(
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser())
@@ -625,6 +625,7 @@ def get_kanban_board(
     for proposal in proposals:
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
+            logger.warning("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:

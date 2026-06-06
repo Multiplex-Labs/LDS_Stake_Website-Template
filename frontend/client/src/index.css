@@ -32,6 +32,9 @@
   
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
   
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -67,6 +70,8 @@
   --accent-foreground: 0 0% 98%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
+  --success: 142 71% 38%;
+  --success-foreground: 0 0% 98%;
   --border: 240 3.7% 15.9%;
   --input: 240 3.7% 15.9%;
   --ring: 240 4.9% 83.9%;
@@ -89,6 +94,8 @@
   --accent-foreground: 222 47% 11%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
+  --success: 142 72% 29%;
+  --success-foreground: 0 0% 98%;
   --border: 214 32% 91%;
   --input: 214 32% 91%;
   --ring: 222 47% 20%;
@@ -111,6 +118,8 @@
   --accent-foreground: 0 0% 0%;
   --destructive: 0 100% 38%;
   --destructive-foreground: 0 0% 100%;
+  --success: 142 100% 22%;
+  --success-foreground: 0 0% 100%;
   --border: 0 0% 0%;
   --input: 0 0% 88%;
   --ring: 220 100% 30%;
@@ -126,6 +135,14 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-serif;
   }
+}
+
+.btn-success {
+  background-color: hsl(var(--success));
+  color: hsl(var(--success-foreground));
+}
+.btn-success:hover {
+  background-color: hsl(var(--success) / 0.9);
 }
 
 .stage-sp-approval  { --stage-bg: hsl(45 80% 50% / 0.10); --stage-border: hsl(45 80% 50% / 0.20); }
