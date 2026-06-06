@@ -25,13 +25,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { KanbanBoard, CallingProposal, Ward } from "@/types";
+import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 
 // SP_APPROVAL = "0" in the board response
 const SP_APPROVAL_KEY = "0";
 
 export default function ReviewCallings() {
-  const [selectedProposal, setSelectedProposal] = useState<CallingProposal | null>(null);
+  const [selectedProposal, setSelectedProposal] = useState<CallingProposalWithCounts | null>(null);
 
   const { data: board = {}, isLoading, isError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
@@ -42,7 +42,7 @@ export default function ReviewCallings() {
 
   const wardMap = useWardMap(wards);
 
-  const pendingProposals: CallingProposal[] = board[SP_APPROVAL_KEY] ?? [];
+  const pendingProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
 
   const approveMutation = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -120,8 +120,8 @@ export default function ReviewCallings() {
                       <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
                       <TableCell>
                         <span className="tabular-nums">
-                          {proposal.approval_count ?? 0} approved
-                          {(proposal.denial_count ?? 0) > 0 && (
+                          {proposal.approval_count} approved
+                          {proposal.denial_count > 0 && (
                             <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
                           )}
                         </span>
@@ -185,12 +185,14 @@ export default function ReviewCallings() {
                       <div className="space-y-1 col-span-2">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Reviewer Votes</Label>
                         <div className="flex gap-4 tabular-nums">
-                          <span className="text-green-600 dark:text-green-400 font-medium">
-                            {selectedProposal.approval_count ?? 0} approved
+                          <span className="text-success font-medium">
+                            {selectedProposal.approval_count} approved
                           </span>
-                          <span className="text-destructive font-medium">
-                            {selectedProposal.denial_count ?? 0} denied
-                          </span>
+                          {selectedProposal.denial_count > 0 && (
+                            <span className="text-destructive font-medium">
+                              {selectedProposal.denial_count} denied
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

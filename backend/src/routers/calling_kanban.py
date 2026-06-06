@@ -1,7 +1,6 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
-from pydantic import BaseModel as PydanticBaseModel
 from sqlmodel import Session, col, select
 from datetime import datetime, timezone
 
@@ -20,6 +19,7 @@ from ..utils import (
 )
 from ..db import get_session
 from ..models import (
+    BaseModel,
     KanbanStages,
     KanbanUpdate,
     CallingProposal,
@@ -35,19 +35,36 @@ logger = getLogger("application")
 router = APIRouter(prefix="/calling-kanban", tags=["calling-kanban"])
 
 
-class CallingProposalWithCounts(PydanticBaseModel):
+class CallingProposalWithCounts(BaseModel):
     id: int
     fname: str
     lname: str
-    spouse_name: str | None
+    spouse_name: str
     proposed_calling: str
     ward_id: int
+    submitter: int
     is_release: bool
     submitted_at: datetime
     updated_at: datetime
-    submitter: int
     approval_count: int
     denial_count: int
+
+    @classmethod
+    def from_proposal(cls, proposal: CallingProposal, approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
+        return cls(
+            id=proposal.id,
+            fname=proposal.fname,
+            lname=proposal.lname,
+            spouse_name=proposal.spouse_name,
+            proposed_calling=proposal.proposed_calling,
+            ward_id=proposal.ward_id,
+            submitter=proposal.submitter,
+            is_release=proposal.is_release,
+            submitted_at=proposal.submitted_at,
+            updated_at=proposal.updated_at,
+            approval_count=approval_count,
+            denial_count=denial_count,
+        )
 
 
 def _proposal_statement_for_user(current_user: User, session: Session):
@@ -612,10 +629,9 @@ def get_kanban_board(
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
-            board[stage].append(CallingProposalWithCounts(
-                **proposal.model_dump(),
-                approval_count=sum(1 for a in proposal_approvals if a.approved),
-                denial_count=sum(1 for a in proposal_approvals if not a.approved),
+            approved = sum(1 for a in proposal_approvals if a.approved)
+            board[stage].append(CallingProposalWithCounts.from_proposal(
+                proposal, approval_count=approved, denial_count=len(proposal_approvals) - approved
             ))
     return board
 
