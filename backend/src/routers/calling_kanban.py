@@ -17,6 +17,7 @@ from ..utils import (
     get_bishops_ward,
     get_stake_presidency,
 )
+from ..utils.calling_kanban import _stage_scoped_approval_counts
 from ..db import get_session
 from ..models import (
     BaseModel,
@@ -46,11 +47,11 @@ class CallingProposalWithCounts(BaseModel):
     is_release: bool
     submitted_at: datetime
     updated_at: datetime
-    approval_count: int = Field(ge=0)
+    stage_approval_count: int = Field(ge=0)
     denial_count: int = Field(ge=0)
 
     @classmethod
-    def from_proposal(cls, proposal: CallingProposal, approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
+    def from_proposal(cls, proposal: CallingProposal, stage_approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
         return cls(
             id=proposal.id,
             fname=proposal.fname,
@@ -62,7 +63,7 @@ class CallingProposalWithCounts(BaseModel):
             is_release=proposal.is_release,
             submitted_at=proposal.submitted_at,
             updated_at=proposal.updated_at,
-            approval_count=approval_count,
+            stage_approval_count=stage_approval_count,
             denial_count=denial_count,
         )
 
@@ -629,10 +630,11 @@ def get_kanban_board(
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
+            proposal_updates = updates_by_proposal.get(proposal.id, [])
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
-            approved = sum(1 for a in proposal_approvals if a.approved)
+            approved, denied = _stage_scoped_approval_counts(proposal_updates, proposal_approvals, stage)
             board[stage].append(CallingProposalWithCounts.from_proposal(
-                proposal, approval_count=approved, denial_count=len(proposal_approvals) - approved
+                proposal, stage_approval_count=approved, denial_count=denied
             ))
     return board
 

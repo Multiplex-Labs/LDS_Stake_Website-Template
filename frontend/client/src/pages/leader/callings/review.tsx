@@ -27,11 +27,13 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 
-// SP_APPROVAL = "0" in the board response
+// SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
 const SP_APPROVAL_KEY = "0";
+const HC_APPROVAL_KEY = "1";
 
 export default function ReviewCallings() {
   const [selectedProposal, setSelectedProposal] = useState<CallingProposalWithCounts | null>(null);
+  const [selectedStage, setSelectedStage] = useState<"SP" | "HC" | null>(null);
 
   const { data: board = {}, isLoading, isError, error } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
@@ -42,7 +44,8 @@ export default function ReviewCallings() {
 
   const wardMap = useWardMap(wards);
 
-  const pendingProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
+  const spProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
+  const hcProposals: CallingProposalWithCounts[] = board[HC_APPROVAL_KEY] ?? [];
 
   const approveMutation = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -50,6 +53,7 @@ export default function ReviewCallings() {
     onSuccess: (_, { approved }) => {
       const p = selectedProposal;
       setSelectedProposal(null);
+      setSelectedStage(null);
       queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
       if (!p) return;
       if (approved) {
@@ -103,64 +107,124 @@ export default function ReviewCallings() {
             <h1 className="text-3xl font-bold">Review Callings</h1>
           </div>
 
-          <div className="rounded-md border bg-card overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Proposed Calling</TableHead>
-                  <TableHead>Ward</TableHead>
-                  <TableHead>Approvals</TableHead>
-                  <TableHead>Date Submitted</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      Loading…
-                    </TableCell>
-                  </TableRow>
-                ) : pendingProposals.length > 0 ? (
-                  pendingProposals.map((proposal) => (
-                    <TableRow
-                      key={proposal.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelectedProposal(proposal)}
-                    >
-                      <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
-                      <TableCell>{proposal.proposed_calling}</TableCell>
-                      <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
-                      <TableCell>
-                        <span className="tabular-nums">
-                          {proposal.approval_count} {proposal.approval_count === 1 ? "approval" : "approvals"}
-                          {proposal.denial_count > 0 && (
-                            <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
+          <div className="space-y-8">
+            {/* Stake Presidency Review */}
+            <div>
+              <h2 className="text-xl font-semibold mb-3">Stake Presidency Review</h2>
+              <div className="rounded-md border bg-card overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Proposed Calling</TableHead>
+                      <TableHead>Ward</TableHead>
+                      <TableHead>Approvals</TableHead>
+                      <TableHead>Date Submitted</TableHead>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      No callings pending review.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
+                      </TableRow>
+                    ) : spProposals.length > 0 ? (
+                      spProposals.map((proposal) => (
+                        <TableRow
+                          key={proposal.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => { setSelectedProposal(proposal); setSelectedStage("SP"); }}
+                        >
+                          <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
+                          <TableCell>{proposal.proposed_calling}</TableCell>
+                          <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
+                          <TableCell>
+                            <span className="tabular-nums">
+                              {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
+                              {proposal.denial_count > 0 && (
+                                <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* High Council Review */}
+            <div>
+              <h2 className="text-xl font-semibold mb-3">High Council Review</h2>
+              <div className="rounded-md border bg-card overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Proposed Calling</TableHead>
+                      <TableHead>Ward</TableHead>
+                      <TableHead>Approvals</TableHead>
+                      <TableHead>Date Submitted</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
+                      </TableRow>
+                    ) : hcProposals.length > 0 ? (
+                      hcProposals.map((proposal) => (
+                        <TableRow
+                          key={proposal.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => { setSelectedProposal(proposal); setSelectedStage("HC"); }}
+                        >
+                          <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
+                          <TableCell>{proposal.proposed_calling}</TableCell>
+                          <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
+                          <TableCell>
+                            <span className="tabular-nums">
+                              {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
+                              {proposal.denial_count > 0 && (
+                                <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </div>
         </div>
 
-        <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && setSelectedProposal(null)}>
+        <Dialog
+          open={!!selectedProposal}
+          onOpenChange={(open) => { if (!open) { setSelectedProposal(null); setSelectedStage(null); } }}
+        >
           <DialogContent className="max-w-[90vw] sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl">Review Recommendation</DialogTitle>
-              <DialogDescription>
-                Review details for {selectedProposal?.fname} {selectedProposal?.lname}
-              </DialogDescription>
+              <div className="flex items-center gap-2 mt-1">
+                <DialogDescription>
+                  Review details for {selectedProposal?.fname} {selectedProposal?.lname}
+                </DialogDescription>
+                <span className="badge badge-secondary text-xs">
+                  {selectedStage === "HC" ? "HC Review" : "SP Review"}
+                </span>
+              </div>
             </DialogHeader>
 
             {selectedProposal && (
@@ -199,7 +263,7 @@ export default function ReviewCallings() {
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Reviewer Votes</Label>
                         <div className="flex gap-4 tabular-nums">
                           <span className="text-success font-medium">
-                            {selectedProposal.approval_count} approved
+                            {selectedProposal.stage_approval_count} approved
                           </span>
                           {selectedProposal.denial_count > 0 && (
                             <span className="text-destructive font-medium">
@@ -216,7 +280,7 @@ export default function ReviewCallings() {
 
             <DialogFooter className="gap-2 sm:gap-0">
               <div className="flex w-full justify-between items-center">
-                <Button variant="outline" onClick={() => setSelectedProposal(null)}>
+                <Button variant="outline" onClick={() => { setSelectedProposal(null); setSelectedStage(null); }}>
                   Close
                 </Button>
                 <div className="flex gap-2">
