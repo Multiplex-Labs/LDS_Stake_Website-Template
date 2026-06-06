@@ -59,7 +59,10 @@ def get_bishops_ward(session: Session, bishop_user: User) -> Ward:
     if not user_has_calling(bishop_user, "Bishop"):
         raise HTTPException(status_code=403, detail="User does not have a Bishop calling.")
     bishop_calling = session.exec(
-        select(UserCalling).where(UserCalling.user_id == bishop_user.id).join_from(UserCalling.calling).where_by(Calling.name == "Bishop")
+        select(UserCalling)
+        .join(Calling, UserCalling.calling_id == Calling.id)
+        .where(UserCalling.user_id == bishop_user.id)
+        .where(Calling.name == "Bishop")
     ).first()
     ward_statement = select(Ward).where(Ward.bishop_id == bishop_calling.id)
     ward = session.exec(ward_statement).first()

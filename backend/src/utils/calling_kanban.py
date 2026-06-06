@@ -153,6 +153,27 @@ def _latest_update(updates: list) -> KanbanUpdate:
     return max(updates, key=lambda u: (u.updated_at, u.id))
 
 
+def _stage_scoped_approval_counts(
+    updates: list,
+    approvals: list,
+    stage: "KanbanStages",
+) -> tuple[int, int]:
+    stage_entries = [u for u in updates if u.to_stage == stage]
+    if not stage_entries:
+        logger.warning("_stage_scoped_approval_counts: no KanbanUpdate found for stage %s — returning (0, 0)", stage)
+        return (0, 0)
+    else:
+        stage_entry_time = max(stage_entries, key=lambda u: (u.updated_at, u.id)).updated_at
+        in_window = [a for a in approvals if a.created_at >= stage_entry_time]
+    # Filter by approver role based on stage
+    if stage == KanbanStages.SP_APPROVAL:
+        in_window = [a for a in in_window if a.approver_user is not None and is_stake_presidency(a.approver_user)]
+    elif stage == KanbanStages.HC_APPROVAL:
+        in_window = [a for a in in_window if a.approver_user is not None and is_high_councilor(a.approver_user)]
+    approved = sum(1 for a in in_window if a.approved)
+    return approved, len(in_window) - approved
+
+
 def _get_stage_last_entered_at(proposal_id: int, stage: KanbanStages, session: Session):
     """Return the updated_at of the most recent KanbanUpdate that moved this proposal TO stage."""
     updates = session.exec(

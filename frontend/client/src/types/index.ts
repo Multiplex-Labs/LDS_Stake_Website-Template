@@ -69,8 +69,8 @@ export interface CallingProposal {
 }
 
 export interface CallingProposalWithCounts extends CallingProposal {
-  approval_count: number;
-  denial_count: number;
+  stage_approval_count: number;
+  stage_denial_count: number;
 }
 
 // Keys are KanbanStages enum values serialized as numeric strings:
