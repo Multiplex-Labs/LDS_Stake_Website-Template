@@ -68,10 +68,15 @@ export interface CallingProposal {
   submitter: number;
 }
 
+export interface CallingProposalWithCounts extends CallingProposal {
+  approval_count: number;
+  denial_count: number;
+}
+
 // Keys are KanbanStages enum values serialized as numeric strings:
 // "0"=SP_APPROVAL, "1"=HC_APPROVAL, "2"=INTERVIEW, "3"=SUSTAIN,
 // "4"=SET_APART, "5"=LCR_UPDATE, "6"=DONE
-export type KanbanBoard = Record<string, CallingProposal[]>;
+export type KanbanBoard = Record<string, CallingProposalWithCounts[]>;
 
 export interface CallingComment {
   id: number;

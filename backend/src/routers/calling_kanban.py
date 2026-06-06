@@ -1,7 +1,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
-from sqlmodel import Session, col, select
+from sqlmodel import Session, Field, col, select
 from datetime import datetime, timezone
 
 from ..utils import (
@@ -19,6 +19,7 @@ from ..utils import (
 )
 from ..db import get_session
 from ..models import (
+    BaseModel,
     KanbanStages,
     KanbanUpdate,
     CallingProposal,
@@ -32,6 +33,38 @@ from ..models import (
 
 logger = getLogger("application")
 router = APIRouter(prefix="/calling-kanban", tags=["calling-kanban"])
+
+
+class CallingProposalWithCounts(BaseModel):
+    id: int
+    fname: str
+    lname: str
+    spouse_name: str
+    proposed_calling: str
+    ward_id: int
+    submitter: int
+    is_release: bool
+    submitted_at: datetime
+    updated_at: datetime
+    approval_count: int = Field(ge=0)
+    denial_count: int = Field(ge=0)
+
+    @classmethod
+    def from_proposal(cls, proposal: CallingProposal, approval_count: int, denial_count: int) -> "CallingProposalWithCounts":
+        return cls(
+            id=proposal.id,
+            fname=proposal.fname,
+            lname=proposal.lname,
+            spouse_name=proposal.spouse_name,
+            proposed_calling=proposal.proposed_calling,
+            ward_id=proposal.ward_id,
+            submitter=proposal.submitter,
+            is_release=proposal.is_release,
+            submitted_at=proposal.submitted_at,
+            updated_at=proposal.updated_at,
+            approval_count=approval_count,
+            denial_count=denial_count,
+        )
 
 
 def _proposal_statement_for_user(current_user: User, session: Session):
@@ -563,14 +596,14 @@ def revert_proposal(
 
 
 # Kanban board view
-@router.get("/board")
+@router.get("/board", response_model=dict[KanbanStages, list[CallingProposalWithCounts]])
 def get_kanban_board(
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser())
 ):
     """Return active proposals grouped by kanban stage; access mirrors list_proposals."""
     proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
-    board: dict[KanbanStages, list[CallingProposal]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
+    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
     if not proposals:
         return board
 
@@ -582,12 +615,24 @@ def get_kanban_board(
     for u in all_updates:
         updates_by_proposal[u.proposal_id].append(u)
 
+    all_approvals = session.exec(
+        select(CallingApproval).where(col(CallingApproval.proposal_id).in_(proposal_ids))
+    ).all()
+    approvals_by_proposal: dict[int, list[CallingApproval]] = defaultdict(list)
+    for a in all_approvals:
+        approvals_by_proposal[a.proposal_id].append(a)
+
     for proposal in proposals:
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
+            logger.warning("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
-            board[stage].append(proposal)
+            proposal_approvals = approvals_by_proposal.get(proposal.id, [])
+            approved = sum(1 for a in proposal_approvals if a.approved)
+            board[stage].append(CallingProposalWithCounts.from_proposal(
+                proposal, approval_count=approved, denial_count=len(proposal_approvals) - approved
+            ))
     return board
 
