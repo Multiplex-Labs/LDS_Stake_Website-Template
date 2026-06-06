@@ -133,7 +133,7 @@ export default function ReviewCallings() {
                       <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
                       <TableCell>
                         <span className="tabular-nums">
-                          {proposal.approval_count} approved
+                          {proposal.approval_count} {proposal.approval_count === 1 ? "approval" : "approvals"}
                           {proposal.denial_count > 0 && (
                             <span className="text-destructive ml-1">/ {proposal.denial_count} denied</span>
                           )}
