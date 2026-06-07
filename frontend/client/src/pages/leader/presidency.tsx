@@ -4,65 +4,55 @@ import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, Users } from "lucide-react";
-import { findByCallingName } from "@/lib/hooks";
-import type { ApiUser } from "@/types";
-
-const ASSIGNMENTS = [
-  {
-    role: "Stake President",
-    callingName: "Stake President",
-    responsibilities: [
-      "Bishops",
-      "Relief Society",
-      "Stake Patriarch",
-      "High Council",
-      "First time Temple Interviews",
-      "Coordinating Council",
-      "Stake Council",
-      "General Conference Tickets",
-    ],
-  },
-  {
-    role: "First Counselor",
-    callingName: "1st Counselor",
-    responsibilities: [
-      "Sunday School",
-      "Emergency Preparedness",
-      "Blood Drive",
-      "Welfare and Self Reliance",
-      "Temple and Family History",
-      "Stake Finances/Records",
-      "Music",
-    ],
-    wards: ["9th Ward", "10th Ward", "11th Ward", "12th Ward"],
-  },
-  {
-    role: "Second Counselor",
-    callingName: "2nd Counselor",
-    responsibilities: [
-      "Physical Facilities",
-      "Technology",
-      "Institute",
-      "Audits",
-      "Stake Activities",
-      "Primary",
-      "Missionary Work",
-    ],
-    wards: ["13th Ward", "14th Ward", "15th Ward", "16th Ward", "17th Ward"],
-  },
-];
+import type { PresidencyAssignment, Ward } from "@/types";
 
 export default function PresidencyAssignments() {
-  const { data: users = [] } = useQuery<ApiUser[]>({
-    queryKey: ["/api/users/"],
+  const {
+    data: assignments = [],
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+  } = useQuery<PresidencyAssignment[]>({
+    queryKey: ["/api/presidency-assignments/"],
   });
 
-  const membersByRole = useMemo(() => {
-    return ASSIGNMENTS.map((a) => ({
-      ...a,
-      user: findByCallingName(users, a.callingName),
-    }));
-  }, [users]);
+  const {
+    data: wards = [],
+    isLoading: wardsLoading,
+    error: wardsError,
+  } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+
+  const wardMap = useMemo(
+    () => new Map(wards.map((w) => [w.id, w.name])),
+    [wards],
+  );
+
+  if (assignmentsLoading || wardsLoading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <p className="text-muted-foreground text-sm">Loading…</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (assignmentsError) {
+    console.error("[presidency] assignments:", assignmentsError);
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <p className="text-destructive text-sm">Failed to load presidency assignments.</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (wardsError) {
+    console.error("[presidency] wards:", wardsError);
+    // Non-fatal — continue rendering; ward names will degrade to IDs
+  }
 
   return (
     <Layout>
@@ -70,18 +60,21 @@ export default function PresidencyAssignments() {
         <h1 className="text-3xl font-bold text-primary mb-8">Stake Presidency Assignments</h1>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {membersByRole.map((member, index) => {
-            const displayName = member.user
-              ? `President ${member.user.fname} ${member.user.lname}`
-              : `President [${member.role}]`;
+          {assignments.map((member) => {
+            const displayName = member.current_holder
+              ? `President ${member.current_holder.fname} ${member.current_holder.lname}`
+              : `President [${member.calling_name}]`;
 
             return (
-              <Card key={index} className="flex flex-col h-full border-t-4 border-t-primary shadow-sm hover:shadow-md transition-shadow">
+              <Card
+                key={member.id}
+                className="flex flex-col h-full border-t-4 border-t-primary shadow-sm hover:shadow-md transition-shadow"
+              >
                 <CardHeader className="pb-3">
                   <CardTitle className="flex flex-col gap-1">
                     <span className="text-2xl font-bold">{displayName}</span>
                     <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium uppercase tracking-wide">
-                      {member.role}
+                      {member.calling_name}
                     </div>
                   </CardTitle>
                 </CardHeader>
@@ -91,26 +84,34 @@ export default function PresidencyAssignments() {
                       <Check className="h-4 w-4" />
                       Responsibilities
                     </h3>
-                    <ul className="space-y-2">
-                      {member.responsibilities.map((resp, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
-                          <span>{resp}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    {member.responsibilities.length > 0 ? (
+                      <ul className="space-y-2">
+                        {member.responsibilities.map((resp, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
+                            <span>{resp}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">None listed</p>
+                    )}
                   </div>
 
-                  {member.wards && (
+                  {member.wards_overseen && member.wards_overseen.length > 0 && (
                     <div>
                       <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        Elder Quorum Presidencies
+                        Ward Assignments
                       </h3>
                       <div className="flex flex-wrap gap-2">
-                        {member.wards.map((ward, i) => (
-                          <Badge key={i} variant="secondary" className="bg-primary/5 text-primary hover:bg-primary/10 border-primary/20">
-                            {ward}
+                        {member.wards_overseen.map((wardId) => (
+                          <Badge
+                            key={wardId}
+                            variant="secondary"
+                            className="bg-primary/5 text-primary hover:bg-primary/10 border-primary/20"
+                          >
+                            {wardMap.get(wardId) ?? `Ward ${wardId}`}
                           </Badge>
                         ))}
                       </div>

@@ -8,7 +8,7 @@ from ..models import (
     UserSession, Assignment,
     SpeakingTopic, SpeakingAssignment,
     User, Permissions, Permission,
-    Calling
+    Calling, PresidencyAssignment
 )
 from .security import hash_password
 from .usercalling import HC_CALLING_NAME
@@ -252,6 +252,47 @@ def create_system_callings_and_assignments():
             session, "Executive Secretary", max_slots=1, is_public=True,
             permissions=[~Permission.NONE]  # All permissions
         )
+
+        # Create presidency assignment rows for the three presidency callings
+        create_presidency_assignments(session)
+
+
+def create_presidency_assignments(session: Optional[Session] = None):
+    """Creates PresidencyAssignment rows for the three presidency callings if they don't exist.
+
+    Can be called with an existing session (e.g. from create_system_callings_and_assignments)
+    or standalone (opens its own session when session=None).
+    """
+    PRESIDENCY_CALLINGS = ["Stake President", "First Counselor", "Second Counselor"]
+
+    def _ensure_rows(s: Session):
+        try:
+            for name in PRESIDENCY_CALLINGS:
+                calling = s.exec(select(Calling).where(Calling.name == name)).first()
+                if calling is None:
+                    logger.warning(f"create_presidency_assignments: calling '{name}' not found, skipping.")
+                    continue
+                existing = s.exec(
+                    select(PresidencyAssignment).where(PresidencyAssignment.calling_id == calling.id)
+                ).first()
+                if existing is None:
+                    logger.info(f"Creating PresidencyAssignment row for '{name}'.")
+                    row = PresidencyAssignment(calling_id=calling.id)
+                    s.add(row)
+            s.commit()
+        except Exception:
+            logger.exception(
+                "create_presidency_assignments: failed to seed rows, rolling back."
+            )
+            s.rollback()
+            raise
+
+    if session is not None:
+        _ensure_rows(session)
+    else:
+        orm = ORM()
+        with Session(orm.engine) as s:
+            _ensure_rows(s)
 
 
 def validate_unique_field(

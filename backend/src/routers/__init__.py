@@ -6,3 +6,4 @@ from .assignments import router as assignments_router
 from .speaking import router as speaking_router
 from .calling_kanban import router as calling_kanban_router
 from .ward import router as ward_router
+from .presidency import router as presidency_router

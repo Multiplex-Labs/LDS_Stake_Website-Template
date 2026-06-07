@@ -20,3 +20,4 @@ from .calling_kanban import (
     CallingInterview
 )
 from .ward import Ward
+from .presidency_assignment import PresidencyAssignment

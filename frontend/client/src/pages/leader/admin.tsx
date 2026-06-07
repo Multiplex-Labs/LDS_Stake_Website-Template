@@ -6,12 +6,14 @@ import { UserAdminContent } from "./users";
 import { CallingsTab } from "./callings-tab";
 import { SpeakingTab } from "./speaking-tab";
 import { HCAssignmentsTab } from "./hc-assignments-tab";
+import { PresidencyAssignmentsTab } from "./presidency-assignments-tab";
 
 const TABS = [
   { value: "users", label: "Users" },
   { value: "callings", label: "Callings" },
   { value: "speaking", label: "Speaking" },
   { value: "hc-assignments", label: "HC Assignments" },
+  { value: "presidency", label: "Presidency" },
   { value: "site-content", label: "Site Content" },
 ] as const;
 
@@ -69,7 +71,11 @@ export default function AdminHub() {
             <HCAssignmentsTab />
           </TabsContent>
 
-          {TABS.filter((t) => !["users", "callings", "speaking", "hc-assignments"].includes(t.value)).map((tab) => (
+          <TabsContent value="presidency">
+            <PresidencyAssignmentsTab />
+          </TabsContent>
+
+          {TABS.filter((t) => !["users", "callings", "speaking", "hc-assignments", "presidency"].includes(t.value)).map((tab) => (
             <TabsContent key={tab.value} value={tab.value}>
               <TabPlaceholder name={tab.label} />
             </TabsContent>

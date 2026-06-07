@@ -142,3 +142,17 @@ export interface SustainingPrepState {
   wardAssignments: WardAssignment[];
   ordinations: OrdinationEntry[];
 }
+
+export interface PresidencyAssignment {
+  id: number;
+  calling_id: number;
+  calling_name: string;
+  current_holder: { id: number; fname: string; lname: string } | null;
+  responsibilities: string[];
+  wards_overseen: number[];
+}
+
+export interface PresidencyAssignmentUpdate {
+  responsibilities: string | null;
+  ward_ids: number[];
+}
