@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, setAccessToken } from "@/lib/queryClient";
+import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 
 export default function ChangePassword() {
@@ -27,8 +28,17 @@ export default function ChangePassword() {
       toast.error("Passwords do not match");
       return;
     }
-    if (form.newPassword.length < 8) {
-      toast.error("New password must be at least 8 characters");
+    const pw = form.newPassword;
+    if (
+      pw.length < 8 ||
+      pw.length > 128 ||
+      !/[A-Z]/.test(pw) ||
+      !/[0-9]/.test(pw) ||
+      !/[^a-zA-Z0-9]/.test(pw)
+    ) {
+      toast.error("Password requirements not met", {
+        description: "Must be 8–128 characters and include at least one uppercase letter, one digit, and one special character.",
+      });
       return;
     }
     if (!user) {
@@ -48,16 +58,16 @@ export default function ChangePassword() {
       setUser(null);
       setLocation("/login");
     } catch (err: unknown) {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("401")) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
         toast.error("Session expired", { description: "Please log in again to change your password." });
         setAccessToken(null);
         setUser(null);
         setLocation("/login");
         return;
-      } else if (raw.startsWith("400")) {
+      } else if (status === 400) {
         toast.error("Error", { description: "Current password is incorrect." });
-      } else if (raw.startsWith("403")) {
+      } else if (status === 403) {
         toast.error("Not Authorized", { description: "You are not authorized to change this password." });
       } else {
         console.error("[change-password] unexpected error:", err);

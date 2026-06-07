@@ -3,7 +3,7 @@ from typing import Tuple
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from src.models import User, UserCalling, Calling
+from src.models import User, UserCalling, Calling, Permission
 
 
 def login_client(client: TestClient, email: str, password: str) -> str:
@@ -110,5 +110,92 @@ def test_get_users_noauth(client: TestClient, db_session):
                 has_public_calling = True
                 break
         assert has_public_calling
-        
+
+
+# --- Password complexity enforcement tests (Task 3.1) ---
+
+def test_change_password_missing_uppercase_rejected(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": "password1!"},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_missing_digit_rejected(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": "Password!"},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_missing_special_char_rejected(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": "Password1"},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_too_long_rejected(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    too_long = "A1!" + "a" * 126  # 129 characters total
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": too_long},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_compliant_accepted(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": "Secure1!"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+
+
+# --- Password complexity enforcement tests (Task 3.2) ---
+
+def test_create_user_weak_password_rejected(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "email": "weakpass@example.com",
+        "password": "nouppernordigit",
+        "fname": "Test",
+        "lname": "User",
+        "active": True,
+        "force_password_reset": True,
+    }
+    r = client.post("/users/", json=payload, headers=headers)
+    assert r.status_code == 422
+
 

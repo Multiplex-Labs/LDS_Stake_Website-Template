@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import secrets
 import mimetypes
@@ -7,6 +8,7 @@ from logging import getLogger
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel, Session, delete, func, select
 
 
@@ -141,8 +143,22 @@ def update_user(
     return ResponseSafeUser.from_user(db_user)
 
 class PasswordUpdateRequest(SQLModel):
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=8, max_length=128)
     old_password: Optional[str] = None
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        errors = []
+        if not any(c.isupper() for c in v):
+            errors.append("one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            errors.append("one digit")
+        if not re.search(r"[^a-zA-Z0-9]", v):
+            errors.append("one special character")
+        if errors:
+            raise ValueError(f"Password must contain at least: {', '.join(errors)}")
+        return v
 @router.patch("/{user_id}/password")
 def update_user_password(
     user_id: int,
@@ -229,7 +245,21 @@ def get_user_by_email(
 
 
 class UserCreateRequest(RequestSafeUser):
-    password: str
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        errors = []
+        if not any(c.isupper() for c in v):
+            errors.append("one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            errors.append("one digit")
+        if not re.search(r"[^a-zA-Z0-9]", v):
+            errors.append("one special character")
+        if errors:
+            raise ValueError(f"Password must contain at least: {', '.join(errors)}")
+        return v
 @router.post("/")
 def create_user(
     user: UserCreateRequest,

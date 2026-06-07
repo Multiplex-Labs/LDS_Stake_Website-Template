@@ -44,7 +44,7 @@ import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
-import { getInitials, fullName } from "@/lib/utils";
+import { getInitials, fullName, apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ApiUser, ApiCalling } from "@/types";
@@ -244,8 +244,17 @@ export function UserAdminContent() {
 
   function validateStep3(form: AddWizardForm) {
     const errors: AddWizardState["errors"] = {};
-    if (!form.password) errors.password = "Password is required";
-    else if (form.password.length < 8) errors.password = "Minimum 8 characters";
+    if (!form.password) {
+      errors.password = "Password is required";
+    } else if (
+      form.password.length < 8 ||
+      form.password.length > 128 ||
+      !/[A-Z]/.test(form.password) ||
+      !/[0-9]/.test(form.password) ||
+      !/[^a-zA-Z0-9]/.test(form.password)
+    ) {
+      errors.password = "Must be 8–128 characters with at least one uppercase, one digit, and one special character";
+    }
     if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match";
     return errors;
   }
@@ -343,12 +352,12 @@ export function UserAdminContent() {
       setEditSlotNumber("");
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("409")) {
+      const status = apiErrorStatus(err);
+      if (status === 409) {
         toast.error("User already has a calling", { description: "A person can only hold one calling at a time." });
-      } else if (msg.startsWith("403")) {
+      } else if (status === 403) {
         toast.error("Permission denied", { description: "MANAGE_CALLINGS permission required." });
-      } else if (msg.startsWith("400")) {
+      } else if (status === 400) {
         toast.error("Slot unavailable", { description: "That slot was just taken. Please select another." });
       } else {
         toast.error("Failed to assign calling");
@@ -426,8 +435,8 @@ export function UserAdminContent() {
       setResetPasswordForm({ password: "", confirm: "" });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("401") || msg.startsWith("403")) {
+      const status = apiErrorStatus(err);
+      if (status === 401 || status === 403) {
         toast.error("Session Expired", { description: "Log out and back in, then try again." });
       } else {
         toast.error("Reset Failed", { description: "Could not reset password." });
@@ -444,8 +453,9 @@ export function UserAdminContent() {
       handleCloseEdit();
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("400")) {
+      const status = apiErrorStatus(err);
+      if (status === 400) {
+        const msg = err instanceof Error ? err.message : "";
         toast.error("Cannot Delete User", { description: msg.replace(/^\d+:\s*/, "") });
       } else {
         toast.error("Delete Failed", { description: "Could not delete user." });
@@ -1434,8 +1444,17 @@ export function UserAdminContent() {
                 disabled={resetPasswordMutation.isPending}
                 onClick={() => {
                   const errors: typeof resetPasswordErrors = {};
-                  if (!resetPasswordForm.password) errors.password = "Password is required";
-                  else if (resetPasswordForm.password.length < 8) errors.password = "Minimum 8 characters";
+                  if (!resetPasswordForm.password) {
+                    errors.password = "Password is required";
+                  } else if (
+                    resetPasswordForm.password.length < 8 ||
+                    resetPasswordForm.password.length > 128 ||
+                    !/[A-Z]/.test(resetPasswordForm.password) ||
+                    !/[0-9]/.test(resetPasswordForm.password) ||
+                    !/[^a-zA-Z0-9]/.test(resetPasswordForm.password)
+                  ) {
+                    errors.password = "Must be 8–128 characters with at least one uppercase, one digit, and one special character";
+                  }
                   if (resetPasswordForm.password !== resetPasswordForm.confirm) errors.confirm = "Passwords do not match";
                   if (Object.keys(errors).length > 0) { setResetPasswordErrors(errors); return; }
                   if (!resetPasswordUser) return;
