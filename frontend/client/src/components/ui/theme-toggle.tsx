@@ -1,4 +1,4 @@
-import { Sun, Moon, Contrast } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,9 +9,8 @@ import {
 import { useThemeStore, THEMES, type Theme } from "@/stores/theme";
 
 const ICONS: Record<Theme, React.ReactNode> = {
-  light:          <Sun className="h-4 w-4" />,
-  dark:           <Moon className="h-4 w-4" />,
-  "high-contrast": <Contrast className="h-4 w-4" />,
+  light: <Sun className="h-4 w-4" />,
+  dark:  <Moon className="h-4 w-4" />,
 };
 
 export function ThemeToggle() {

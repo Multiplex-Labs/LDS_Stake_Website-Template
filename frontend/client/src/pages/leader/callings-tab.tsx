@@ -449,9 +449,7 @@ export function CallingsTab() {
                       {calling.max_slots}
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={`badge badge-sm ${calling.is_public ? "badge-success" : "badge-ghost"}`}
-                      >
+                      <span className={calling.is_public ? "text-sm font-medium text-success" : "text-sm text-muted-foreground"}>
                         {calling.is_public ? "Public" : "Private"}
                       </span>
                     </TableCell>
