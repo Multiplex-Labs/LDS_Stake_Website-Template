@@ -63,8 +63,6 @@ def test_create_get_list_proposal(client: TestClient, auth_headers, db_session: 
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
     assert r.status_code == 200
     created = r.json()
-    print(r.text)
-    print(created)
     assert created["fname"] == "Jane"
     assert created["lname"] == "Doe"
     assert "id" in created
@@ -622,6 +620,8 @@ def test_board_baseline_sp_approval_count(
     matching = [p for p in sp_approval_column if p["id"] == proposal_id]
     assert matching, f"Proposal {proposal_id} not found in board['0']"
     assert matching[0]["stage_approval_count"] == 1
+    # Admin (auth_headers user) has not voted, so current_stage_vote must be None
+    assert matching[0]["current_stage_vote"] is None
 
 
 def test_board_count_resets_after_sp_to_hc_advance(
@@ -996,3 +996,109 @@ def test_board_includes_done_stage(client: TestClient, auth_headers, db_session:
     assert "6" in board, "Board must contain a '6' (DONE) key"
     done_ids = [p["id"] for p in board["6"]]
     assert proposal_id in done_ids, f"Proposal {proposal_id} must appear in board['6']"
+
+
+# ---------------------------------------------------------------------------
+# current_stage_vote field tests
+# ---------------------------------------------------------------------------
+
+
+def test_board_current_stage_vote_none_for_fresh_proposal(
+    client: TestClient, auth_headers, db_session: Session
+):
+    """A brand-new proposal has no votes yet; current_stage_vote must be None for the requesting user."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    r = client.get("/calling-kanban/board", headers=auth_headers)
+    assert r.status_code == 200
+    board = r.json()
+
+    sp_column = board.get("0", [])
+    matching = [p for p in sp_column if p["id"] == proposal_id]
+    assert matching, f"Proposal {proposal_id} not found in board['0']"
+    assert matching[0]["current_stage_vote"] is None, (
+        "Fresh proposal with no votes must return current_stage_vote=null"
+    )
+
+
+def test_board_current_stage_vote_true_after_user_approves(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    """After voting approve on a proposal, the voter's board fetch shows current_stage_vote=True."""
+    (sp, sp_pass), _ = _setup_sp_users(db_session, create_user)
+
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # SP votes approve — threshold is 2 so proposal stays at SP_APPROVAL
+    sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.SP_APPROVAL
+    )
+
+    # Fetch board AS the voter (sp_headers)
+    r = client.get("/calling-kanban/board", headers=sp_headers)
+    assert r.status_code == 200
+    board = r.json()
+
+    sp_column = board.get("0", [])
+    matching = [p for p in sp_column if p["id"] == proposal_id]
+    assert matching, f"Proposal {proposal_id} not found in board['0'] for voter"
+    assert matching[0]["current_stage_vote"] is True, (
+        f"Voter should see current_stage_vote=True; got {matching[0]['current_stage_vote']}"
+    )
+
+
+def test_board_current_stage_vote_resets_to_none_after_revert(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    """After a revert, a prior-stage vote must not appear in the new stage window (current_stage_vote=None)."""
+    (sp, sp_pass), (fc, fc_pass) = _setup_sp_users(db_session, create_user)
+
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
+    fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
+
+    # Both SP members vote → auto-advances to HC_APPROVAL
+    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
+    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=fc_headers)
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.HC_APPROVAL
+    )
+
+    # Admin reverts back to SP_APPROVAL; the two SP votes now predate the new stage-entry time
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
+    assert r.status_code == 200
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.SP_APPROVAL
+    )
+
+    # Fetch board AS the original voter (sp_headers); their vote is now outside the window
+    r = client.get("/calling-kanban/board", headers=sp_headers)
+    assert r.status_code == 200
+    board = r.json()
+
+    sp_column = board.get("0", [])
+    matching = [p for p in sp_column if p["id"] == proposal_id]
+    assert matching, f"Proposal {proposal_id} not found in board['0'] after revert"
+    assert matching[0]["current_stage_vote"] is None, (
+        "After revert the prior vote falls outside the new stage window; "
+        f"current_stage_vote must be None, got {matching[0]['current_stage_vote']}"
+    )

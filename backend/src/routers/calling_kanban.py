@@ -49,9 +49,16 @@ class CallingProposalWithCounts(BaseModel):
     updated_at: datetime
     stage_approval_count: int = Field(ge=0)
     stage_denial_count: int = Field(ge=0)
+    current_stage_vote: bool | None = None
 
     @classmethod
-    def from_proposal(cls, proposal: CallingProposal, stage_approval_count: int, stage_denial_count: int) -> "CallingProposalWithCounts":
+    def from_proposal(
+        cls,
+        proposal: CallingProposal,
+        stage_approval_count: int,
+        stage_denial_count: int,
+        current_stage_vote: bool | None = None,
+    ) -> "CallingProposalWithCounts":
         return cls(
             id=proposal.id,
             fname=proposal.fname,
@@ -65,6 +72,7 @@ class CallingProposalWithCounts(BaseModel):
             updated_at=proposal.updated_at,
             stage_approval_count=stage_approval_count,
             stage_denial_count=stage_denial_count,
+            current_stage_vote=current_stage_vote,
         )
 
 
@@ -681,11 +689,28 @@ def get_kanban_board(
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
-            proposal_updates = updates_by_proposal.get(proposal.id, [])
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
-            approved, denied = _stage_scoped_approval_counts(proposal_updates, proposal_approvals, stage)
+            approved, denied = _stage_scoped_approval_counts(updates, proposal_approvals, stage)
+
+            # Only votes cast after the most recent entry into this stage count,
+            # so re-queued proposals start fresh.
+            current_stage_vote: bool | None = None
+            stage_entries = [u for u in updates if u.to_stage == stage]
+            if stage_entries:
+                stage_entry_time = max(stage_entries, key=lambda u: (u.updated_at, u.id)).updated_at
+                user_approval = next(
+                    (a for a in proposal_approvals
+                     if a.created_at >= stage_entry_time and a.approver_id == current_user.id),
+                    None,
+                )
+                if user_approval is not None:
+                    current_stage_vote = user_approval.approved
+
             board[stage].append(CallingProposalWithCounts.from_proposal(
-                proposal, stage_approval_count=approved, stage_denial_count=denied
+                proposal,
+                stage_approval_count=approved,
+                stage_denial_count=denied,
+                current_stage_vote=current_stage_vote,
             ))
     return board
 
