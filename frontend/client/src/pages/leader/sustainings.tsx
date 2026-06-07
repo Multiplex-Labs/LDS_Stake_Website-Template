@@ -302,7 +302,7 @@ export default function ReleasesAndSustainings() {
               <Link href="/leader/callings/sustainings-prep">
                 <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
                   <ClipboardList className="h-4 w-4" />
-                  Sustaining Prep
+                  Prepare Form
                 </Button>
               </Link>
             )}
