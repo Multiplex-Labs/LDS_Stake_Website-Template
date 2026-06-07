@@ -153,19 +153,68 @@ def _latest_update(updates: list) -> KanbanUpdate:
     return max(updates, key=lambda u: (u.updated_at, u.id))
 
 
+def _build_stage_intervals(
+    updates: list,
+    stage: "KanbanStages",
+) -> list[tuple[datetime, datetime | None]]:
+    """Return all half-open intervals [enter, leave) during which the proposal was at `stage`.
+
+    The last interval is open-ended (None) if the proposal is currently at that stage.
+    Intervals are built by walking updates in chronological order and recording every
+    entry/exit pair for the requested stage.
+    """
+    sorted_updates = sorted(updates, key=lambda u: (u.updated_at, u.id))
+    intervals: list[tuple[datetime, datetime | None]] = []
+    in_stage_since: datetime | None = None
+    for u in sorted_updates:
+        if u.to_stage == stage:
+            in_stage_since = u.updated_at
+        elif in_stage_since is not None:
+            intervals.append((in_stage_since, u.updated_at))
+            in_stage_since = None
+    if in_stage_since is not None:
+        intervals.append((in_stage_since, None))
+    return intervals
+
+
+def _in_any_interval(dt: datetime, intervals: list[tuple[datetime, datetime | None]]) -> bool:
+    """Return True if `dt` falls within any of the given half-open [start, end) intervals.
+
+    Normalizes all timestamps to UTC before comparison so that naive datetimes from
+    SQLite and aware datetimes from PostgreSQL are compared safely.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    for start, end in intervals:
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        if end is not None and end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        if dt >= start and (end is None or dt < end):
+            return True
+    return False
+
+
 def _stage_scoped_approval_counts(
     updates: list,
     approvals: list,
     stage: "KanbanStages",
 ) -> tuple[int, int]:
-    stage_entries = [u for u in updates if u.to_stage == stage]
-    if not stage_entries:
-        logger.warning("_stage_scoped_approval_counts: no KanbanUpdate found for stage %s — returning (0, 0)", stage)
+    """Return (approved_count, denied_count) for votes cast while the proposal was at `stage`.
+
+    Votes are included if their created_at falls within ANY interval during which the
+    proposal resided at `stage`, including prior passes before an admin revert. This
+    means a revert does not void votes that were cast legitimately before the proposal
+    left the stage the first time.
+    """
+    intervals = _build_stage_intervals(updates, stage)
+    if not intervals:
+        logger.warning(
+            "_stage_scoped_approval_counts: no KanbanUpdate found for stage %s — returning (0, 0)",
+            stage,
+        )
         return (0, 0)
-    else:
-        stage_entry_time = max(stage_entries, key=lambda u: (u.updated_at, u.id)).updated_at
-        in_window = [a for a in approvals if a.created_at >= stage_entry_time]
-    # Filter by approver role based on stage
+    in_window = [a for a in approvals if _in_any_interval(a.created_at, intervals)]
     if stage == KanbanStages.SP_APPROVAL:
         in_window = [a for a in in_window if a.approver_user is not None and is_stake_presidency(a.approver_user)]
     elif stage == KanbanStages.HC_APPROVAL:
@@ -333,14 +382,13 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     ).all()
 
     if status == KanbanStages.SP_APPROVAL:
-        sp_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.SP_APPROVAL]
-        stage_entry_time = _latest_update(sp_entries).updated_at if sp_entries else None
-        logger.debug(f"Checking SP approvals for proposal {proposal.id} since {stage_entry_time}")
+        sp_intervals = _build_stage_intervals(kanban_updates, KanbanStages.SP_APPROVAL)
+        logger.debug(f"Checking SP approvals for proposal {proposal.id}, intervals: {sp_intervals}")
         sp_approvals = [
             a for a in all_approvals
             if a.approver_user
             and is_stake_presidency(a.approver_user)
-            and (stage_entry_time is None or a.created_at >= stage_entry_time)
+            and _in_any_interval(a.created_at, sp_intervals)
         ]
         logger.debug(f"Found {len(sp_approvals)} SP approvals for proposal {proposal.id}")
         if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD", "2")) and all(a.approved for a in sp_approvals):
@@ -360,13 +408,12 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
             status = KanbanStages.HC_APPROVAL
 
     if status == KanbanStages.HC_APPROVAL:
-        hc_entries = [u for u in kanban_updates if u.to_stage == KanbanStages.HC_APPROVAL]
-        stage_entry_time = _latest_update(hc_entries).updated_at if hc_entries else None
+        hc_intervals = _build_stage_intervals(kanban_updates, KanbanStages.HC_APPROVAL)
         hc_approvals = [
             a for a in all_approvals
             if a.approver_user
             and is_high_councilor(a.approver_user)
-            and (stage_entry_time is None or a.created_at >= stage_entry_time)
+            and _in_any_interval(a.created_at, hc_intervals)
         ]
         if len(hc_approvals) >= int(os.getenv("HC_APPROVAL_THRESHOLD", "3")) and all(a.approved for a in hc_approvals):
             sorted_approvals = sorted(hc_approvals, key=lambda a: a.created_at, reverse=True)

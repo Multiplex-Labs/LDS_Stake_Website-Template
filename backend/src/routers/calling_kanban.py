@@ -17,7 +17,11 @@ from ..utils import (
     get_bishops_ward,
     get_stake_presidency,
 )
-from ..utils.calling_kanban import _stage_scoped_approval_counts
+from ..utils.calling_kanban import (
+    _stage_scoped_approval_counts,
+    _build_stage_intervals,
+    _in_any_interval,
+)
 from ..db import get_session
 from ..models import (
     BaseModel,
@@ -692,20 +696,16 @@ def get_kanban_board(
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
             approved, denied = _stage_scoped_approval_counts(updates, proposal_approvals, stage)
 
-            # Only votes cast after the most recent time this stage was entered count.
-            # A proposal reverted to an earlier stage and re-entered starts with no votes.
+            # Votes cast during ANY interval the proposal was at the current stage count,
+            # including prior passes before an admin revert. A revert does not void a vote
+            # that was legitimately cast while the proposal resided at this stage previously.
             current_stage_vote: bool | None = None
-            stage_entries = [u for u in updates if u.to_stage == stage]
-            if stage_entries:
-                stage_entry_time = max(stage_entries, key=lambda u: (u.updated_at, u.id)).updated_at
-                # Normalize to UTC for safe comparison across DB engines (SQLite returns naive, PostgreSQL aware)
-                if stage_entry_time.tzinfo is None:
-                    stage_entry_time = stage_entry_time.replace(tzinfo=timezone.utc)
+            stage_intervals = _build_stage_intervals(updates, stage)
+            if stage_intervals:
                 user_approval = next(
                     (
                         a for a in proposal_approvals
-                        if (a.created_at if a.created_at.tzinfo else a.created_at.replace(tzinfo=timezone.utc))
-                           >= stage_entry_time
+                        if _in_any_interval(a.created_at, stage_intervals)
                         and a.approver_id == current_user.id
                     ),
                     None,

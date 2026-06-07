@@ -397,10 +397,20 @@ def test_revert_proposal_permission_and_terminal(client: TestClient, auth_header
     assert r.status_code == 400
 
 
-def test_revert_does_not_re_advance_on_next_approval(
+def test_revert_re_advances_when_interval_votes_meet_threshold(
     client: TestClient, auth_headers, db_session: Session, create_user
 ):
-    """After a revert, pre-existing approvals must NOT auto-advance the proposal."""
+    """After a revert, patching an approval can re-advance if prior-interval votes meet threshold.
+
+    Under interval-based vote scoping, votes from all intervals the proposal occupied a
+    stage are counted together. After reverting SP→HC→SP:
+      - FC's original approval (interval 1) still counts
+      - Patching SP's approval updates its created_at to now (interval 2) and it also counts
+
+    Combined the two approvals meet the SP_APPROVAL_THRESHOLD (2), so the proposal
+    auto-advances back to HC_APPROVAL. This is the correct behavior: if enough legitimate
+    votes exist across all intervals, the business rule is satisfied.
+    """
     # Set up stake presidency
     sp, sp_pass = create_user()
     fc, fc_pass = create_user()
@@ -425,6 +435,7 @@ def test_revert_does_not_re_advance_on_next_approval(
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=fc_headers)
 
+    db_session.expire_all()
     current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
     assert current_stage == KanbanStages.HC_APPROVAL
 
@@ -432,16 +443,20 @@ def test_revert_does_not_re_advance_on_next_approval(
     r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
     assert r.status_code == 200
 
+    db_session.expire_all()
     current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
     assert current_stage == KanbanStages.SP_APPROVAL
 
-    # Changing an existing SP approval must NOT re-advance (old approvals predate stage re-entry)
+    # Patching SP's approval refreshes its created_at to now (falls in interval 2);
+    # FC's original vote remains in interval 1. Both count → threshold met → re-advance.
     r = client.patch(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
     assert r.status_code == 200
 
+    db_session.expire_all()
     current_stage = get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
-    assert current_stage == KanbanStages.SP_APPROVAL, (
-        "Historical pre-revert approvals must not count toward the threshold after a revert"
+    assert current_stage == KanbanStages.HC_APPROVAL, (
+        "Combined interval votes (FC interval 1 + SP interval 2) meet the threshold "
+        "and must cause an automatic re-advance to HC_APPROVAL"
     )
 
 
@@ -705,49 +720,43 @@ def test_board_hc_vote_increments_count(
     assert matching[0]["stage_approval_count"] == 1
 
 
-def test_board_revert_resets_count_window(
+def test_board_revert_preserves_prior_interval_counts(
     client: TestClient, auth_headers, db_session: Session, create_user
 ):
-    """Advance to HC, revert to SP, cast 1 new SP approval → board['0'] stage_approval_count=1 (not 3)."""
-    (sp, sp_pass), (fc, fc_pass) = _setup_sp_users(db_session, create_user)
+    """Revert back to SP after only 1 SP vote → board['0'] still shows stage_approval_count=1.
 
-    hc_calling = db_session.exec(select(Calling).where(Calling.name == "High Councilor")).first()
-    hc_user, hc_pass = create_user()
-    db_session.add(hc_user)
-    db_session.commit()
-    db_session.refresh(hc_user)
-    db_session.add(UserCalling(user_id=hc_user.id, calling_id=hc_calling.id, slot_number=1))
-    db_session.commit()
-    db_session.refresh(hc_user)
+    Under interval-based scoping, all votes from any interval the proposal occupied
+    a stage are counted. This test uses a single SP vote (below threshold) to avoid
+    auto-advance, then manually force-advances and reverts. The single SP vote from
+    interval 1 must still appear in the count after the revert opens interval 2.
+    """
+    (sp, sp_pass), _ = _setup_sp_users(db_session, create_user)
 
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
     assert r.status_code == 200
     proposal_id = r.json()["id"]
 
     sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
-    fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
-    hc_headers = {"Authorization": f"Bearer {login_client(client, hc_user.email, hc_pass)}"}
 
-    # SP + FC vote → auto-advances to HC_APPROVAL
+    # One SP vote (below threshold=2 → stays at SP_APPROVAL, so we force-advance manually)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
-    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=fc_headers)
+
+    db_session.expire_all()
+    assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.SP_APPROVAL
+
+    # Force-advance to HC_APPROVAL (closes the first SP interval)
+    r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
+    assert r.status_code == 200
 
     db_session.expire_all()
     assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.HC_APPROVAL
 
-    # One HC vote (pre-revert; should NOT count after revert)
-    client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=hc_headers)
-
-    # Admin reverts to SP_APPROVAL
+    # Admin reverts to SP_APPROVAL (opens a second SP interval)
     r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
     assert r.status_code == 200
 
     db_session.expire_all()
     assert get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session) == KanbanStages.SP_APPROVAL
-
-    # SP changes their approval (post-revert) — only this vote should be in the new SP window
-    r = client.patch(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
-    assert r.status_code == 200
 
     r = client.get("/calling-kanban/board", headers=auth_headers)
     assert r.status_code == 200
@@ -756,15 +765,23 @@ def test_board_revert_resets_count_window(
     sp_column = board.get("0", [])
     matching = [p for p in sp_column if p["id"] == proposal_id]
     assert matching, f"Proposal {proposal_id} not found in board['0'] after revert"
+    # SP's vote from interval 1 is preserved — still counted after the revert
     assert matching[0]["stage_approval_count"] == 1, (
-        f"Only 1 post-revert SP vote should count; got {matching[0]['stage_approval_count']}"
+        f"Vote from first SP interval must persist through revert; "
+        f"got {matching[0]['stage_approval_count']}"
     )
 
 
-def test_board_denial_count_is_stage_scoped(
+def test_board_denial_count_persists_across_revert(
     client: TestClient, auth_headers, db_session: Session, create_user
 ):
-    """Denial cast before a revert does not appear in the current-stage stage_denial_count."""
+    """Denial cast before a revert persists in the stage_denial_count after revert.
+
+    Under interval-based vote scoping, a vote made in any prior interval the proposal
+    occupied the stage is still counted. Force-advancing and reverting back to SP_APPROVAL
+    opens a new interval but leaves the first interval — and FC's denial recorded in it —
+    intact in the count.
+    """
     (sp, sp_pass), (fc, fc_pass) = _setup_sp_users(db_session, create_user)
 
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
@@ -774,7 +791,7 @@ def test_board_denial_count_is_stage_scoped(
     sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
     fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
 
-    # SP votes approved, FC votes denied → board should show stage_denial_count=1 at SP_APPROVAL
+    # SP votes approved, FC votes denied → both in first SP interval
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=false", headers=fc_headers)
 
@@ -786,7 +803,7 @@ def test_board_denial_count_is_stage_scoped(
     assert before_match, "Proposal should be in SP_APPROVAL before revert"
     assert before_match[0]["stage_denial_count"] == 1
 
-    # Force-advance to HC_APPROVAL, then revert back to SP_APPROVAL
+    # Force-advance to HC_APPROVAL (closes the first SP interval), then revert to SP_APPROVAL
     r = client.post(f"/calling-kanban/proposals/{proposal_id}/advance?from_stage=0", headers=auth_headers)
     assert r.status_code == 200
 
@@ -805,8 +822,9 @@ def test_board_denial_count_is_stage_scoped(
     sp_col_after = board_after.get("0", [])
     after_match = [p for p in sp_col_after if p["id"] == proposal_id]
     assert after_match, "Proposal should be back in SP_APPROVAL after revert"
-    assert after_match[0]["stage_denial_count"] == 0, (
-        f"Pre-revert denial should not count in new SP stage window; got {after_match[0]['stage_denial_count']}"
+    # FC's denial from the first SP interval is preserved — still counts after the revert
+    assert after_match[0]["stage_denial_count"] == 1, (
+        f"Denial from first SP interval must persist through revert; got {after_match[0]['stage_denial_count']}"
     )
 
 
@@ -1192,10 +1210,16 @@ def test_board_current_stage_vote_true_at_hc_stage(
     )
 
 
-def test_board_current_stage_vote_resets_to_none_after_revert(
+def test_board_current_stage_vote_persists_after_revert(
     client: TestClient, auth_headers, db_session: Session, create_user
 ):
-    """After a revert, a prior-stage vote must not appear in the new stage window (current_stage_vote=None)."""
+    """After a revert, votes cast during a prior pass at the stage still count.
+
+    Under interval-based vote scoping a vote is valid if its created_at falls within
+    ANY interval during which the proposal resided at the stage — including intervals
+    that were closed by an admin revert. Reverting back to SP_APPROVAL opens a new
+    interval but does not void the votes recorded in the earlier interval.
+    """
     (sp, sp_pass), (fc, fc_pass) = _setup_sp_users(db_session, create_user)
 
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
@@ -1205,7 +1229,7 @@ def test_board_current_stage_vote_resets_to_none_after_revert(
     sp_headers = {"Authorization": f"Bearer {login_client(client, sp.email, sp_pass)}"}
     fc_headers = {"Authorization": f"Bearer {login_client(client, fc.email, fc_pass)}"}
 
-    # Both SP members vote → auto-advances to HC_APPROVAL
+    # Both SP members vote → auto-advances to HC_APPROVAL (closes the first SP interval)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=sp_headers)
     client.post(f"/calling-kanban/proposals/{proposal_id}/approvals?approved=true", headers=fc_headers)
 
@@ -1215,7 +1239,7 @@ def test_board_current_stage_vote_resets_to_none_after_revert(
         == KanbanStages.HC_APPROVAL
     )
 
-    # Admin reverts back to SP_APPROVAL; the two SP votes now predate the new stage-entry time
+    # Admin reverts back to SP_APPROVAL — opens a second SP interval; first interval is preserved
     r = client.post(f"/calling-kanban/proposals/{proposal_id}/revert", headers=auth_headers)
     assert r.status_code == 200
 
@@ -1225,7 +1249,7 @@ def test_board_current_stage_vote_resets_to_none_after_revert(
         == KanbanStages.SP_APPROVAL
     )
 
-    # Fetch board AS the original voter (sp_headers); their vote is now outside the window
+    # SP voter's original approval falls in the first SP interval and must still be visible
     r = client.get("/calling-kanban/board", headers=sp_headers)
     assert r.status_code == 200
     board = r.json()
@@ -1233,7 +1257,20 @@ def test_board_current_stage_vote_resets_to_none_after_revert(
     sp_column = board.get("0", [])
     matching = [p for p in sp_column if p["id"] == proposal_id]
     assert matching, f"Proposal {proposal_id} not found in board['0'] after revert"
-    assert matching[0]["current_stage_vote"] is None, (
-        "After revert the prior vote falls outside the new stage window; "
-        f"current_stage_vote must be None, got {matching[0]['current_stage_vote']}"
+    assert matching[0]["current_stage_vote"] is True, (
+        "Prior-interval vote must persist through a revert; "
+        f"current_stage_vote must be True, got {matching[0]['current_stage_vote']}"
+    )
+
+    # FC voter's original approval also falls in the first SP interval — must also be visible
+    r = client.get("/calling-kanban/board", headers=fc_headers)
+    assert r.status_code == 200
+    board_fc = r.json()
+
+    sp_column_fc = board_fc.get("0", [])
+    matching_fc = [p for p in sp_column_fc if p["id"] == proposal_id]
+    assert matching_fc, f"Proposal {proposal_id} not found in board['0'] for FC voter after revert"
+    assert matching_fc[0]["current_stage_vote"] is True, (
+        "FC prior-interval vote must persist through a revert; "
+        f"current_stage_vote must be True, got {matching_fc[0]['current_stage_vote']}"
     )
