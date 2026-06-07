@@ -11,6 +11,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
-import { Eye, Trash2, Plus } from "lucide-react";
+import { ChevronLeft, Trash2, Plus, CalendarIcon, Inbox } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { useWardMap } from "@/lib/hooks";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,6 +31,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
+import { fullName } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { hasPermission, Permission } from "@/lib/constants";
 
@@ -68,8 +74,6 @@ function parseWardDropId(id: string): number | "stake" | null {
   return parsed;
 }
 
-// ---------- PoolCard ----------
-
 interface PoolCardProps {
   item: SustainingItem;
   proposals: KanbanBoard;
@@ -95,7 +99,7 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
       console.error("[sustainings-prep] Ordination ID in state not found in ordinations list:", item.ordinationId);
       return null;
     }
-    name = `${ord.fname} ${ord.lname}`;
+    name = fullName(ord);
     subtitle = ord.office;
   } else {
     const proposal = (proposals["3"] ?? []).find((p) => p.id === item.proposalId);
@@ -103,25 +107,25 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
       console.error("[sustainings-prep] Proposal ID in state not found in board stage 3:", item.proposalId);
       return null;
     }
-    name = `${proposal.fname} ${proposal.lname}`;
+    name = fullName(proposal);
     subtitle = proposal.proposed_calling;
   }
 
   return (
-    <div
-      className={`bg-card border border-l-4 ${borderClass} rounded-md p-3 shadow-sm select-none`}
-    >
-      <div className="font-semibold text-sm">{name}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>
-      {item.type === "proposal" && wardName && (
-        <div className="text-xs text-muted-foreground/60 mt-1">{wardName}</div>
-      )}
-      {item.type === "ordination" && (
-        <span className="mt-1 inline-block text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-          Ordination
-        </span>
-      )}
-    </div>
+    <Card className={`border-l-4 ${borderClass} hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing`}>
+      <CardHeader className="p-3">
+        <CardTitle className="text-sm font-semibold">{name}</CardTitle>
+        <CardDescription className="text-xs mt-1 space-y-1">
+          <div>{subtitle}</div>
+          {item.type === "proposal" && wardName && (
+            <div className="opacity-60">{wardName}</div>
+          )}
+          {item.type === "ordination" && (
+            <span className="badge badge-sm badge-secondary mt-1">Ordination</span>
+          )}
+        </CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -134,7 +138,6 @@ function DraggableCard({ item, proposals, ordinations, wardName }: PoolCardProps
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.4 : 1,
-    cursor: isDragging ? "grabbing" : "grab",
   };
 
   return (
@@ -159,38 +162,44 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
-    <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-      <div className="px-4 py-2.5 border-b bg-muted/40">
+    <div className="collapse collapse-arrow bg-card border rounded-lg shadow-sm">
+      <input type="checkbox" defaultChecked={items.length > 0} />
+      <div className="collapse-title flex items-center justify-between pr-8 py-2.5 px-4">
         <span className="font-semibold text-sm">{label}</span>
-        {items.length > 0 && (
-          <span className="ml-2 text-xs text-muted-foreground">({items.length})</span>
-        )}
+        <span className={`badge badge-sm ${items.length > 0 ? "badge-primary" : "badge-ghost"}`}>
+          Pending: {items.length}
+        </span>
       </div>
-      <div
-        ref={setNodeRef}
-        className={`min-h-[80px] p-3 space-y-2 transition-colors ${
-          isOver ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : ""
-        }`}
-      >
-        {items.length === 0 ? (
-          <div className="h-16 flex items-center justify-center border-2 border-dashed border-muted-foreground/20 rounded text-xs text-muted-foreground/40">
-            Drop here
-          </div>
-        ) : (
-          items.map((item) => (
-            <DraggableCard
-              key={itemKey(item)}
-              item={item}
-              proposals={proposals}
-              ordinations={ordinations}
-              wardName={
-                item.type === "proposal"
-                  ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
-                  : undefined
-              }
-            />
-          ))
-        )}
+      <div className="collapse-content px-3 pb-3 pt-0">
+        <div
+          ref={setNodeRef}
+          className={`min-h-[56px] rounded-md border border-dashed transition-all p-2 ${
+            isOver ? "border-primary bg-primary/10" : "border-base-content/20 bg-base-300/30"
+          }`}
+        >
+          {items.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
+              <Inbox className="size-4" />
+              <span className="text-xs">Drop callings or ordinations here</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+            {items.map((item) => (
+              <DraggableCard
+                key={itemKey(item)}
+                item={item}
+                proposals={proposals}
+                ordinations={ordinations}
+                wardName={
+                  item.type === "proposal"
+                    ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
+                    : undefined
+                }
+              />
+            ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -305,6 +314,8 @@ export default function SustainingPrep() {
   const [ordinationOpen, setOrdinationOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const {
     data: board = {},
@@ -451,6 +462,32 @@ export default function SustainingPrep() {
 
   const { setNodeRef: poolRef, isOver: isOverPool } = useDroppable({ id: "pool" });
 
+  const filteredUnassigned = useMemo(() => {
+    if (!searchQuery.trim()) return state.unassigned;
+    const q = searchQuery.toLowerCase();
+    const proposalMap = new Map(sustainProposals.map((p) => [p.id, p]));
+    return state.unassigned.filter((item) => {
+      if (item.type === "ordination") {
+        const ord = state.ordinations.find((o) => o.id === item.ordinationId);
+        if (!ord) return false;
+        return fullName(ord).toLowerCase().includes(q) || ord.office.toLowerCase().includes(q);
+      }
+      const proposal = proposalMap.get(item.proposalId);
+      if (!proposal) return false;
+      const wName = wardMap.get(proposal.ward_id) ?? "";
+      return (
+        fullName(proposal).toLowerCase().includes(q) ||
+        proposal.proposed_calling.toLowerCase().includes(q) ||
+        wName.toLowerCase().includes(q)
+      );
+    });
+  }, [searchQuery, state.unassigned, state.ordinations, sustainProposals, wardMap]);
+
+  const selectedDate = useMemo<Date | undefined>(
+    () => (state.sustainingDate ? parseISO(state.sustainingDate) : undefined),
+    [state.sustainingDate],
+  );
+
   if (!hasAccess) {
     return (
       <Layout>
@@ -482,52 +519,79 @@ export default function SustainingPrep() {
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 max-w-[1400px]">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-serif text-3xl font-bold">Sustaining Prep</h1>
+            <Link href="/leader/sustainings">
+              <Button variant="ghost" className="gap-2 pl-0 hover:bg-transparent hover:text-primary">
+                <ChevronLeft className="size-4" />
+                Back to Sustainment/Release Form
+              </Button>
+            </Link>
+            <h1 className="font-serif text-3xl font-bold mt-1">Sustaining Prep</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Assign callings, releases, and ordinations to ward sections
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">Sustaining Date</label>
-              <input
-                type="date"
-                className="input input-bordered input-sm"
-                value={state.sustainingDate ?? ""}
-                onChange={(e) => handleDateChange(e.target.value)}
-              />
-            </div>
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => setOrdinationOpen(true)}>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2 min-w-[160px] justify-start font-normal">
+                  <CalendarIcon className="size-4" />
+                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  className="rounded-lg border"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    handleDateChange(date ? format(date, "yyyy-MM-dd") : "");
+                    setDatePickerOpen(false);
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              variant="outline"
+              className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+              onClick={() => setOrdinationOpen(true)}
+            >
               <Plus className="size-4" />
               Add Ordination
             </Button>
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200 text-destructive hover:text-destructive" onClick={handleClearAll}>
+
+            <Button
+              variant="ghost"
+              className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleClearAll}
+            >
               <Trash2 className="size-4" />
               Clear All
             </Button>
-            <Link href="/leader/sustainings">
-              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <Eye className="size-4" />
-                Preview Viewer
-              </Button>
-            </Link>
           </div>
         </div>
 
         <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-6 items-start">
-            {/* Left: Unassigned Pool */}
-            <div className="w-72 shrink-0">
-              <div className="rounded-lg border bg-card shadow-sm overflow-hidden sticky top-4">
+            <div className="w-64 shrink-0 sticky top-4">
+              <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
                 <div className="px-4 py-2.5 border-b bg-muted/40 flex items-center justify-between">
                   <span className="font-semibold text-sm">Unassigned Pool</span>
-                  <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border">
-                    {state.unassigned.length}
-                  </span>
+                  <span className="badge badge-sm">{state.unassigned.length}</span>
                 </div>
+
+                <div className="px-3 pt-3 pb-2">
+                  <Input
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+
                 <div
                   ref={poolRef}
                   className={`min-h-[300px] p-3 space-y-2 transition-colors ${
@@ -539,13 +603,18 @@ export default function SustainingPrep() {
                       <div className="skeleton h-16 w-full rounded-md" />
                       <div className="skeleton h-16 w-full rounded-md" />
                     </>
-                  ) : state.unassigned.length === 0 ? (
+                  ) : filteredUnassigned.length === 0 && state.unassigned.length > 0 ? (
+                    <div className="h-32 flex flex-col items-center justify-center text-center gap-1 text-muted-foreground/50 text-xs">
+                      <p>No results</p>
+                      <p>Try a different search</p>
+                    </div>
+                  ) : filteredUnassigned.length === 0 ? (
                     <div className="h-40 flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50 text-sm">
                       <p>Pool is empty</p>
                       <p className="text-xs">All items have been assigned</p>
                     </div>
                   ) : (
-                    state.unassigned.map((item) => (
+                    filteredUnassigned.map((item) => (
                       <DraggableCard
                         key={itemKey(item)}
                         item={item}
@@ -565,9 +634,7 @@ export default function SustainingPrep() {
               </div>
             </div>
 
-            {/* Right: Ward Sections */}
-            <div className="flex-1 space-y-4">
-              {/* Stake section first */}
+            <div className="flex-1 grid md:grid-cols-2 gap-4">
               <WardDropZone
                 droppableId="ward-stake"
                 label="Stake"
