@@ -90,6 +90,13 @@ def _proposal_statement_for_user(current_user: User, session: Session):
     raise HTTPException(status_code=403, detail="Not authorized to view calling proposals")
 
 
+def _get_proposal_or_404(session: Session, proposal_id: int) -> CallingProposal:
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return proposal
+
+
 # CallingProposal endpoints
 @router.post("/proposals", response_model=CallingProposal)
 def create_proposal(
@@ -170,13 +177,13 @@ def get_proposal(
     current_user: User = Depends(CallingUser())
 ):
     """Get a specific calling proposal by ID"""
-    proposal = session.get(CallingProposal, proposal_id)
+    proposal = _get_proposal_or_404(session, proposal_id)
     if user_has_calling(current_user, BISHOP_CALLING_NAME):
         bishop_ward = get_bishops_ward(session, current_user)
-        if not proposal or proposal.ward_id != bishop_ward.id:
+        if proposal.ward_id != bishop_ward.id:
             raise HTTPException(status_code=404, detail="Proposal not found")
         return proposal
-    if not user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session) or not proposal:
+    if not user_has_permission(current_user, Permission.VIEW_CALLING_PROPOSALS, session):
         raise HTTPException(status_code=404, detail="Proposal not found")
     return proposal
 
@@ -190,9 +197,7 @@ def update_proposal(
     """Update an existing calling proposal."""
     logger.debug(f"User {current_user.id} is attempting to update calling proposal with ID {proposal_id}, submitter {proposal_data.submitter}, and data: {proposal_data}")
     # Compare against DB submitter — proposal_data.submitter is client-supplied and untrusted.
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     if current_user.id != proposal.submitter and not user_has_permission(current_user, Permission.MANAGE_CALLING_PROPOSALS, session):
         raise HTTPException(status_code=403, detail="Not authorized to update this proposal")
     proposal.fname = proposal_data.fname
@@ -289,9 +294,7 @@ def force_advance_proposal(
     """If from_stage is provided and does not match the proposal's current stage, a 409 is
     returned so the caller can detect a race between auto-advance and a concurrent drag.
     """
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     current_stage = get_current_proposal_status(proposal, session)
     if from_stage is not None and current_stage != from_stage:
         raise HTTPException(status_code=409, detail="Proposal has moved since you last loaded the board")
@@ -323,9 +326,7 @@ def add_approval(
     if not can_approve_proposal(current_user):
         raise HTTPException(status_code=403, detail="Not authorized to approve/reject proposals")
     # Get proposal
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     # Check if user has already approved/rejected
     statement = select(CallingApproval).where(
         CallingApproval.proposal_id == proposal_id,
@@ -393,9 +394,7 @@ def change_approval_status(
     approval = session.exec(statement).first()
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     approval.approved = approved
     approval.created_at = datetime.now(timezone.utc)  # Update timestamp to reflect change
     session.add(approval)
@@ -443,9 +442,7 @@ def complete_interview(
     interview = session.exec(statement).first()
     if not interview:
         raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     if get_current_proposal_status(proposal, session) != KanbanStages.INTERVIEW:
         raise HTTPException(status_code=400, detail="Proposal is not at interview stage")
     if interview.interviewer_id is None:
@@ -486,9 +483,7 @@ def sustain_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Mark sustaining as completed for a calling proposal"""
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     if get_current_proposal_status(proposal, session) != KanbanStages.SUSTAIN:
         raise HTTPException(status_code=400, detail="Proposal is not at sustaining stage")
     # Create kanban update
@@ -521,9 +516,7 @@ def set_apart_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Mark a calling proposal as set apart (finalized)"""
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     if get_current_proposal_status(proposal, session) != KanbanStages.SET_APART:
         raise HTTPException(status_code=400, detail="Proposal is not at set apart stage")
     # Create kanban update
@@ -545,9 +538,7 @@ def update_lcr_proposal(
     current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
 ):
     """Mark proposal as updated in LCR"""
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
     if get_current_proposal_status(proposal, session) != KanbanStages.LCR_UPDATE:
         raise HTTPException(status_code=400, detail="Proposal is not at LCR update stage")
     # Create kanban update
@@ -576,10 +567,7 @@ def revert_proposal(
     Reverting to INTERVIEW resets the CallingInterview record so a new
     interviewer can be assigned.
     """
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-
+    proposal = _get_proposal_or_404(session, proposal_id)
     current_stage = get_current_proposal_status(proposal, session)
 
     if current_stage == KanbanStages.DONE:
@@ -619,9 +607,7 @@ def delete_proposal(
     Returns 404 if the proposal does not exist.
     Returns 409 if the proposal's current stage is DONE.
     """
-    proposal = session.get(CallingProposal, proposal_id)
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = _get_proposal_or_404(session, proposal_id)
 
     # Guard against proposals whose initial KanbanUpdate was never committed — calling
     # get_current_proposal_status on such a proposal would raise a misleading 404.
@@ -689,7 +675,7 @@ def get_kanban_board(
     for proposal in proposals:
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
-            logger.warning("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
+            logger.error("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:

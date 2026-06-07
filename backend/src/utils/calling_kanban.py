@@ -40,11 +40,10 @@ def can_approve_proposal(
         bool: True if the user can approve/reject proposals, False otherwise.
         
     Note:
-        The approving callings are: high councilor, stake president, first councilor, 
-        and second councilor. This reflects the ecclesiastical hierarchy where stake
+        The approving callings are: high councilor, stake president, first counselor,
+        and second counselor. This reflects the ecclesiastical hierarchy where stake
         presidency and high council have oversight over calling proposals.
     """
-    # Gather all relevant Permissions objects for the user
     approver_callings = ["high councilor", "stake president", "first counselor", "second counselor"]
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
@@ -89,8 +88,8 @@ def is_stake_presidency(user: User) -> bool:
         bool: True if the user is in the stake presidency, False otherwise.
         
     Note:
-        This function checks for the callings: "stake president", "first councilor",
-        and "second councilor". The check is case-insensitive.
+        This function checks for the callings: "stake president", "first counselor",
+        and "second counselor". The check is case-insensitive.
     """
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
@@ -362,7 +361,9 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
           SP_APPROVAL_THRESHOLD (default: 2), HC_APPROVAL_THRESHOLD (default: 3)
         - All approvals in the current stage must be positive for advancement
         - The updater_id for automatic updates is set to the most recent approver
-        - For INTERVIEW stage, a CallingInterview record is created when advancing from HC_APPROVAL
+        - For new callings advancing from HC_APPROVAL, a CallingInterview record is created here.
+          For releases, the CallingInterview row is created at proposal creation time in the router
+          (since releases start directly at INTERVIEW and skip SP_APPROVAL and HC_APPROVAL).
         - This function commits changes to the database for each stage advancement
         
     Side Effects:
@@ -454,6 +455,6 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     
     # The remainder of stages:
     # SUSTAIN, SET_APART, LCR_UPDATE, DONE
-    # Will be manully set by users, and are not calculated by business logic
+    # Will be manually set by users, and are not calculated by business logic
 
     return updates
