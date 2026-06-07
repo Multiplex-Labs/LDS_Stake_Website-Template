@@ -323,16 +323,16 @@ export default function ReleasesAndSustainings() {
           <div className="flex items-center gap-2">
             {canManageCallings && (
               <Link href="/leader/callings/sustainings-prep">
-                <button className="btn btn-outline gap-2">
-                  <ClipboardList className="size-4" />
+                <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                  <ClipboardList className="h-4 w-4" />
                   Sustaining Prep
-                </button>
+                </Button>
               </Link>
             )}
-            <button className="btn btn-outline gap-2" onClick={() => window.print()}>
-              <Printer className="size-4" />
+            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" />
               Print
-            </button>
+            </Button>
           </div>
         </div>
       </div>

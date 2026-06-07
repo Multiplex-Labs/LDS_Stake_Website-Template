@@ -299,6 +299,9 @@ function OrdinationDialog({
 
 export default function SustainingPrep() {
   const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
+  const hasAccess = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+
   const [state, setState] = useState<SustainingPrepState>(() => loadSustainingPrep());
   const [ordinationOpen, setOrdinationOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
@@ -308,19 +311,23 @@ export default function SustainingPrep() {
     data: board = {},
     isLoading: boardLoading,
     isError: boardError,
+    error: boardQueryError,
   } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
+    enabled: hasAccess,
   });
   const {
     data: wards = [],
     isLoading: wardsLoading,
     isError: wardsError,
+    error: wardsQueryError,
   } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
+    enabled: hasAccess,
   });
 
-  if (boardError) console.error("[sustainings-prep] Failed to load kanban board");
-  if (wardsError) console.error("[sustainings-prep] Failed to load wards");
+  if (boardError) console.error("[sustainings-prep] Failed to load kanban board:", boardQueryError);
+  if (wardsError) console.error("[sustainings-prep] Failed to load wards:", wardsQueryError);
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useWardMap(wards);
@@ -445,6 +452,29 @@ export default function SustainingPrep() {
 
   const { setNodeRef: poolRef, isOver: isOverPool } = useDroppable({ id: "pool" });
 
+  if (authLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-32">
+          <span className="loading loading-spinner loading-lg text-primary" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+          <p className="text-destructive font-medium">Access denied.</p>
+          <p className="text-muted-foreground text-sm mt-2">
+            You don't have permission to access Sustaining Prep.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
   if (boardError || wardsError) {
     return (
       <Layout>
@@ -452,19 +482,6 @@ export default function SustainingPrep() {
           <p className="text-destructive font-medium">Failed to load sustaining data.</p>
           <p className="text-muted-foreground text-sm mt-2">
             Please refresh the page. If this continues, contact your administrator.
-          </p>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (!hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS)) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-          <p className="text-destructive font-medium">Access denied.</p>
-          <p className="text-muted-foreground text-sm mt-2">
-            You don't have permission to access Sustaining Prep.
           </p>
         </div>
       </Layout>
