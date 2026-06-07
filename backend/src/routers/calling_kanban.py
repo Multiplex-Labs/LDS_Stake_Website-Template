@@ -17,7 +17,11 @@ from ..utils import (
     get_bishops_ward,
     get_stake_presidency,
 )
-from ..utils.calling_kanban import _stage_scoped_approval_counts
+from ..utils.calling_kanban import (
+    _stage_scoped_approval_counts,
+    _build_stage_intervals,
+    _in_any_interval,
+)
 from ..db import get_session
 from ..models import (
     BaseModel,
@@ -49,9 +53,16 @@ class CallingProposalWithCounts(BaseModel):
     updated_at: datetime
     stage_approval_count: int = Field(ge=0)
     stage_denial_count: int = Field(ge=0)
+    current_stage_vote: bool | None
 
     @classmethod
-    def from_proposal(cls, proposal: CallingProposal, stage_approval_count: int, stage_denial_count: int) -> "CallingProposalWithCounts":
+    def from_proposal(
+        cls,
+        proposal: CallingProposal,
+        stage_approval_count: int,
+        stage_denial_count: int,
+        current_stage_vote: bool | None,
+    ) -> "CallingProposalWithCounts":
         return cls(
             id=proposal.id,
             fname=proposal.fname,
@@ -65,6 +76,7 @@ class CallingProposalWithCounts(BaseModel):
             updated_at=proposal.updated_at,
             stage_approval_count=stage_approval_count,
             stage_denial_count=stage_denial_count,
+            current_stage_vote=current_stage_vote,
         )
 
 
@@ -681,11 +693,31 @@ def get_kanban_board(
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:
-            proposal_updates = updates_by_proposal.get(proposal.id, [])
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
-            approved, denied = _stage_scoped_approval_counts(proposal_updates, proposal_approvals, stage)
+            approved, denied = _stage_scoped_approval_counts(updates, proposal_approvals, stage)
+
+            # Votes cast during ANY interval the proposal was at the current stage count,
+            # including prior passes before an admin revert. A revert does not void a vote
+            # that was legitimately cast while the proposal resided at this stage previously.
+            current_stage_vote: bool | None = None
+            stage_intervals = _build_stage_intervals(updates, stage)
+            if stage_intervals:
+                user_approval = next(
+                    (
+                        a for a in proposal_approvals
+                        if _in_any_interval(a.created_at, stage_intervals)
+                        and a.approver_id == current_user.id
+                    ),
+                    None,
+                )
+                if user_approval is not None:
+                    current_stage_vote = user_approval.approved
+
             board[stage].append(CallingProposalWithCounts.from_proposal(
-                proposal, stage_approval_count=approved, stage_denial_count=denied
+                proposal,
+                stage_approval_count=approved,
+                stage_denial_count=denied,
+                current_stage_vote=current_stage_vote,
             ))
     return board
 

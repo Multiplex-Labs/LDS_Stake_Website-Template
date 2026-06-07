@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 
 // SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
@@ -57,26 +58,33 @@ function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTabl
               <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Loading…</TableCell>
             </TableRow>
           ) : proposals.length > 0 ? (
-            proposals.map((proposal) => (
+            proposals.map((proposal) => {
+              const hasVoted = proposal.current_stage_vote != null;
+              return (
               <TableRow
                 key={proposal.id}
-                className="cursor-pointer hover:bg-muted/50"
+                className={cn("cursor-pointer hover:bg-muted/50", hasVoted && "opacity-50")}
                 onClick={() => onSelect(proposal)}
               >
                 <TableCell className="font-medium">{proposal.fname} {proposal.lname}</TableCell>
                 <TableCell>{proposal.proposed_calling}</TableCell>
                 <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
                 <TableCell>
-                  <span className="tabular-nums">
-                    {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
-                    {proposal.stage_denial_count > 0 && (
-                      <span className="text-destructive ml-1">/ {proposal.stage_denial_count} denied</span>
-                    )}
-                  </span>
+                  {hasVoted ? (
+                    <span className="badge badge-sm badge-ghost">Voted</span>
+                  ) : (
+                    <span className="tabular-nums">
+                      {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
+                      {proposal.stage_denial_count > 0 && (
+                        <span className="text-destructive ml-1">/ {proposal.stage_denial_count} denied</span>
+                      )}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>{new Date(proposal.submitted_at).toLocaleDateString()}</TableCell>
               </TableRow>
-            ))
+              );
+            })
           ) : (
             <TableRow>
               <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No callings pending review.</TableCell>
@@ -103,6 +111,10 @@ export default function ReviewCallings() {
 
   const spProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
   const hcProposals: CallingProposalWithCounts[] = board[HC_APPROVAL_KEY] ?? [];
+  const liveProposal = selectedProposal
+    ? [...spProposals, ...hcProposals].find((p) => p.id === selectedProposal.id) ?? selectedProposal
+    : null;
+  const alreadyVoted = liveProposal !== null && liveProposal.current_stage_vote != null;
 
   const approveMutation = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -124,12 +136,16 @@ export default function ReviewCallings() {
       }
     },
     onError: (err) => {
-      console.error("[review] approval mutation failed:", err);
+      console.error("[review] approval mutation failed for proposal", selectedProposal?.id, "stage", selectedStage, err);
       const msg = err instanceof Error ? err.message : "";
       if (msg.startsWith("400")) {
         toast.error("Already Voted", { description: "You have already submitted a vote for this proposal." });
       } else if (msg.startsWith("403")) {
         toast.error("Not Authorized", { description: "You do not have permission to vote on this proposal." });
+      } else if (msg.startsWith("404")) {
+        toast.error("Proposal Not Found", { description: "This proposal may have been deleted. Refresh the page." });
+      } else if (msg.startsWith("409")) {
+        toast.error("Stage Changed", { description: "This proposal has moved to a new stage. Refresh the page to vote." });
       } else {
         toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
       }
@@ -258,6 +274,11 @@ export default function ReviewCallings() {
             )}
 
             <DialogFooter className="gap-2 sm:gap-0">
+              {alreadyVoted && (
+                <p className="text-xs text-muted-foreground text-center">
+                  You have already voted on this proposal.
+                </p>
+              )}
               <div className="flex w-full justify-between items-center">
                 <Button variant="outline" onClick={() => { setSelectedProposal(null); setSelectedStage(null); }}>
                   Close
@@ -266,7 +287,7 @@ export default function ReviewCallings() {
                   <Button
                     variant="destructive"
                     className="gap-2"
-                    disabled={approveMutation.isPending}
+                    disabled={approveMutation.isPending || alreadyVoted}
                     onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: false })}
                   >
                     <X className="h-4 w-4" />
@@ -274,7 +295,7 @@ export default function ReviewCallings() {
                   </Button>
                   <Button
                     className="gap-2 btn-success"
-                    disabled={approveMutation.isPending}
+                    disabled={approveMutation.isPending || alreadyVoted}
                     onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: true })}
                   >
                     <Check className="h-4 w-4" />

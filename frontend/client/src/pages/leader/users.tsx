@@ -542,8 +542,6 @@ export function UserAdminContent() {
     }
   };
 
-  const getStatusBadge = (active: boolean) => (active ? "badge-success" : "badge-error");
-
   if (isError) {
     return (
       <div className="text-center py-16">
@@ -654,9 +652,11 @@ export function UserAdminContent() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`badge text-xs ${getStatusBadge(user.active)}`}>
-                      {user.active ? "Active" : "Disabled"}
-                    </span>
+                    {user.active ? (
+                      <span className="text-xs font-medium text-success">Active</span>
+                    ) : (
+                      <span className="text-xs font-medium text-muted-foreground">Disabled</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm text-foreground">
                     {user.callings?.map((c) => callings.find((cal) => cal.id === c.calling_id)?.name).filter(Boolean).join(", ") || "—"}
