@@ -67,7 +67,7 @@ def _parse_wards_overseen(value: Optional[str]) -> list[int]:
         if isinstance(parsed, list):
             return [int(x) for x in parsed]
     except (json.JSONDecodeError, ValueError, TypeError):
-        logger.warning("Could not parse wards_overseen JSON: %r", value)
+        logger.error("Could not parse wards_overseen JSON: %r", value)
     return []
 
 
@@ -77,7 +77,17 @@ def _build_response(
 ) -> PresidencyAssignmentResponse:
     """Build a PresidencyAssignmentResponse from an ORM row."""
     calling = session.get(Calling, row.calling_id)
-    calling_name = calling.name if calling else f"Calling #{row.calling_id}"
+    if calling is None:
+        logger.error(
+            "_build_response: PresidencyAssignment id=%s references non-existent calling_id=%s",
+            row.id,
+            row.calling_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Internal data error: presidency assignment references a deleted calling.",
+        )
+    calling_name = calling.name
 
     # Find the active UserCalling for this calling (slot_number=1 for single-slot callings)
     uc = session.exec(
@@ -133,7 +143,20 @@ def get_presidency_assignments(
         ).first()
 
         if calling is None:
-            logger.warning("Presidency calling '%s' not found in DB.", calling_name)
+            logger.error(
+                "get_presidency_assignments: calling '%s' not found. Startup init may have failed.",
+                calling_name,
+            )
+            results.append(
+                PresidencyAssignmentResponse(
+                    id=-1,
+                    calling_id=-1,
+                    calling_name=calling_name,
+                    current_holder=None,
+                    responsibilities=[],
+                    wards_overseen=[],
+                )
+            )
             continue
 
         row = session.exec(

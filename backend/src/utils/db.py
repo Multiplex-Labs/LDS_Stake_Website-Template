@@ -266,19 +266,26 @@ def create_presidency_assignments(session: Optional[Session] = None):
     PRESIDENCY_CALLINGS = ["Stake President", "First Counselor", "Second Counselor"]
 
     def _ensure_rows(s: Session):
-        for name in PRESIDENCY_CALLINGS:
-            calling = s.exec(select(Calling).where(Calling.name == name)).first()
-            if calling is None:
-                logger.warning(f"create_presidency_assignments: calling '{name}' not found, skipping.")
-                continue
-            existing = s.exec(
-                select(PresidencyAssignment).where(PresidencyAssignment.calling_id == calling.id)
-            ).first()
-            if existing is None:
-                logger.info(f"Creating PresidencyAssignment row for '{name}'.")
-                row = PresidencyAssignment(calling_id=calling.id)
-                s.add(row)
-        s.commit()
+        try:
+            for name in PRESIDENCY_CALLINGS:
+                calling = s.exec(select(Calling).where(Calling.name == name)).first()
+                if calling is None:
+                    logger.warning(f"create_presidency_assignments: calling '{name}' not found, skipping.")
+                    continue
+                existing = s.exec(
+                    select(PresidencyAssignment).where(PresidencyAssignment.calling_id == calling.id)
+                ).first()
+                if existing is None:
+                    logger.info(f"Creating PresidencyAssignment row for '{name}'.")
+                    row = PresidencyAssignment(calling_id=calling.id)
+                    s.add(row)
+            s.commit()
+        except Exception:
+            logger.exception(
+                "create_presidency_assignments: failed to seed rows, rolling back."
+            )
+            s.rollback()
+            raise
 
     if session is not None:
         _ensure_rows(session)
