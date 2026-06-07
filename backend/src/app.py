@@ -92,7 +92,8 @@ from .routers import (
     assignments_router,
     speaking_router,
     calling_kanban_router,
-    ward_router
+    ward_router,
+    presidency_router,
 )
 
 app.include_router(health_router)
@@ -103,3 +104,4 @@ app.include_router(assignments_router)
 app.include_router(speaking_router)
 app.include_router(calling_kanban_router)
 app.include_router(ward_router)
+app.include_router(presidency_router)
