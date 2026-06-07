@@ -19,6 +19,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,7 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/auth";
-import { STAGE_LABELS, STAGE_BADGE_CLASS } from "@/lib/constants";
+import { STAGE_LABELS, STAGE_BADGE_CLASS, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
 import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
@@ -68,6 +78,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!proposal) return;
@@ -75,6 +86,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     setEditingCommentId(null);
     setEditDraft("");
     setNewComment("");
+    setDeleteConfirmOpen(false);
     setEditForm({
       fname: proposal.fname,
       lname: proposal.lname,
@@ -108,6 +120,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     setEditingCommentId(null);
     setEditDraft("");
     setNewComment("");
+    setDeleteConfirmOpen(false);
   }
 
   const invalidateBoard = () => queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
@@ -226,11 +239,37 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/calling-kanban/proposals/${id}`),
+    onSuccess: () => {
+      toast.success("Proposal deleted");
+      invalidateBoard();
+      closeDialog();
+    },
+    onError: (err: unknown) => {
+      console.error("[CallingModal] deleteMutation error:", err);
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.startsWith("403")) {
+        toast.error("Not authorized", { description: "You don't have permission to delete this proposal." });
+      } else if (raw.startsWith("409")) {
+        toast.error("Already completed", { description: "Proposal is already completed — refresh the board." });
+        invalidateBoard();
+      } else if (raw.startsWith("404")) {
+        toast.error("Not found", { description: "Proposal no longer exists." });
+        invalidateBoard();
+      } else {
+        toast.error("Delete failed", { description: "Could not delete proposal. Please try again." });
+        invalidateBoard();
+      }
+    },
+  });
+
   const anyMutating =
     updateMutation.isPending || scheduleInterviewMutation.isPending ||
     completeInterviewMutation.isPending || sustainMutation.isPending ||
     setApartMutation.isPending || lcrMutation.isPending ||
-    addCommentMutation.isPending || editCommentMutation.isPending || deleteCommentMutation.isPending;
+    addCommentMutation.isPending || editCommentMutation.isPending || deleteCommentMutation.isPending ||
+    deleteMutation.isPending;
 
   return (
     <Dialog open={!!proposal} onOpenChange={(open) => !open && closeDialog()}>
@@ -490,22 +529,65 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
 
         <DialogFooter className="p-6 pt-4 border-t">
           {canManage && editForm && proposal ? (
-            <>
-              <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-              <Button
-                className="gap-2"
-                disabled={anyMutating}
-                onClick={() => updateMutation.mutate({ id: proposal.id, form: editForm, original: proposal })}
-              >
-                <Save className="h-4 w-4" />
-                {updateMutation.isPending ? "Saving…" : "Save Changes"}
-              </Button>
-            </>
+            <div className="flex w-full justify-between items-center">
+              <div>
+                {proposal.stageKey !== SK_DONE && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-2"
+                    disabled={anyMutating}
+                    onClick={() => setDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Proposal
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+                <Button
+                  className="gap-2"
+                  disabled={anyMutating}
+                  onClick={() => updateMutation.mutate({ id: proposal.id, form: editForm, original: proposal })}
+                >
+                  <Save className="h-4 w-4" />
+                  {updateMutation.isPending ? "Saving…" : "Save Changes"}
+                </Button>
+              </div>
+            </div>
           ) : (
             <Button variant="outline" onClick={closeDialog}>Close</Button>
           )}
         </DialogFooter>
       </DialogContent>
+      {proposal && (
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Proposal</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete <strong>{proposal.fname} {proposal.lname}</strong>'s proposal. This action cannot be undone.
+                {Number(proposal.stageKey) >= Number(SK_SUSTAIN) && (
+                  <span className="block mt-2">
+                    This proposal may have already been announced publicly. Deleting it does not undo any in-person actions.
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(proposal.id)}
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete Proposal"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Dialog>
   );
 }

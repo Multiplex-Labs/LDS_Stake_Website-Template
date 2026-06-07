@@ -21,6 +21,9 @@ export const KANBAN_STAGES = [
   { key: "5", id: "pending-lcr",            label: "LCR Update",               badgeClass: "badge-primary",   cssClass: "stage-lcr-update"   },
 ] as const;
 
+export const SK_SUSTAIN = KANBAN_STAGES[3].key;
+export const SK_DONE = "6";
+
 export const STAGE_LABELS: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.map((s) => [s.key, s.label]),
 );

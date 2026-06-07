@@ -1,7 +1,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
-from sqlmodel import Session, Field, col, select
+from sqlmodel import Session, Field, col, select, delete as sql_delete
 from datetime import datetime, timezone
 
 from ..utils import (
@@ -596,6 +596,57 @@ def revert_proposal(
     return proposal
 
 
+@router.delete("/proposals/{proposal_id}")
+def delete_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Hard-delete a calling proposal and all its child rows in a single transaction.
+
+    Returns 404 if the proposal does not exist.
+    Returns 409 if the proposal's current stage is DONE.
+    """
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    # Guard against proposals whose initial KanbanUpdate was never committed — calling
+    # get_current_proposal_status on such a proposal would raise a misleading 404.
+    updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id)
+    ).all()
+    if not updates:
+        logger.error("Proposal %s has no KanbanUpdate rows — data integrity violation", proposal_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Proposal is in an inconsistent state and cannot be deleted",
+        )
+
+    current_stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
+    if current_stage == KanbanStages.DONE:
+        raise HTTPException(status_code=409, detail="Cannot delete a completed proposal")
+
+    # Delete child rows before removing the parent (FK dependency order)
+    session.exec(sql_delete(CallingInterview).where(CallingInterview.proposal_id == proposal_id))
+    session.exec(sql_delete(CallingApproval).where(CallingApproval.proposal_id == proposal_id))
+    session.exec(sql_delete(CallingComment).where(CallingComment.proposal_id == proposal_id))
+    session.exec(sql_delete(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id))
+
+    try:
+        session.delete(proposal)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.error("Failed to delete proposal %s: %s", proposal_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete proposal. The operation was rolled back.",
+        ) from exc
+
+    return {"detail": "Proposal deleted"}
+
+
 # Kanban board view
 @router.get("/board", response_model=dict[KanbanStages, list[CallingProposalWithCounts]])
 def get_kanban_board(
@@ -604,7 +655,7 @@ def get_kanban_board(
 ):
     """Return active proposals grouped by kanban stage; access mirrors list_proposals."""
     proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
-    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
+    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages}
     if not proposals:
         return board
 
