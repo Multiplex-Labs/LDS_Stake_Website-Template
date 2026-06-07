@@ -258,12 +258,7 @@ export default function ReleasesAndSustainings() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="bg-muted/30 py-12 print:hidden">
-          <div className="container mx-auto px-4">
-            <h1 className="font-serif text-4xl font-bold text-center">Releases &amp; Sustainings</h1>
-          </div>
-        </div>
-        <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
           <div className="skeleton h-8 w-48 mb-6" />
           <div className="skeleton h-4 w-full mb-2" />
           <div className="skeleton h-4 w-3/4 mb-2" />
@@ -279,11 +274,6 @@ export default function ReleasesAndSustainings() {
     const is401 = apiErrorStatus(error) === 401 || apiErrorStatus(boardQueryError) === 401;
     return (
       <Layout>
-        <div className="bg-muted/30 py-12 print:hidden">
-          <div className="container mx-auto px-4">
-            <h1 className="font-serif text-4xl font-bold text-center">Releases &amp; Sustainings</h1>
-          </div>
-        </div>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
           <p className="text-destructive">
             {is401
@@ -299,27 +289,14 @@ export default function ReleasesAndSustainings() {
     <Layout>
       <style>{`@media print { nav, footer { display: none !important; } }`}</style>
 
-      <div className="bg-muted/30 py-12 print:hidden">
-        <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <Link href="/leader/calling-system">
-              <Button variant="ghost" className="gap-2 mb-4 pl-0 hover:bg-transparent hover:text-primary">
-                <ChevronLeft className="h-4 w-4" />
-                Back to Calling System
-              </Button>
-            </Link>
-            <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
-            {prepState.sustainingDate && (
-              <p className="text-muted-foreground mt-1">
-                {new Date(prepState.sustainingDate + "T00:00:00").toLocaleDateString(undefined, {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-            )}
-          </div>
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="flex justify-between items-center mb-8 print:hidden">
+          <Link href="/leader/calling-system">
+            <Button variant="ghost" className="gap-2 pl-0 hover:bg-transparent hover:text-primary">
+              <ChevronLeft className="h-4 w-4" />
+              Back to Calling System
+            </Button>
+          </Link>
           <div className="flex items-center gap-2">
             {canManageCallings && (
               <Link href="/leader/callings/sustainings-prep">
@@ -335,9 +312,6 @@ export default function ReleasesAndSustainings() {
             </Button>
           </div>
         </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
         {allEmpty ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <h2 className="font-serif text-3xl font-bold mb-3">No Stake Business at this time</h2>
