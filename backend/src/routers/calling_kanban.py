@@ -1,7 +1,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException, Request
 from collections import defaultdict
-from sqlmodel import Session, Field, col, select
+from sqlmodel import Session, Field, col, select, delete as sql_delete
 from datetime import datetime, timezone
 
 from ..utils import (
@@ -614,9 +614,7 @@ def delete_proposal(
     # Guard against proposals whose initial KanbanUpdate was never committed — calling
     # get_current_proposal_status on such a proposal would raise a misleading 404.
     updates = session.exec(
-        select(KanbanUpdate)
-        .where(KanbanUpdate.proposal_id == proposal_id)
-        .order_by(KanbanUpdate.updated_at, KanbanUpdate.id)
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id)
     ).all()
     if not updates:
         logger.error("Proposal %s has no KanbanUpdate rows — data integrity violation", proposal_id)
@@ -625,19 +623,15 @@ def delete_proposal(
             detail="Proposal is in an inconsistent state and cannot be deleted",
         )
 
-    current_stage = updates[-1].to_stage
+    current_stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=409, detail="Cannot delete a completed proposal")
 
-    # Delete child rows in dependency order before removing the parent
-    for row in session.exec(select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)).all():
-        session.delete(row)
-    for row in session.exec(select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)).all():
-        session.delete(row)
-    for row in session.exec(select(CallingComment).where(CallingComment.proposal_id == proposal_id)).all():
-        session.delete(row)
-    for row in updates:
-        session.delete(row)
+    # Delete child rows before removing the parent (FK dependency order)
+    session.exec(sql_delete(CallingInterview).where(CallingInterview.proposal_id == proposal_id))
+    session.exec(sql_delete(CallingApproval).where(CallingApproval.proposal_id == proposal_id))
+    session.exec(sql_delete(CallingComment).where(CallingComment.proposal_id == proposal_id))
+    session.exec(sql_delete(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id))
 
     try:
         session.delete(proposal)

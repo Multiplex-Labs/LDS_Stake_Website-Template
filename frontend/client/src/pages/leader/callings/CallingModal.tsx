@@ -36,7 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/auth";
-import { STAGE_LABELS, STAGE_BADGE_CLASS } from "@/lib/constants";
+import { STAGE_LABELS, STAGE_BADGE_CLASS, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
 import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
@@ -531,7 +531,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
           {canManage && editForm && proposal ? (
             <div className="flex w-full justify-between items-center">
               <div>
-                {proposal.stageKey !== "6" && (
+                {proposal.stageKey !== SK_DONE && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -561,31 +561,33 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
           )}
         </DialogFooter>
       </DialogContent>
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Proposal</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{proposal?.fname} {proposal?.lname}</strong>'s proposal. This action cannot be undone.
-              {proposal && Number(proposal.stageKey) >= 3 && (
-                <span className="block mt-2">
-                  This proposal may have already been announced publicly. Deleting it does not undo any in-person actions.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteConfirmOpen(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteMutation.isPending}
-              onClick={() => proposal && deleteMutation.mutate(proposal.id)}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete Proposal"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {proposal && (
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Proposal</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete <strong>{proposal.fname} {proposal.lname}</strong>'s proposal. This action cannot be undone.
+                {Number(proposal.stageKey) >= Number(SK_SUSTAIN) && (
+                  <span className="block mt-2">
+                    This proposal may have already been announced publicly. Deleting it does not undo any in-person actions.
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(proposal.id)}
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete Proposal"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Dialog>
   );
 }
