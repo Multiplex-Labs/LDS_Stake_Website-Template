@@ -596,6 +596,41 @@ def revert_proposal(
     return proposal
 
 
+@router.delete("/proposals/{proposal_id}")
+def delete_proposal(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Hard-delete a calling proposal and all its child rows in a single transaction.
+
+    Returns 404 if the proposal does not exist.
+    Returns 409 if the proposal's current stage is DONE.
+    """
+    proposal = session.get(CallingProposal, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    current_stage = get_current_proposal_status(proposal, session)
+    if current_stage == KanbanStages.DONE:
+        raise HTTPException(status_code=409, detail="Cannot delete a completed proposal")
+
+    # Delete child rows in dependency order before removing the parent
+    for row in session.exec(select(CallingInterview).where(CallingInterview.proposal_id == proposal_id)).all():
+        session.delete(row)
+    for row in session.exec(select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)).all():
+        session.delete(row)
+    for row in session.exec(select(CallingComment).where(CallingComment.proposal_id == proposal_id)).all():
+        session.delete(row)
+    for row in session.exec(select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id)).all():
+        session.delete(row)
+
+    session.delete(proposal)
+    session.commit()
+
+    return {"detail": "Proposal deleted"}
+
+
 # Kanban board view
 @router.get("/board", response_model=dict[KanbanStages, list[CallingProposalWithCounts]])
 def get_kanban_board(
@@ -604,7 +639,7 @@ def get_kanban_board(
 ):
     """Return active proposals grouped by kanban stage; access mirrors list_proposals."""
     proposals = session.exec(_proposal_statement_for_user(current_user, session)).all()
-    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages if stage != KanbanStages.DONE}
+    board: dict[KanbanStages, list[CallingProposalWithCounts]] = {stage: [] for stage in KanbanStages}
     if not proposals:
         return board
 

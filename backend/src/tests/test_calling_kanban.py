@@ -870,3 +870,75 @@ def test_board_bishop_scoped_sees_correct_stage_count(
     assert not any(p["id"] == other_ward_proposal_id for p in all_board_proposals), (
         "Bishop should not see proposals from other wards"
     )
+
+
+# ---------------------------------------------------------------------------
+# Hard-delete proposal tests
+# ---------------------------------------------------------------------------
+
+def test_delete_proposal_success(client: TestClient, auth_headers):
+    """DELETE /calling-kanban/proposals/{id} with MANAGE permission returns 200 and removes the proposal."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    r = client.delete(f"/calling-kanban/proposals/{proposal_id}", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["detail"] == "Proposal deleted"
+
+    # Proposal must not appear on the board any more
+    r = client.get("/calling-kanban/board", headers=auth_headers)
+    assert r.status_code == 200
+    board = r.json()
+    all_board_ids = [p["id"] for stage_proposals in board.values() for p in stage_proposals]
+    assert proposal_id not in all_board_ids
+
+
+def test_delete_proposal_blocked_at_done(client: TestClient, auth_headers, db_session: Session):
+    """DELETE returns 409 when the proposal's current stage is DONE."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    # Force-advance through all 6 stages to reach DONE
+    for _ in range(6):
+        client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.DONE
+    )
+
+    r = client.delete(f"/calling-kanban/proposals/{proposal_id}", headers=auth_headers)
+    assert r.status_code == 409
+
+
+def test_delete_proposal_already_deleted(client: TestClient, auth_headers):
+    """Second DELETE on the same proposal returns 404."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    r = client.delete(f"/calling-kanban/proposals/{proposal_id}", headers=auth_headers)
+    assert r.status_code == 200
+
+    r = client.delete(f"/calling-kanban/proposals/{proposal_id}", headers=auth_headers)
+    assert r.status_code == 404
+
+
+def test_delete_proposal_forbidden_without_manage_permission(
+    client: TestClient, auth_headers, userpass
+):
+    """DELETE returns 403 for a user without MANAGE_CALLING_PROPOSALS."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    r = client.delete(
+        f"/calling-kanban/proposals/{proposal_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
