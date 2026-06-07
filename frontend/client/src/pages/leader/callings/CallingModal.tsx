@@ -249,14 +249,18 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     onError: (err: unknown) => {
       console.error("[CallingModal] deleteMutation error:", err);
       const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("409")) {
+      if (raw.startsWith("403")) {
+        toast.error("Not authorized", { description: "You don't have permission to delete this proposal." });
+      } else if (raw.startsWith("409")) {
         toast.error("Already completed", { description: "Proposal is already completed — refresh the board." });
+        invalidateBoard();
       } else if (raw.startsWith("404")) {
         toast.error("Not found", { description: "Proposal no longer exists." });
+        invalidateBoard();
       } else {
         toast.error("Delete failed", { description: "Could not delete proposal. Please try again." });
+        invalidateBoard();
       }
-      invalidateBoard();
     },
   });
 
@@ -563,7 +567,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
             <AlertDialogTitle>Delete Proposal</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete <strong>{proposal?.fname} {proposal?.lname}</strong>'s proposal. This action cannot be undone.
-              {proposal && proposal.stageKey >= "3" && (
+              {proposal && Number(proposal.stageKey) >= 3 && (
                 <span className="block mt-2">
                   This proposal may have already been announced publicly. Deleting it does not undo any in-person actions.
                 </span>

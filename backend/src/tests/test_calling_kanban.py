@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from src.models import (
-    CallingProposal, CallingInterview, Calling, UserCalling,
-    KanbanStages, Permission, Permissions, Ward,
+    CallingProposal, CallingComment, CallingApproval, CallingInterview,
+    Calling, UserCalling, KanbanUpdate, KanbanStages, Permission, Permissions, Ward,
 )
 from src.utils.calling_kanban import get_current_proposal_status
 from src.utils import DiscordBotHandle
@@ -876,22 +876,52 @@ def test_board_bishop_scoped_sees_correct_stage_count(
 # Hard-delete proposal tests
 # ---------------------------------------------------------------------------
 
-def test_delete_proposal_success(client: TestClient, auth_headers):
-    """DELETE /calling-kanban/proposals/{id} with MANAGE permission returns 200 and removes the proposal."""
+def test_delete_proposal_success(client: TestClient, auth_headers, db_session: Session):
+    """DELETE /calling-kanban/proposals/{id} removes the proposal and all child rows."""
     r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
     assert r.status_code == 200
     proposal_id = r.json()["id"]
+
+    me = client.get("/auth/me", headers=auth_headers)
+    assert me.status_code == 200
+    admin_id = me.json()["id"]
+
+    comment = CallingComment(
+        proposal_id=proposal_id,
+        commenter_id=admin_id,
+        comment_text="seed comment",
+    )
+    approval = CallingApproval(
+        proposal_id=proposal_id,
+        approver_id=admin_id,
+        approved=True,
+    )
+    db_session.add(comment)
+    db_session.add(approval)
+    db_session.commit()
 
     r = client.delete(f"/calling-kanban/proposals/{proposal_id}", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["detail"] == "Proposal deleted"
 
-    # Proposal must not appear on the board any more
-    r = client.get("/calling-kanban/board", headers=auth_headers)
-    assert r.status_code == 200
-    board = r.json()
-    all_board_ids = [p["id"] for stage_proposals in board.values() for p in stage_proposals]
-    assert proposal_id not in all_board_ids
+    db_session.expire_all()
+
+    assert db_session.get(CallingProposal, proposal_id) is None
+
+    remaining_comments = db_session.exec(
+        select(CallingComment).where(CallingComment.proposal_id == proposal_id)
+    ).all()
+    assert remaining_comments == []
+
+    remaining_approvals = db_session.exec(
+        select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)
+    ).all()
+    assert remaining_approvals == []
+
+    remaining_updates = db_session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id)
+    ).all()
+    assert remaining_updates == []
 
 
 def test_delete_proposal_blocked_at_done(client: TestClient, auth_headers, db_session: Session):
@@ -942,3 +972,27 @@ def test_delete_proposal_forbidden_without_manage_permission(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 403
+
+
+def test_board_includes_done_stage(client: TestClient, auth_headers, db_session: Session):
+    """GET /calling-kanban/board includes stage '6' (DONE) and lists proposals that have reached it."""
+    r = client.post("/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers)
+    assert r.status_code == 200
+    proposal_id = r.json()["id"]
+
+    for _ in range(6):
+        client.post(f"/calling-kanban/proposals/{proposal_id}/advance", headers=auth_headers)
+
+    db_session.expire_all()
+    assert (
+        get_current_proposal_status(db_session.get(CallingProposal, proposal_id), db_session)
+        == KanbanStages.DONE
+    )
+
+    r = client.get("/calling-kanban/board", headers=auth_headers)
+    assert r.status_code == 200
+    board = r.json()
+
+    assert "6" in board, "Board must contain a '6' (DONE) key"
+    done_ids = [p["id"] for p in board["6"]]
+    assert proposal_id in done_ids, f"Proposal {proposal_id} must appear in board['6']"

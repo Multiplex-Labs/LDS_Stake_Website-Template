@@ -611,7 +611,21 @@ def delete_proposal(
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
 
-    current_stage = get_current_proposal_status(proposal, session)
+    # Guard against proposals whose initial KanbanUpdate was never committed — calling
+    # get_current_proposal_status on such a proposal would raise a misleading 404.
+    updates = session.exec(
+        select(KanbanUpdate)
+        .where(KanbanUpdate.proposal_id == proposal_id)
+        .order_by(KanbanUpdate.updated_at, KanbanUpdate.id)
+    ).all()
+    if not updates:
+        logger.error("Proposal %s has no KanbanUpdate rows — data integrity violation", proposal_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Proposal is in an inconsistent state and cannot be deleted",
+        )
+
+    current_stage = updates[-1].to_stage
     if current_stage == KanbanStages.DONE:
         raise HTTPException(status_code=409, detail="Cannot delete a completed proposal")
 
@@ -622,11 +636,19 @@ def delete_proposal(
         session.delete(row)
     for row in session.exec(select(CallingComment).where(CallingComment.proposal_id == proposal_id)).all():
         session.delete(row)
-    for row in session.exec(select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal_id)).all():
+    for row in updates:
         session.delete(row)
 
-    session.delete(proposal)
-    session.commit()
+    try:
+        session.delete(proposal)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.error("Failed to delete proposal %s: %s", proposal_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete proposal. The operation was rolled back.",
+        ) from exc
 
     return {"detail": "Proposal deleted"}
 
