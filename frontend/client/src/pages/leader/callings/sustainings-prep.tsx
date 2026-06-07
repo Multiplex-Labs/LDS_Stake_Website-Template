@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -10,11 +10,10 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
+import "cally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +30,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
-import { fullName } from "@/lib/utils";
+import { fullName, extractWardNumber } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { hasPermission, Permission } from "@/lib/constants";
 
@@ -164,9 +163,9 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
   return (
     <div className="collapse collapse-arrow bg-card border rounded-lg shadow-sm">
       <input type="checkbox" defaultChecked={items.length > 0} />
-      <div className="collapse-title flex items-center justify-between pr-8 py-2.5 px-4">
+      <div className="collapse-title flex items-center justify-between pr-12 py-2.5 px-4">
         <span className="font-semibold text-sm">{label}</span>
-        <span className={`badge badge-sm ${items.length > 0 ? "badge-primary" : "badge-ghost"}`}>
+        <span className="badge-ghost badge-sm badge-neutral">
           Pending: {items.length}
         </span>
       </div>
@@ -316,6 +315,8 @@ export default function SustainingPrep() {
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const callyRef = useRef<HTMLElement & { value: string }>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
 
   const {
     data: board = {},
@@ -342,7 +343,7 @@ export default function SustainingPrep() {
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useWardMap(wards);
   const sortedWards = useMemo(
-    () => [...wards].sort((a, b) => parseInt(a.name) - parseInt(b.name)),
+    () => [...wards].sort((a, b) => parseInt(extractWardNumber(a.name)) - parseInt(extractWardNumber(b.name))),
     [wards],
   );
 
@@ -488,6 +489,34 @@ export default function SustainingPrep() {
     [state.sustainingDate],
   );
 
+  // Wire cally's native change event when the picker is open
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    const el = callyRef.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const value = (e.target as HTMLElement & { value: string }).value;
+      if (value) {
+        handleDateChange(value);
+        setDatePickerOpen(false);
+      }
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, [datePickerOpen, handleDateChange]);
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setDatePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [datePickerOpen]);
+
   if (!hasAccess) {
     return (
       <Layout>
@@ -527,32 +556,38 @@ export default function SustainingPrep() {
                 Back to Sustainment/Release Form
               </Button>
             </Link>
-            <h1 className="font-serif text-3xl font-bold mt-1">Sustaining Prep</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Assign callings, releases, and ordinations to ward sections
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-2 min-w-[160px] justify-start font-normal">
-                  <CalendarIcon className="size-4" />
-                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  className="rounded-lg border"
-                  selected={selectedDate}
-                  onSelect={(date) => {
-                    handleDateChange(date ? format(date, "yyyy-MM-dd") : "");
-                    setDatePickerOpen(false);
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <div className="relative" ref={datePickerRef}>
+              <Button
+                variant="outline"
+                className="gap-2 min-w-[160px] justify-start font-normal"
+                onClick={() => setDatePickerOpen(!datePickerOpen)}
+              >
+                <CalendarIcon className="size-4" />
+                {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
+              </Button>
+              {datePickerOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 rounded-xl shadow-lg border border-border overflow-hidden">
+                  {/* @ts-expect-error cally custom element — types flow via HTMLElementTagNameMap */}
+                  <calendar-date
+                    className="cally"
+                    ref={callyRef}
+                    value={state.sustainingDate ?? ""}
+                  >
+                    <svg aria-label="Previous" className="fill-current size-4" {...{ slot: "previous" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                      <path d="M15.75 19.5 8.25 12l7.5-7.5" />
+                    </svg>
+                    <svg aria-label="Next" className="fill-current size-4" {...{ slot: "next" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                      <path d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
+                    {/* @ts-expect-error cally custom element */}
+                    <calendar-month />
+                  {/* @ts-expect-error cally custom element */}
+                  </calendar-date>
+                </div>
+              )}
+            </div>
 
             <Button
               variant="outline"
@@ -564,8 +599,8 @@ export default function SustainingPrep() {
             </Button>
 
             <Button
-              variant="ghost"
-              className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              variant="outline"
+              className="gap-2 border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={handleClearAll}
             >
               <Trash2 className="size-4" />
@@ -579,8 +614,10 @@ export default function SustainingPrep() {
             <div className="w-64 shrink-0 sticky top-4">
               <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
                 <div className="px-4 py-2.5 border-b bg-muted/40 flex items-center justify-between">
-                  <span className="font-semibold text-sm">Unassigned Pool</span>
-                  <span className="badge badge-sm">{state.unassigned.length}</span>
+                  <span className="font-semibold text-sm">Unassigned Callings</span>
+                  <span className="text-[11px] font-normal tracking-wide">
+                    Total: {state.unassigned.length}
+                  </span>
                 </div>
 
                 <div className="px-3 pt-3 pb-2">
