@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, setAccessToken } from "@/lib/queryClient";
-import { apiErrorStatus } from "@/lib/utils";
+import { apiErrorStatus, meetsPasswordComplexity } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 
 export default function ChangePassword() {
@@ -28,14 +28,7 @@ export default function ChangePassword() {
       toast.error("Passwords do not match");
       return;
     }
-    const pw = form.newPassword;
-    if (
-      pw.length < 8 ||
-      pw.length > 128 ||
-      !/[A-Z]/.test(pw) ||
-      !/[0-9]/.test(pw) ||
-      !/[^a-zA-Z0-9]/.test(pw)
-    ) {
+    if (!meetsPasswordComplexity(form.newPassword)) {
       toast.error("Password requirements not met", {
         description: "Must be 8–128 characters and include at least one uppercase letter, one digit, and one special character.",
       });

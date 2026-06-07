@@ -142,6 +142,19 @@ def update_user(
 
     return ResponseSafeUser.from_user(db_user)
 
+def _check_password_complexity(v: str) -> str:
+    errors = []
+    if not any(c.isupper() for c in v):
+        errors.append("one uppercase letter")
+    if not any(c.isdigit() for c in v):
+        errors.append("one digit")
+    if not re.search(r"[^a-zA-Z0-9]", v):
+        errors.append("one special character")
+    if errors:
+        raise ValueError(f"Password must contain at least: {', '.join(errors)}")
+    return v
+
+
 class PasswordUpdateRequest(SQLModel):
     new_password: str = Field(min_length=8, max_length=128)
     old_password: Optional[str] = None
@@ -149,16 +162,7 @@ class PasswordUpdateRequest(SQLModel):
     @field_validator("new_password")
     @classmethod
     def validate_password_complexity(cls, v: str) -> str:
-        errors = []
-        if not any(c.isupper() for c in v):
-            errors.append("one uppercase letter")
-        if not any(c.isdigit() for c in v):
-            errors.append("one digit")
-        if not re.search(r"[^a-zA-Z0-9]", v):
-            errors.append("one special character")
-        if errors:
-            raise ValueError(f"Password must contain at least: {', '.join(errors)}")
-        return v
+        return _check_password_complexity(v)
 @router.patch("/{user_id}/password")
 def update_user_password(
     user_id: int,
@@ -186,7 +190,7 @@ def update_user_password(
     db_user.password_hash = hash_password(data.new_password)
     db_user.force_password_reset = not is_self  # If self-reset, clear the flag
 
-    # Let's also clear all existing sessions for this user
+    # Invalidate all active sessions so the old password cannot be used
     session.add(db_user)
     session.exec(
         delete(UserSession).where(UserSession.user_id == user_id)
@@ -250,16 +254,7 @@ class UserCreateRequest(RequestSafeUser):
     @field_validator("password")
     @classmethod
     def validate_password_complexity(cls, v: str) -> str:
-        errors = []
-        if not any(c.isupper() for c in v):
-            errors.append("one uppercase letter")
-        if not any(c.isdigit() for c in v):
-            errors.append("one digit")
-        if not re.search(r"[^a-zA-Z0-9]", v):
-            errors.append("one special character")
-        if errors:
-            raise ValueError(f"Password must contain at least: {', '.join(errors)}")
-        return v
+        return _check_password_complexity(v)
 @router.post("/")
 def create_user(
     user: UserCreateRequest,
