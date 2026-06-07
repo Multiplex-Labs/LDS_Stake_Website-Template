@@ -1,11 +1,15 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { ChevronLeft, ClipboardList, Printer } from "lucide-react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout/Layout";
+import { Button } from "@/components/ui/button";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
 import { useWardMap } from "@/lib/hooks";
 import { fullName, apiErrorStatus } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useAuthStore } from "@/stores/auth";
+import { hasPermission, Permission } from "@/lib/constants";
 import type { Ward, KanbanBoard } from "@/types";
 
 interface Release {
@@ -141,6 +145,9 @@ function TabContent({ tab }: { tab: TabData }) {
 }
 
 export default function ReleasesAndSustainings() {
+  const user = useAuthStore((s) => s.user);
+  const canManageCallings = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+
   const {
     data: wards = [],
     isLoading,
@@ -295,6 +302,12 @@ export default function ReleasesAndSustainings() {
       <div className="bg-muted/30 py-12 print:hidden">
         <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
           <div>
+            <Link href="/leader/calling-system">
+              <Button variant="ghost" className="gap-2 mb-4 pl-0 hover:bg-transparent hover:text-primary">
+                <ChevronLeft className="h-4 w-4" />
+                Back to Calling System
+              </Button>
+            </Link>
             <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
             {prepState.sustainingDate && (
               <p className="text-muted-foreground mt-1">
@@ -307,10 +320,20 @@ export default function ReleasesAndSustainings() {
               </p>
             )}
           </div>
-          <button className="btn btn-outline gap-2" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            Print
-          </button>
+          <div className="flex items-center gap-2">
+            {canManageCallings && (
+              <Link href="/leader/callings/sustainings-prep">
+                <button className="btn btn-outline gap-2">
+                  <ClipboardList className="size-4" />
+                  Sustaining Prep
+                </button>
+              </Link>
+            )}
+            <button className="btn btn-outline gap-2" onClick={() => window.print()}>
+              <Printer className="size-4" />
+              Print
+            </button>
+          </div>
         </div>
       </div>
 

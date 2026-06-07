@@ -26,6 +26,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
+import { useAuthStore } from "@/stores/auth";
+import { hasPermission, Permission } from "@/lib/constants";
 
 // ---------- helpers ----------
 
@@ -296,6 +298,7 @@ function OrdinationDialog({
 // ---------- Main Page ----------
 
 export default function SustainingPrep() {
+  const user = useAuthStore((s) => s.user);
   const [state, setState] = useState<SustainingPrepState>(() => loadSustainingPrep());
   const [ordinationOpen, setOrdinationOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
@@ -449,6 +452,19 @@ export default function SustainingPrep() {
           <p className="text-destructive font-medium">Failed to load sustaining data.</p>
           <p className="text-muted-foreground text-sm mt-2">
             Please refresh the page. If this continues, contact your administrator.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS)) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+          <p className="text-destructive font-medium">Access denied.</p>
+          <p className="text-muted-foreground text-sm mt-2">
+            You don't have permission to access Sustaining Prep.
           </p>
         </div>
       </Layout>

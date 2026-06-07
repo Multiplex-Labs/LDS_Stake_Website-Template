@@ -15,7 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PlusCircle, FileCheck, Archive, ClipboardList } from "lucide-react";
+import { PlusCircle, FileCheck, Archive, Users } from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
@@ -138,6 +138,9 @@ function DroppableColumn({ id, isValidTarget, children }: DroppableColumnProps) 
 export default function CallingSystem() {
   const user = useAuthStore((s) => s.user);
   const canManage = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+  const canViewSustainings =
+    hasPermission(user?.permissions ?? 0, Permission.VIEW_CALLING_PROPOSALS) ||
+    hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
 
   const { data: board = {}, isLoading: boardLoading, isError: boardError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
@@ -293,12 +296,14 @@ export default function CallingSystem() {
             </Link>
           </div>
           <div className="flex gap-2">
-            <Link href="/leader/callings/sustainings-prep">
-              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <ClipboardList className="h-4 w-4" />
-                Sustaining Prep
-              </Button>
-            </Link>
+            {canViewSustainings && (
+              <Link href="/leader/sustainings">
+                <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                  <Users className="h-4 w-4" />
+                  Releases &amp; Sustainings
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
 
