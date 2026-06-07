@@ -103,9 +103,10 @@ export default function ReviewCallings() {
   const { data: board = {}, isLoading, isError, error } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+  if (wardsError) console.error("[review] failed to load /api/wards/:", wardsQueryError);
 
   const wardMap = useWardMap(wards);
 

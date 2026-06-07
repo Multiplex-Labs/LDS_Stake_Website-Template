@@ -142,6 +142,7 @@ def update_user(
 
     return ResponseSafeUser.from_user(db_user)
 
+
 def _check_password_complexity(v: str) -> str:
     errors = []
     if not any(c.isupper() for c in v):
@@ -163,6 +164,8 @@ class PasswordUpdateRequest(SQLModel):
     @classmethod
     def validate_password_complexity(cls, v: str) -> str:
         return _check_password_complexity(v)
+
+
 @router.patch("/{user_id}/password")
 def update_user_password(
     user_id: int,
@@ -255,6 +258,8 @@ class UserCreateRequest(RequestSafeUser):
     @classmethod
     def validate_password_complexity(cls, v: str) -> str:
         return _check_password_complexity(v)
+
+
 @router.post("/")
 def create_user(
     user: UserCreateRequest,

@@ -142,12 +142,14 @@ export default function CallingSystem() {
   const { data: board = {}, isLoading: boardLoading, isError: boardError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  const { data: users = [] } = useQuery<ApiUser[]>({
+  const { data: users = [], isError: usersError, error: usersQueryError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+  if (wardsError) console.error("[callings] failed to load /api/wards/:", wardsQueryError);
+  if (usersError) console.error("[callings] failed to load /api/users/:", usersQueryError);
 
   const wardMap = useWardMap(wards);
 

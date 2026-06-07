@@ -675,7 +675,7 @@ def get_kanban_board(
     for proposal in proposals:
         updates = updates_by_proposal.get(proposal.id, [])
         if not updates:
-            logger.error("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
+            logger.warning("get_kanban_board: proposal %s has no KanbanUpdate rows; skipping", proposal.id)
             continue
         stage = max(updates, key=lambda u: (u.updated_at, u.id)).to_stage
         if stage in board:

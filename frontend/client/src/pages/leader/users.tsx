@@ -303,7 +303,14 @@ export function UserAdminContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Status Updated");
     },
-    onError: () => toast.error("Update Failed", { description: "Could not update user status." }),
+    onError: (err: unknown) => {
+      console.error("[users] toggleStatusMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Update Failed", { description: "Could not update user status." });
+      }
+    },
   });
 
   const saveEditMutation = useMutation({
@@ -323,7 +330,14 @@ export function UserAdminContent() {
       toast.success("Profile Updated", { description: `${form.fname} ${form.lname} has been saved.` });
       handleCloseEdit();
     },
-    onError: () => toast.error("Update Failed", { description: "Could not save changes." }),
+    onError: (err: unknown) => {
+      console.error("[users] saveEditMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Update Failed", { description: "Could not save changes." });
+      }
+    },
   });
 
   const removeCallingMutation = useMutation({
@@ -333,7 +347,14 @@ export function UserAdminContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Calling removed");
     },
-    onError: () => toast.error("Failed to remove calling"),
+    onError: (err: unknown) => {
+      console.error("[users] removeCallingMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to remove calling");
+      }
+    },
   });
 
   const assignCallingMutation = useMutation({
@@ -402,9 +423,11 @@ export function UserAdminContent() {
       ]);
 
       if (results[0].status === "rejected") {
+        console.error("[users] photo upload failed for new user:", newUser.id, results[0].reason);
         toast.warning("User created, but photo upload failed — add it via Edit");
       }
       if (results[1].status === "rejected") {
+        console.error("[users] calling assignment failed for new user:", newUser.id, results[1].reason);
         toast.warning("User created, but calling assignment failed — assign it via Edit");
       }
 
@@ -467,7 +490,10 @@ export function UserAdminContent() {
       toast.success("Photo updated");
       releaseCropState();
     },
-    onError: () => toast.error("Upload Failed", { description: "Could not save photo. Please try again." }),
+    onError: (err: unknown) => {
+      console.error("[users] uploadPhotoMutation error:", err);
+      toast.error("Upload Failed", { description: "Could not save photo. Please try again." });
+    },
   });
 
   // --- Handlers ---

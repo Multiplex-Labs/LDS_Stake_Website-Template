@@ -53,6 +53,7 @@ export default function ChangePassword() {
     } catch (err: unknown) {
       const status = apiErrorStatus(err);
       if (status === 401) {
+        console.error("[change-password] session expired or token rejected:", err);
         toast.error("Session expired", { description: "Please log in again to change your password." });
         setAccessToken(null);
         setUser(null);

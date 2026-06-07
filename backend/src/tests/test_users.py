@@ -3,7 +3,7 @@ from typing import Tuple
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from src.models import User, UserCalling, Calling, Permission
+from src.models import User, UserCalling, Calling
 
 
 def login_client(client: TestClient, email: str, password: str) -> str:
@@ -180,22 +180,90 @@ def test_change_password_compliant_accepted(client: TestClient, userpass: Tuple[
     assert r.status_code == 200
 
 
+def test_change_password_too_short_rejected(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": "Abc1!xy"},  # 7 chars, all complexity rules met
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_max_length_accepted(client: TestClient, userpass: Tuple[User, str]):
+    user, password = userpass
+    token = login_client(client, user.email, password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    at_limit = "A1!" + "a" * 125  # exactly 128 characters
+    r = client.patch(
+        f"/users/{user.id}/password",
+        json={"old_password": password, "new_password": at_limit},
+        headers=headers,
+    )
+    assert r.status_code == 200
+
+
 # --- Password complexity enforcement tests (Task 3.2) ---
+
+def _create_user_payload(email: str, password: str) -> dict:
+    return {"email": email, "password": password, "fname": "Test", "lname": "User", "active": True, "force_password_reset": True}
+
 
 def test_create_user_weak_password_rejected(client: TestClient, admin: Tuple[User, str]):
     admin_user, admin_password = admin
     token = login_client(client, admin_user.email, admin_password)
     headers = {"Authorization": f"Bearer {token}"}
 
-    payload = {
-        "email": "weakpass@example.com",
-        "password": "nouppernordigit",
-        "fname": "Test",
-        "lname": "User",
-        "active": True,
-        "force_password_reset": True,
-    }
-    r = client.post("/users/", json=payload, headers=headers)
+    r = client.post("/users/", json=_create_user_payload("weakpass@example.com", "nouppernordigit"), headers=headers)
     assert r.status_code == 422
+
+
+def test_create_user_missing_uppercase_rejected(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/users/", json=_create_user_payload("nouppercase@example.com", "password1!"), headers=headers)
+    assert r.status_code == 422
+
+
+def test_create_user_missing_digit_rejected(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/users/", json=_create_user_payload("nodigit@example.com", "Password!"), headers=headers)
+    assert r.status_code == 422
+
+
+def test_create_user_missing_special_char_rejected(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/users/", json=_create_user_payload("nospecial@example.com", "Password1"), headers=headers)
+    assert r.status_code == 422
+
+
+def test_create_user_too_short_rejected(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/users/", json=_create_user_payload("tooshort@example.com", "Abc1!xy"), headers=headers)
+    assert r.status_code == 422
+
+
+def test_get_user_nonexistent_returns_404(client: TestClient, admin: Tuple[User, str]):
+    admin_user, admin_password = admin
+    token = login_client(client, admin_user.email, admin_password)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.get("/users/99999", headers=headers)
+    assert r.status_code == 404
 
 

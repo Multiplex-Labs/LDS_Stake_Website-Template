@@ -78,7 +78,7 @@ def is_stake_presidency(user: User) -> bool:
     Check if a user is a member of the stake presidency.
     
     The stake presidency consists of the stake president and his counselors (first
-    and second councilors). These individuals have the highest authority in stake
+    and second counselors). These individuals have the highest authority in stake
     governance and are responsible for final approvals in the calling process.
     
     Args:
@@ -282,7 +282,8 @@ def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanSt
         from_stage (KanbanStages): The stage the proposal is moving from.
         to_stage (KanbanStages): The stage the proposal is moving to.
         session (Session): The database session to use for the operation.
-        
+        discord_bot (DiscordBotHandle): Bot handle used to send stage-change notifications and request approvals.
+
     Returns:
         KanbanUpdate: The newly created and committed KanbanUpdate object,
         refreshed from the database with any auto-generated fields.
@@ -343,7 +344,8 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     
     - SP_APPROVAL → HC_APPROVAL: When stake presidency approvals meet the threshold
     - HC_APPROVAL → INTERVIEW: When high council approvals meet the threshold
-    - INTERVIEW → SUSTAIN: When the interview is completed (interviewer assigned and date passed)
+    - INTERVIEW → SUSTAIN: Handled directly by the complete_interview endpoint via create_kanban_update;
+      the automated check in this function is unreachable under normal workflow
     
     Later stages (SUSTAIN, SET_APART, LCR_UPDATE, DONE) are manually set by users and
     not handled by this automated logic.

@@ -160,15 +160,30 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     mutationFn: ({ id, interviewerId }: { id: number; interviewerId: number }) =>
       apiRequest("POST", `/api/calling-kanban/proposals/${id}/interview?interviewer_id=${interviewerId}`),
     onSuccess: () => { toast.success("Interviewer assigned"); invalidateBoard(); },
-    onError: () => toast.error("Failed to assign interviewer"),
+    onError: (err: unknown) => {
+      console.error("[CallingModal] scheduleInterviewMutation error:", err);
+      const status = apiErrorStatus(err);
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Not authorized", { description: "You don't have permission to assign an interviewer." });
+      } else if (status === 404) {
+        toast.error("Proposal not found", { description: "This proposal may have been deleted. Refresh the board." });
+      } else {
+        toast.error("Failed to assign interviewer", { description: "Please refresh and try again." });
+      }
+    },
   });
 
   const completeInterviewMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/interview/complete`),
     onSuccess: () => { toast.success("Interview marked complete — proposal moved to Sustainment"); invalidateBoard(); closeDialog(); },
     onError: (err: unknown) => {
+      console.error("[CallingModal] completeInterviewMutation error:", err);
       const status = apiErrorStatus(err);
-      if (status === 400 || status === 409) {
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 400 || status === 409) {
         toast.error("Cannot complete interview", { description: "Ensure an interviewer has been assigned first." });
       } else {
         toast.error("Failed to complete interview", { description: "Please refresh and try again." });
@@ -177,6 +192,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
   });
 
   function stageAdvanceOnError(err: unknown) {
+    console.error("[CallingModal] stage advance error:", err);
     const status = apiErrorStatus(err);
     if (status === 401) {
       toast.error("Session expired", { description: "Please log in again." });
