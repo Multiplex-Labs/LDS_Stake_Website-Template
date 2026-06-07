@@ -299,7 +299,6 @@ function OrdinationDialog({
 
 export default function SustainingPrep() {
   const user = useAuthStore((s) => s.user);
-  const authLoading = useAuthStore((s) => s.isLoading);
   const hasAccess = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
 
   const [state, setState] = useState<SustainingPrepState>(() => loadSustainingPrep());
@@ -451,16 +450,6 @@ export default function SustainingPrep() {
   }, []);
 
   const { setNodeRef: poolRef, isOver: isOverPool } = useDroppable({ id: "pool" });
-
-  if (authLoading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center py-32">
-          <span className="loading loading-spinner loading-lg text-primary" />
-        </div>
-      </Layout>
-    );
-  }
 
   if (!hasAccess) {
     return (

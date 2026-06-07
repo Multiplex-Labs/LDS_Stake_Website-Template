@@ -139,8 +139,7 @@ export default function CallingSystem() {
   const user = useAuthStore((s) => s.user);
   const canManage = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
   const canViewSustainings =
-    hasPermission(user?.permissions ?? 0, Permission.VIEW_CALLING_PROPOSALS) ||
-    hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+    canManage || hasPermission(user?.permissions ?? 0, Permission.VIEW_CALLING_PROPOSALS);
 
   const { data: board = {}, isLoading: boardLoading, isError: boardError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
