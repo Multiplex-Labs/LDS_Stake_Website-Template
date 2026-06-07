@@ -59,7 +59,7 @@ function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTabl
             </TableRow>
           ) : proposals.length > 0 ? (
             proposals.map((proposal) => {
-              const hasVoted = proposal.current_stage_vote !== null;
+              const hasVoted = proposal.current_stage_vote != null;
               return (
               <TableRow
                 key={proposal.id}
@@ -111,7 +111,10 @@ export default function ReviewCallings() {
 
   const spProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
   const hcProposals: CallingProposalWithCounts[] = board[HC_APPROVAL_KEY] ?? [];
-  const alreadyVoted = selectedProposal !== null && selectedProposal.current_stage_vote !== null;
+  const liveProposal = selectedProposal
+    ? [...spProposals, ...hcProposals].find((p) => p.id === selectedProposal.id) ?? selectedProposal
+    : null;
+  const alreadyVoted = liveProposal !== null && liveProposal.current_stage_vote != null;
 
   const approveMutation = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -133,12 +136,16 @@ export default function ReviewCallings() {
       }
     },
     onError: (err) => {
-      console.error("[review] approval mutation failed:", err);
+      console.error("[review] approval mutation failed for proposal", selectedProposal?.id, "stage", selectedStage, err);
       const msg = err instanceof Error ? err.message : "";
       if (msg.startsWith("400")) {
         toast.error("Already Voted", { description: "You have already submitted a vote for this proposal." });
       } else if (msg.startsWith("403")) {
         toast.error("Not Authorized", { description: "You do not have permission to vote on this proposal." });
+      } else if (msg.startsWith("404")) {
+        toast.error("Proposal Not Found", { description: "This proposal may have been deleted. Refresh the page." });
+      } else if (msg.startsWith("409")) {
+        toast.error("Stage Changed", { description: "This proposal has moved to a new stage. Refresh the page to vote." });
       } else {
         toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
       }

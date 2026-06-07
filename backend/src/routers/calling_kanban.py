@@ -49,7 +49,7 @@ class CallingProposalWithCounts(BaseModel):
     updated_at: datetime
     stage_approval_count: int = Field(ge=0)
     stage_denial_count: int = Field(ge=0)
-    current_stage_vote: bool | None = None
+    current_stage_vote: bool | None
 
     @classmethod
     def from_proposal(
@@ -57,7 +57,7 @@ class CallingProposalWithCounts(BaseModel):
         proposal: CallingProposal,
         stage_approval_count: int,
         stage_denial_count: int,
-        current_stage_vote: bool | None = None,
+        current_stage_vote: bool | None,
     ) -> "CallingProposalWithCounts":
         return cls(
             id=proposal.id,
@@ -692,15 +692,22 @@ def get_kanban_board(
             proposal_approvals = approvals_by_proposal.get(proposal.id, [])
             approved, denied = _stage_scoped_approval_counts(updates, proposal_approvals, stage)
 
-            # Only votes cast after the most recent entry into this stage count,
-            # so re-queued proposals start fresh.
+            # Only votes cast after the most recent time this stage was entered count.
+            # A proposal reverted to an earlier stage and re-entered starts with no votes.
             current_stage_vote: bool | None = None
             stage_entries = [u for u in updates if u.to_stage == stage]
             if stage_entries:
                 stage_entry_time = max(stage_entries, key=lambda u: (u.updated_at, u.id)).updated_at
+                # Normalize to UTC for safe comparison across DB engines (SQLite returns naive, PostgreSQL aware)
+                if stage_entry_time.tzinfo is None:
+                    stage_entry_time = stage_entry_time.replace(tzinfo=timezone.utc)
                 user_approval = next(
-                    (a for a in proposal_approvals
-                     if a.created_at >= stage_entry_time and a.approver_id == current_user.id),
+                    (
+                        a for a in proposal_approvals
+                        if (a.created_at if a.created_at.tzinfo else a.created_at.replace(tzinfo=timezone.utc))
+                           >= stage_entry_time
+                        and a.approver_id == current_user.id
+                    ),
                     None,
                 )
                 if user_approval is not None:
