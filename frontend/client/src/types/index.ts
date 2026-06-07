@@ -148,7 +148,7 @@ export interface PresidencyAssignment {
   calling_id: number;
   calling_name: string;
   current_holder: { id: number; fname: string; lname: string } | null;
-  responsibilities: string | null;
+  responsibilities: string[];
   wards_overseen: number[];
 }
 

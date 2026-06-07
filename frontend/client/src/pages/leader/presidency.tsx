@@ -4,7 +4,6 @@ import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, Users } from "lucide-react";
-import { parseCommaList } from "@/lib/utils";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 export default function PresidencyAssignments() {
@@ -19,6 +18,7 @@ export default function PresidencyAssignments() {
   const {
     data: wards = [],
     isLoading: wardsLoading,
+    error: wardsError,
   } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
@@ -49,6 +49,11 @@ export default function PresidencyAssignments() {
     );
   }
 
+  if (wardsError) {
+    console.error("[presidency] wards:", wardsError);
+    // Non-fatal — continue rendering; ward names will degrade to IDs
+  }
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
@@ -56,7 +61,6 @@ export default function PresidencyAssignments() {
 
         <div className="grid gap-6 md:grid-cols-3">
           {assignments.map((member) => {
-            const responsibilities = parseCommaList(member.responsibilities);
             const displayName = member.current_holder
               ? `President ${member.current_holder.fname} ${member.current_holder.lname}`
               : `President [${member.calling_name}]`;
@@ -80,9 +84,9 @@ export default function PresidencyAssignments() {
                       <Check className="h-4 w-4" />
                       Responsibilities
                     </h3>
-                    {responsibilities.length > 0 ? (
+                    {member.responsibilities.length > 0 ? (
                       <ul className="space-y-2">
-                        {responsibilities.map((resp, i) => (
+                        {member.responsibilities.map((resp, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm">
                             <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
                             <span>{resp}</span>

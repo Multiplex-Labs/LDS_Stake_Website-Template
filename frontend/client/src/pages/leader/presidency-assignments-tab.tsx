@@ -28,7 +28,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pencil, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { parseCommaList } from "@/lib/utils";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 interface EditState {
@@ -40,11 +39,19 @@ interface EditState {
 export function PresidencyAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
 
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<PresidencyAssignment[]>({
+  const {
+    data: assignments = [],
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+  } = useQuery<PresidencyAssignment[]>({
     queryKey: ["/api/presidency-assignments/"],
   });
 
-  const { data: wards = [], isLoading: wardsLoading } = useQuery<Ward[]>({
+  const {
+    data: wards = [],
+    isLoading: wardsLoading,
+    error: wardsError,
+  } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
 
@@ -74,14 +81,23 @@ export function PresidencyAssignmentsTab() {
     },
     onError: (err: Error) => {
       console.error("[presidency-assignments-tab] save:", err);
-      toast.error("Failed to save.");
+      const status = parseInt(err.message.split(":")[0], 10);
+      if (status === 403) {
+        toast.error("You don't have permission to edit presidency assignments.");
+      } else if (status === 400) {
+        toast.error(`Invalid data: ${err.message.split(": ").slice(1).join(": ")}`);
+      } else if (status === 404) {
+        toast.error("Assignment not found. Please refresh the page.");
+      } else {
+        toast.error("Failed to save. Please try again.");
+      }
     },
   });
 
   function openEdit(assignment: PresidencyAssignment) {
     setEditing({
       assignment,
-      responsibilities: assignment.responsibilities ?? "",
+      responsibilities: assignment.responsibilities.join(", "),
       selectedWardIds: new Set(assignment.wards_overseen),
     });
   }
@@ -107,76 +123,87 @@ export function PresidencyAssignmentsTab() {
     );
   }
 
+  if (assignmentsError) {
+    console.error("[presidency-assignments-tab] load assignments:", assignmentsError);
+    return (
+      <div className="py-8 text-center text-destructive text-sm">
+        Failed to load presidency assignments. Please refresh the page.
+      </div>
+    );
+  }
+
+  if (wardsError) {
+    console.error("[presidency-assignments-tab] load wards:", wardsError);
+    // Non-fatal — ward names degrade to IDs but cards still render
+  }
+
   return (
     <>
       <div className="grid gap-6 md:grid-cols-3">
-        {assignments.map((assignment) => {
-          const responsibilities = parseCommaList(assignment.responsibilities);
-          return (
-            <Card key={assignment.id} className="flex flex-col">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-start justify-between gap-2">
-                  <span className="text-base font-semibold leading-snug">
-                    {assignment.calling_name}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    onClick={() => openEdit(assignment)}
-                    aria-label={`Edit ${assignment.calling_name}`}
-                  >
-                    <Pencil className="size-4" />
-                    Edit
-                  </Button>
-                </CardTitle>
-                <p className="text-sm font-medium text-foreground">
-                  {assignment.current_holder
-                    ? `${assignment.current_holder.fname} ${assignment.current_holder.lname}`
-                    : <span className="text-muted-foreground">Unassigned</span>}
-                </p>
-              </CardHeader>
+        {assignments.map((assignment) => (
+          <Card key={assignment.id} className="flex flex-col">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-start justify-between gap-2">
+                <span className="text-base font-semibold leading-snug">
+                  {assignment.calling_name}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => openEdit(assignment)}
+                  aria-label={`Edit ${assignment.calling_name}`}
+                >
+                  <Pencil className="size-4" />
+                  Edit
+                </Button>
+              </CardTitle>
+              <p className="text-sm font-medium text-foreground">
+                {assignment.current_holder
+                  ? `${assignment.current_holder.fname} ${assignment.current_holder.lname}`
+                  : <span className="text-muted-foreground">Unassigned</span>}
+              </p>
+            </CardHeader>
 
-              <CardContent className="flex-1 space-y-4">
+            <CardContent className="flex-1 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Responsibilities
+                </p>
+                {assignment.responsibilities.length > 0 ? (
+                  <ul className="space-y-1">
+                    {assignment.responsibilities.map((r, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">None listed</p>
+                )}
+              </div>
+
+              {assignment.wards_overseen.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Responsibilities
+                    Ward Assignments
                   </p>
-                  {responsibilities.length > 0 ? (
-                    <ul className="space-y-1">
-                      {responsibilities.map((r, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
-                          <span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">None listed</p>
-                  )}
-                </div>
-
-                {assignment.wards_overseen.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                      Ward Assignments
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {assignment.wards_overseen.map((wardId) => (
-                        <span
-                          key={wardId}
-                          className="badge badge-outline text-xs"
-                        >
-                          {wardMap.get(wardId) ?? `Ward ${wardId}`}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {assignment.wards_overseen.map((wardId) => (
+                      <span
+                        key={wardId}
+                        className="badge badge-outline text-xs"
+                      >
+                        {wardMap.get(wardId) ?? `Ward ${wardId}`}
+                      </span>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Dialog
