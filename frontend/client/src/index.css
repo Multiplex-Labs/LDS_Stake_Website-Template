@@ -134,6 +134,28 @@
   }
 }
 
+/* Clip cally shadow DOM content to the host element's rounded corners.
+   overflow:hidden on the parent cannot reach into shadow DOM compositing layers. */
+calendar-date {
+  display: block;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+/* Prevent DaisyUI base-layer styles from bleeding into the shadcn Calendar.
+   DaisyUI can inject padding, vertical-align, and display:table-row on bare
+   table elements which breaks the flex-based layout react-day-picker v9 uses. */
+[data-slot="calendar"] td,
+[data-slot="calendar"] th {
+  border-width: 0;
+  padding: 0;
+  vertical-align: middle;
+}
+
+[data-slot="calendar"] tr {
+  display: flex;
+}
+
 .btn-success {
   background-color: hsl(var(--success));
   color: hsl(var(--success-foreground));
