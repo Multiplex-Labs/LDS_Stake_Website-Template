@@ -1,8 +1,19 @@
 import os
 import logging
+from pathlib import Path
+
 import uvicorn
+from alembic import command
+from alembic.config import Config as AlembicConfig
 import dotenv
 from src.logging_config import setup_logging
+
+
+def run_alembic_migrations() -> None:
+    alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
+    config = AlembicConfig(str(alembic_ini))
+    logging.info("Running Alembic migrations: upgrade head")
+    command.upgrade(config, "head")
 
 
 def main():
@@ -18,6 +29,9 @@ def main():
     # Force SQLAlchemy noise down to WARNING, even if its internal loggers are already configured elsewhere.
     for sqlalchemy_logger in ("sqlalchemy", "sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.orm"):
         logging.getLogger(sqlalchemy_logger).setLevel(logging.WARNING)
+
+    if os.environ.get("RUN_MIGRATIONS", "true").lower() in ("1", "true", "yes", "on"):
+        run_alembic_migrations()
 
     port = int(os.environ.get("PORT", 8000))
     # configure uvicorn programmatically
