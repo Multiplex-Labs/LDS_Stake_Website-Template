@@ -43,3 +43,8 @@ export function getInitials(name: string): string {
     .map(part => part[0].toUpperCase())
     .join("");
 }
+
+export function parseCommaList(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
