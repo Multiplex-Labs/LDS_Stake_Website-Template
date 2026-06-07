@@ -44,7 +44,7 @@ import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
-import { getInitials, fullName } from "@/lib/utils";
+import { getInitials, fullName, apiErrorStatus, apiErrorBody, meetsPasswordComplexity } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ApiUser, ApiCalling } from "@/types";
@@ -244,8 +244,11 @@ export function UserAdminContent() {
 
   function validateStep3(form: AddWizardForm) {
     const errors: AddWizardState["errors"] = {};
-    if (!form.password) errors.password = "Password is required";
-    else if (form.password.length < 8) errors.password = "Minimum 8 characters";
+    if (!form.password) {
+      errors.password = "Password is required";
+    } else if (!meetsPasswordComplexity(form.password)) {
+      errors.password = "Must be 8–128 characters with at least one uppercase, one digit, and one special character";
+    }
     if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords do not match";
     return errors;
   }
@@ -300,7 +303,14 @@ export function UserAdminContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Status Updated");
     },
-    onError: () => toast.error("Update Failed", { description: "Could not update user status." }),
+    onError: (err: unknown) => {
+      console.error("[users] toggleStatusMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Update Failed", { description: "Could not update user status." });
+      }
+    },
   });
 
   const saveEditMutation = useMutation({
@@ -320,7 +330,14 @@ export function UserAdminContent() {
       toast.success("Profile Updated", { description: `${form.fname} ${form.lname} has been saved.` });
       handleCloseEdit();
     },
-    onError: () => toast.error("Update Failed", { description: "Could not save changes." }),
+    onError: (err: unknown) => {
+      console.error("[users] saveEditMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Update Failed", { description: "Could not save changes." });
+      }
+    },
   });
 
   const removeCallingMutation = useMutation({
@@ -330,7 +347,14 @@ export function UserAdminContent() {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Calling removed");
     },
-    onError: () => toast.error("Failed to remove calling"),
+    onError: (err: unknown) => {
+      console.error("[users] removeCallingMutation error:", err);
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to remove calling");
+      }
+    },
   });
 
   const assignCallingMutation = useMutation({
@@ -343,12 +367,12 @@ export function UserAdminContent() {
       setEditSlotNumber("");
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("409")) {
+      const status = apiErrorStatus(err);
+      if (status === 409) {
         toast.error("User already has a calling", { description: "A person can only hold one calling at a time." });
-      } else if (msg.startsWith("403")) {
+      } else if (status === 403) {
         toast.error("Permission denied", { description: "MANAGE_CALLINGS permission required." });
-      } else if (msg.startsWith("400")) {
+      } else if (status === 400) {
         toast.error("Slot unavailable", { description: "That slot was just taken. Please select another." });
       } else {
         toast.error("Failed to assign calling");
@@ -399,9 +423,11 @@ export function UserAdminContent() {
       ]);
 
       if (results[0].status === "rejected") {
+        console.error("[users] photo upload failed for new user:", newUser.id, results[0].reason);
         toast.warning("User created, but photo upload failed — add it via Edit");
       }
       if (results[1].status === "rejected") {
+        console.error("[users] calling assignment failed for new user:", newUser.id, results[1].reason);
         toast.warning("User created, but calling assignment failed — assign it via Edit");
       }
 
@@ -426,8 +452,8 @@ export function UserAdminContent() {
       setResetPasswordForm({ password: "", confirm: "" });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("401") || msg.startsWith("403")) {
+      const status = apiErrorStatus(err);
+      if (status === 401 || status === 403) {
         toast.error("Session Expired", { description: "Log out and back in, then try again." });
       } else {
         toast.error("Reset Failed", { description: "Could not reset password." });
@@ -444,9 +470,9 @@ export function UserAdminContent() {
       handleCloseEdit();
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("400")) {
-        toast.error("Cannot Delete User", { description: msg.replace(/^\d+:\s*/, "") });
+      const status = apiErrorStatus(err);
+      if (status === 400) {
+        toast.error("Cannot Delete User", { description: apiErrorBody(err) });
       } else {
         toast.error("Delete Failed", { description: "Could not delete user." });
       }
@@ -464,7 +490,10 @@ export function UserAdminContent() {
       toast.success("Photo updated");
       releaseCropState();
     },
-    onError: () => toast.error("Upload Failed", { description: "Could not save photo. Please try again." }),
+    onError: (err: unknown) => {
+      console.error("[users] uploadPhotoMutation error:", err);
+      toast.error("Upload Failed", { description: "Could not save photo. Please try again." });
+    },
   });
 
   // --- Handlers ---
@@ -1434,8 +1463,11 @@ export function UserAdminContent() {
                 disabled={resetPasswordMutation.isPending}
                 onClick={() => {
                   const errors: typeof resetPasswordErrors = {};
-                  if (!resetPasswordForm.password) errors.password = "Password is required";
-                  else if (resetPasswordForm.password.length < 8) errors.password = "Minimum 8 characters";
+                  if (!resetPasswordForm.password) {
+                    errors.password = "Password is required";
+                  } else if (!meetsPasswordComplexity(resetPasswordForm.password)) {
+                    errors.password = "Must be 8–128 characters with at least one uppercase, one digit, and one special character";
+                  }
                   if (resetPasswordForm.password !== resetPasswordForm.confirm) errors.confirm = "Passwords do not match";
                   if (Object.keys(errors).length > 0) { setResetPasswordErrors(errors); return; }
                   if (!resetPasswordUser) return;

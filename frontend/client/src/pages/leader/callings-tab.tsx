@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiErrorStatus } from "@/lib/utils";
 import type { ApiCalling, ApiUser } from "@/types";
 
 interface CallingForm {
@@ -69,11 +70,14 @@ function invalidateCallingData() {
 
 function onCallingNameError(err: Error, fallback: string) {
   console.error("[callings-tab]", fallback, err);
-  toast.error(
-    err.message.startsWith("400")
-      ? "A calling with that name already exists."
-      : fallback,
-  );
+  const status = apiErrorStatus(err);
+  if (status === 400) {
+    toast.error("A calling with that name already exists.");
+  } else if (status === 401) {
+    toast.error("Session expired", { description: "Please log in again." });
+  } else {
+    toast.error(fallback);
+  }
 }
 
 function UserPicker({
@@ -154,9 +158,12 @@ function SlotRow({
     onSuccess: invalidateCallingData,
     onError: (err: Error) => {
       console.error("[callings-tab] assign slot:", err);
-      if (err.message.startsWith("409")) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 409) {
         toast.error("User already has a calling.", { description: "A person can only hold one calling at a time." });
-      } else if (err.message.startsWith("400")) {
+      } else if (status === 400) {
         toast.error("Slot is already filled.");
       } else {
         toast.error("Failed to assign.");
@@ -172,7 +179,12 @@ function SlotRow({
     },
     onError: (err: Error) => {
       console.error("[callings-tab] clear slot:", err);
-      toast.error("Failed to clear slot.");
+      const status = apiErrorStatus(err);
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to clear slot.");
+      }
     },
   });
 
@@ -391,7 +403,11 @@ export function CallingsTab() {
     },
     onError: (err: Error) => {
       console.error("[callings-tab] delete:", err);
-      toast.error("Failed to delete calling.");
+      if (apiErrorStatus(err) === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to delete calling.");
+      }
     },
   });
 

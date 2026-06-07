@@ -40,11 +40,10 @@ def can_approve_proposal(
         bool: True if the user can approve/reject proposals, False otherwise.
         
     Note:
-        The approving callings are: high councilor, stake president, first councilor, 
-        and second councilor. This reflects the ecclesiastical hierarchy where stake
+        The approving callings are: high councilor, stake president, first counselor,
+        and second counselor. This reflects the ecclesiastical hierarchy where stake
         presidency and high council have oversight over calling proposals.
     """
-    # Gather all relevant Permissions objects for the user
     approver_callings = ["high councilor", "stake president", "first counselor", "second counselor"]
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
@@ -79,7 +78,7 @@ def is_stake_presidency(user: User) -> bool:
     Check if a user is a member of the stake presidency.
     
     The stake presidency consists of the stake president and his counselors (first
-    and second councilors). These individuals have the highest authority in stake
+    and second counselors). These individuals have the highest authority in stake
     governance and are responsible for final approvals in the calling process.
     
     Args:
@@ -89,8 +88,8 @@ def is_stake_presidency(user: User) -> bool:
         bool: True if the user is in the stake presidency, False otherwise.
         
     Note:
-        This function checks for the callings: "stake president", "first councilor",
-        and "second councilor". The check is case-insensitive.
+        This function checks for the callings: "stake president", "first counselor",
+        and "second counselor". The check is case-insensitive.
     """
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
@@ -283,7 +282,8 @@ def create_kanban_update(proposal_id: int, updater_id: int, from_stage: KanbanSt
         from_stage (KanbanStages): The stage the proposal is moving from.
         to_stage (KanbanStages): The stage the proposal is moving to.
         session (Session): The database session to use for the operation.
-        
+        discord_bot (DiscordBotHandle): Bot handle used to send stage-change notifications and request approvals.
+
     Returns:
         KanbanUpdate: The newly created and committed KanbanUpdate object,
         refreshed from the database with any auto-generated fields.
@@ -344,7 +344,8 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     
     - SP_APPROVAL → HC_APPROVAL: When stake presidency approvals meet the threshold
     - HC_APPROVAL → INTERVIEW: When high council approvals meet the threshold
-    - INTERVIEW → SUSTAIN: When the interview is completed (interviewer assigned and date passed)
+    - INTERVIEW → SUSTAIN: Handled directly by the complete_interview endpoint via create_kanban_update;
+      the automated check in this function is unreachable under normal workflow
     
     Later stages (SUSTAIN, SET_APART, LCR_UPDATE, DONE) are manually set by users and
     not handled by this automated logic.
@@ -362,7 +363,9 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
           SP_APPROVAL_THRESHOLD (default: 2), HC_APPROVAL_THRESHOLD (default: 3)
         - All approvals in the current stage must be positive for advancement
         - The updater_id for automatic updates is set to the most recent approver
-        - For INTERVIEW stage, a CallingInterview record is created when advancing from HC_APPROVAL
+        - For new callings advancing from HC_APPROVAL, a CallingInterview record is created here.
+          For releases, the CallingInterview row is created at proposal creation time in the router
+          (since releases start directly at INTERVIEW and skip SP_APPROVAL and HC_APPROVAL).
         - This function commits changes to the database for each stage advancement
         
     Side Effects:
@@ -454,6 +457,6 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     
     # The remainder of stages:
     # SUSTAIN, SET_APART, LCR_UPDATE, DONE
-    # Will be manully set by users, and are not calculated by business logic
+    # Will be manually set by users, and are not calculated by business logic
 
     return updates

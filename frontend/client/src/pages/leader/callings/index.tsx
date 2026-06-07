@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiErrorStatus } from "@/lib/utils";
 import { KANBAN_STAGES, Permission, hasPermission } from "@/lib/constants";
 import { CallingModal, type ProposalWithStage } from "./CallingModal";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
@@ -141,12 +142,14 @@ export default function CallingSystem() {
   const { data: board = {}, isLoading: boardLoading, isError: boardError } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  const { data: users = [] } = useQuery<ApiUser[]>({
+  const { data: users = [], isError: usersError, error: usersQueryError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+  if (wardsError) console.error("[callings] failed to load /api/wards/:", wardsQueryError);
+  if (usersError) console.error("[callings] failed to load /api/users/:", usersQueryError);
 
   const wardMap = useWardMap(wards);
 
@@ -174,12 +177,12 @@ export default function CallingSystem() {
 
   function makeStageErrorHandler(action: string, on400?: { title: string; description: string }) {
     return (err: unknown) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("401")) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
         toast.error("Session expired", { description: "Please log in again." });
-      } else if (raw.startsWith("409")) {
+      } else if (status === 409) {
         toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
-      } else if (raw.startsWith("400")) {
+      } else if (status === 400) {
         if (on400) {
           toast.error(on400.title, { description: on400.description });
         } else {
