@@ -10,6 +10,7 @@ from .db import (
     session_cleanup_loop,
     create_default_admin_user,
     create_system_callings_and_assignments,
+    create_presidency_assignments,
     validate_unique_field,
     speaking_assignment_cleanup_loop,
     create_discord_bot_user
