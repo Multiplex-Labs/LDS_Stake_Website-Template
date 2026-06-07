@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
+import { cn, apiErrorStatus } from "@/lib/utils";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 
 // SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
@@ -137,14 +137,14 @@ export default function ReviewCallings() {
     },
     onError: (err) => {
       console.error("[review] approval mutation failed for proposal", selectedProposal?.id, "stage", selectedStage, err);
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.startsWith("400")) {
+      const status = apiErrorStatus(err);
+      if (status === 400) {
         toast.error("Already Voted", { description: "You have already submitted a vote for this proposal." });
-      } else if (msg.startsWith("403")) {
+      } else if (status === 403) {
         toast.error("Not Authorized", { description: "You do not have permission to vote on this proposal." });
-      } else if (msg.startsWith("404")) {
+      } else if (status === 404) {
         toast.error("Proposal Not Found", { description: "This proposal may have been deleted. Refresh the page." });
-      } else if (msg.startsWith("409")) {
+      } else if (status === 409) {
         toast.error("Stage Changed", { description: "This proposal has moved to a new stage. Refresh the page to vote." });
       } else {
         toast.error("Action Failed", { description: "Could not submit approval. Please try again." });
@@ -154,7 +154,7 @@ export default function ReviewCallings() {
 
   if (isError) {
     console.error("[review] board query failed:", error);
-    const is401 = error instanceof Error && error.message.startsWith("401");
+    const is401 = apiErrorStatus(error) === 401;
     return (
       <Layout>
         <div className="text-center py-16">

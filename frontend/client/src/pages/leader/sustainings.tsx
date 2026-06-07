@@ -4,7 +4,7 @@ import { Printer } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
 import { useWardMap } from "@/lib/hooks";
-import { fullName } from "@/lib/utils";
+import { fullName, apiErrorStatus } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Ward, KanbanBoard } from "@/types";
 
@@ -269,7 +269,7 @@ export default function ReleasesAndSustainings() {
 
   if (isError || boardError) {
     if (isError) console.error("[sustainings] failed to load /api/wards/:", error);
-    const is401 = error instanceof Error && error.message.startsWith("401");
+    const is401 = apiErrorStatus(error) === 401;
     return (
       <Layout>
         <div className="bg-muted/30 py-12 print:hidden">

@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { STAGE_LABELS, STAGE_BADGE_CLASS, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
 import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
@@ -144,10 +145,10 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     onSuccess: () => { toast.success("Proposal updated"); invalidateBoard(); closeDialog(); },
     onError: (err: unknown) => {
       console.error("[CallingModal] updateMutation error:", err);
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("403")) {
+      const status = apiErrorStatus(err);
+      if (status === 403) {
         toast.error("Not authorized", { description: "You don't have permission to edit this proposal." });
-      } else if (raw.startsWith("401")) {
+      } else if (status === 401) {
         toast.error("Session expired", { description: "Please log in again." });
       } else {
         toast.error("Update failed", { description: "Could not save changes." });
@@ -166,8 +167,8 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     mutationFn: (id: number) => apiRequest("POST", `/api/calling-kanban/proposals/${id}/interview/complete`),
     onSuccess: () => { toast.success("Interview marked complete — proposal moved to Sustainment"); invalidateBoard(); closeDialog(); },
     onError: (err: unknown) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("400") || raw.startsWith("409")) {
+      const status = apiErrorStatus(err);
+      if (status === 400 || status === 409) {
         toast.error("Cannot complete interview", { description: "Ensure an interviewer has been assigned first." });
       } else {
         toast.error("Failed to complete interview", { description: "Please refresh and try again." });
@@ -176,10 +177,10 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
   });
 
   function stageAdvanceOnError(err: unknown) {
-    const raw = err instanceof Error ? err.message : "";
-    if (raw.startsWith("401")) {
+    const status = apiErrorStatus(err);
+    if (status === 401) {
       toast.error("Session expired", { description: "Please log in again." });
-    } else if (raw.startsWith("400") || raw.startsWith("409")) {
+    } else if (status === 400 || status === 409) {
       toast.error("Stage conflict", { description: "This proposal may have moved. Refresh to see current state." });
     } else {
       toast.error("Failed to advance stage", { description: "Please refresh and try again." });
@@ -209,8 +210,8 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
       apiRequest("POST", `/api/calling-kanban/proposals/${id}/comments`, { comment_text: text }),
     onSuccess: (_, { id }) => { setNewComment(""); invalidateComments(id); },
     onError: (err: unknown) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You don't have permission to comment on this proposal." });
+      const status = apiErrorStatus(err);
+      if (status === 403) toast.error("Not authorized", { description: "You don't have permission to comment on this proposal." });
       else toast.error("Failed to post comment");
     },
   });
@@ -220,9 +221,9 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
       apiRequest("PUT", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`, { comment_text: text }),
     onSuccess: (_, { proposalId }) => { setEditingCommentId(null); setEditDraft(""); invalidateComments(proposalId); },
     onError: (err: unknown, { proposalId }) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only edit your own comments." });
-      else if (raw.startsWith("404")) { toast.error("Comment not found", { description: "It may have already been deleted." }); invalidateComments(proposalId); }
+      const status = apiErrorStatus(err);
+      if (status === 403) toast.error("Not authorized", { description: "You can only edit your own comments." });
+      else if (status === 404) { toast.error("Comment not found", { description: "It may have already been deleted." }); invalidateComments(proposalId); }
       else toast.error("Failed to save comment");
     },
   });
@@ -232,9 +233,9 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
       apiRequest("DELETE", `/api/calling-kanban/proposals/${proposalId}/comments/${commentId}`),
     onSuccess: (_, { proposalId }) => { toast.success("Comment deleted"); invalidateComments(proposalId); },
     onError: (err: unknown) => {
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("403")) toast.error("Not authorized", { description: "You can only delete your own comments." });
-      else if (raw.startsWith("404")) toast.error("Comment not found", { description: "It may have already been deleted." });
+      const status = apiErrorStatus(err);
+      if (status === 403) toast.error("Not authorized", { description: "You can only delete your own comments." });
+      else if (status === 404) toast.error("Comment not found", { description: "It may have already been deleted." });
       else toast.error("Failed to delete comment");
     },
   });
@@ -248,13 +249,13 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     },
     onError: (err: unknown) => {
       console.error("[CallingModal] deleteMutation error:", err);
-      const raw = err instanceof Error ? err.message : "";
-      if (raw.startsWith("403")) {
+      const status = apiErrorStatus(err);
+      if (status === 403) {
         toast.error("Not authorized", { description: "You don't have permission to delete this proposal." });
-      } else if (raw.startsWith("409")) {
+      } else if (status === 409) {
         toast.error("Already completed", { description: "Proposal is already completed — refresh the board." });
         invalidateBoard();
-      } else if (raw.startsWith("404")) {
+      } else if (status === 404) {
         toast.error("Not found", { description: "Proposal no longer exists." });
         invalidateBoard();
       } else {

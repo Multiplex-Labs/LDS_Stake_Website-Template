@@ -5,6 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function apiErrorStatus(err: unknown): number | null {
+  if (!(err instanceof Error)) return null;
+  const n = parseInt(err.message, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 export function extractWardNumber(name: string): string {
   const match = name.match(/(\d+)(th|st|nd|rd)\s+Ward/i);
   return match ? match[1] : name;
