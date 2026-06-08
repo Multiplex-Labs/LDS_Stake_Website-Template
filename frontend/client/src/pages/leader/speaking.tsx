@@ -78,8 +78,8 @@ export default function SpeakingSchedule() {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold text-primary">High Council Speaking Schedule</h1>
           <div className="flex bg-muted p-1 rounded-lg">
             <button
