@@ -13,6 +13,9 @@ import { Layout } from "@/components/layout/Layout";
 import "cally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog,
@@ -120,7 +123,7 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
             <div className="opacity-60">{wardName}</div>
           )}
           {item.type === "ordination" && (
-            <span className="badge badge-sm badge-secondary mt-1">Ordination</span>
+            <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-1">Ordination</Badge>
           )}
         </CardDescription>
       </CardHeader>
@@ -163,50 +166,55 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
-    <div className="collapse collapse-arrow bg-card border rounded-lg shadow-sm">
-      <input
-        type="checkbox"
-        checked={isOpen}
-        onChange={() => onToggle(droppableId)}
-      />
-      <div className="collapse-title flex items-center justify-between pr-12 py-2.5 px-4">
-        <span className="font-semibold text-sm">{label}</span>
-        <span className="badge badge-sm badge-neutral">
-          Pending: {items.length}
-        </span>
-      </div>
-      <div className="collapse-content px-3 pb-3 pt-0">
-        <div
-          ref={setNodeRef}
-          className={`min-h-[56px] rounded-md border border-dashed transition-all p-2 ${
-            isOver ? "border-primary bg-primary/10" : "border-base-content/20 bg-base-300/30"
-          }`}
-        >
-          {items.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
-              <Inbox className="size-4" />
-              <span className="text-xs">Drop callings or ordinations here</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-            {items.map((item) => (
-              <DraggableCard
-                key={itemKey(item)}
-                item={item}
-                proposals={proposals}
-                ordinations={ordinations}
-                wardName={
-                  item.type === "proposal"
-                    ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
-                    : undefined
-                }
-              />
-            ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <Accordion
+      type="single"
+      collapsible
+      value={isOpen ? droppableId : ""}
+      onValueChange={() => onToggle(droppableId)}
+      className="bg-card border rounded-lg shadow-sm overflow-hidden"
+    >
+      <AccordionItem value={droppableId} className="border-0">
+        <AccordionTrigger className="px-4 py-2.5 hover:no-underline">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">{label}</span>
+            <Badge variant="neutral" className="text-xs px-1.5 py-0">
+              Pending: {items.length}
+            </Badge>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-3 pb-3 pt-0">
+          <div
+            ref={setNodeRef}
+            className={`min-h-[56px] rounded-md border border-dashed transition-all p-2 ${
+              isOver ? "border-primary bg-primary/10" : "border-foreground/20 bg-muted/30"
+            }`}
+          >
+            {items.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
+                <Inbox className="size-4" />
+                <span className="text-xs">Drop callings or ordinations here</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+              {items.map((item) => (
+                <DraggableCard
+                  key={itemKey(item)}
+                  item={item}
+                  proposals={proposals}
+                  ordinations={ordinations}
+                  wardName={
+                    item.type === "proposal"
+                      ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
+                      : undefined
+                  }
+                />
+              ))}
+              </div>
+            )}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 
@@ -259,9 +267,9 @@ function OrdinationDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium block mb-1">First Name</label>
-              <input
+              <Input
                 {...register("fname")}
-                className="input input-bordered w-full input-sm"
+                className="h-8"
                 placeholder="First name"
               />
               {errors.fname && (
@@ -270,9 +278,9 @@ function OrdinationDialog({
             </div>
             <div>
               <label className="text-sm font-medium block mb-1">Last Name</label>
-              <input
+              <Input
                 {...register("lname")}
-                className="input input-bordered w-full input-sm"
+                className="h-8"
                 placeholder="Last name"
               />
               {errors.lname && (
@@ -287,7 +295,7 @@ function OrdinationDialog({
                 <label key={o} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    className="radio radio-sm"
+                    className="size-4 accent-primary"
                     checked={office === o}
                     onChange={() => setValue("office", o, { shouldValidate: true })}
                   />
@@ -615,7 +623,7 @@ export default function SustainingPrep() {
                 {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
               </Button>
               {datePickerOpen && (
-                <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 rounded-xl shadow-lg border border-border overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 z-50 bg-background rounded-xl shadow-lg border border-border overflow-hidden">
                   {/* @ts-expect-error cally custom element — types flow via HTMLElementTagNameMap */}
                   <calendar-date
                     className="cally"
@@ -684,8 +692,8 @@ export default function SustainingPrep() {
                 >
                   {isPageLoading ? (
                     <>
-                      <div className="skeleton h-16 w-full rounded-md" />
-                      <div className="skeleton h-16 w-full rounded-md" />
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-16 w-full" />
                     </>
                   ) : filteredUnassigned.length === 0 && state.unassigned.length > 0 ? (
                     <div className="h-32 flex flex-col items-center justify-center text-center gap-1 text-muted-foreground/50 text-xs">

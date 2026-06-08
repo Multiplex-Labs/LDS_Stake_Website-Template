@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -142,15 +143,15 @@ function LeaderCard({ user, isLoading, prefix, role, size = "md" }: LeaderCardPr
           sm ? "w-16 h-16 text-xl" : "w-24 h-24 text-2xl"
         )}>
           {showSkeleton ? (
-            <span className="skeleton w-full h-full rounded-full" />
+            <Skeleton className="w-full h-full rounded-full" />
           ) : (
             getInitials(user!.fname, user!.lname)
           )}
         </div>
         {showSkeleton ? (
           <>
-            <div className={cn("skeleton rounded mx-auto", sm ? "h-5 w-32" : "h-6 w-40")} />
-            <div className="skeleton h-3 w-24 rounded mx-auto mt-1" />
+            <Skeleton className={cn("mx-auto", sm ? "h-5 w-32" : "h-6 w-40")} />
+            <Skeleton className="h-3 w-24 mx-auto mt-1" />
           </>
         ) : (
           <>
@@ -177,8 +178,8 @@ function HCMemberSkeleton() {
         <AvatarFallback>HC</AvatarFallback>
       </Avatar>
       <div>
-        <div className="skeleton h-4 w-28 rounded" />
-        <div className="skeleton h-3 w-20 rounded mt-1" />
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-3 w-20 mt-1" />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -361,7 +362,7 @@ export default function ArchiveCallings() {
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
                         {Array.from({ length: 7 }).map((__, j) => (
-                          <TableCell key={j}><div className="skeleton h-4 w-24 rounded" /></TableCell>
+                          <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
                         ))}
                       </TableRow>
                     ))
@@ -493,7 +494,7 @@ export default function ArchiveCallings() {
                     ) : commentsLoading ? (
                       <div className="space-y-2">
                         {Array.from({ length: 2 }).map((_, i) => (
-                          <div key={i} className="skeleton h-14 w-full rounded-md" />
+                          <Skeleton key={i} className="h-14 w-full" />
                         ))}
                       </div>
                     ) : comments.length === 0 ? (

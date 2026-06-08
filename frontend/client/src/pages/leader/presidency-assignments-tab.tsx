@@ -25,6 +25,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Pencil, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -191,12 +192,9 @@ export function PresidencyAssignmentsTab() {
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {assignment.wards_overseen.map((wardId) => (
-                      <span
-                        key={wardId}
-                        className="badge badge-outline text-xs"
-                      >
+                      <Badge key={wardId} variant="outline" className="text-xs">
                         {wardMap.get(wardId) ?? `Ward ${wardId}`}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>

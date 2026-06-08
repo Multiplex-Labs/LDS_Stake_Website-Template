@@ -217,18 +217,20 @@ Permissions can be granted at user level (`is_calling=false`) or calling level (
 
 ## Frontend Conventions
 
-### Component Library Priority
+### Component Library
 
-Both DaisyUI and shadcn/ui are active. Follow this rule:
+shadcn/ui and Tailwind CSS are the only UI systems. Do not use DaisyUI.
 
 | Need | Use |
 |------|-----|
-| Buttons, badges, tables, alerts, loading skeletons, toasts | DaisyUI classes (`btn`, `badge`, `table`, `skeleton`, etc.) |
-| Cards, tabs, drawers, simple modals | DaisyUI |
-| Dialog (accessible), Dropdown, Select, Popover, Command, Sheet, Tooltip, Accordion | shadcn (`components/ui/`) |
+| Buttons, badges, inputs, checkboxes, selects, textareas | shadcn (`components/ui/`) |
+| Loading skeletons | `<Skeleton>` from `components/ui/skeleton.tsx` |
+| Spinners / full-page loading | `<Spinner>` from `components/ui/spinner.tsx` |
+| Dialog, Dropdown, Popover, Command, Sheet, Tooltip, Accordion | shadcn (`components/ui/`) |
+| Cards, tabs, tables | shadcn (`components/ui/`) |
 | Layout, spacing, custom positioning | Raw Tailwind |
 
-Never build a custom version of something either library already provides.
+Never build a custom version of something shadcn already provides.
 
 Add new shadcn components via CLI only — do not hand-write into `ui/`:
 ```bash

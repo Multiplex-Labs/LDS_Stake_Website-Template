@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ClipboardList, Printer, Undo2 } from "lucide-react";
 import { Link } from "wouter";
 import { Layout } from "@/components/layout/Layout";
@@ -260,10 +261,10 @@ export default function ReleasesAndSustainings() {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-8 max-w-4xl">
-          <div className="skeleton h-8 w-48 mb-6" />
-          <div className="skeleton h-4 w-full mb-2" />
-          <div className="skeleton h-4 w-3/4 mb-2" />
-          <div className="skeleton h-4 w-5/6" />
+          <Skeleton className="h-8 w-48 mb-6" />
+          <Skeleton className="h-4 w-full mb-2" />
+          <Skeleton className="h-4 w-3/4 mb-2" />
+          <Skeleton className="h-4 w-5/6" />
         </div>
       </Layout>
     );

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, MapPin, User } from "lucide-react";
 import { useUserCallingMap } from "@/lib/hooks";
@@ -72,7 +73,7 @@ export default function MeetingTimes() {
                   <div className="flex items-center gap-3 text-muted-foreground pt-2 border-t mt-3">
                     <User className="w-4 h-4 text-accent" />
                     {isLoading ? (
-                      <div className="skeleton h-4 w-32 rounded" />
+                      <Skeleton className="h-4 w-32" />
                     ) : bishopName ? (
                       <span>{bishopName}</span>
                     ) : (

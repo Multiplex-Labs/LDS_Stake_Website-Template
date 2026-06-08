@@ -1,9 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@plugin "daisyui" {
-  themes: false;
-  logs: false;
-}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -40,23 +36,6 @@
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
 
-  /* DaisyUI base surface tokens — mapped to existing theme variables */
-  --color-base-100: hsl(var(--background));
-  --color-base-200: hsl(var(--card));
-  --color-base-300: hsl(var(--muted));
-  --color-base-content: hsl(var(--foreground));
-
-  /* DaisyUI -content variants for interactive components */
-  --color-primary-content: hsl(var(--primary-foreground));
-  --color-secondary-content: hsl(var(--secondary-foreground));
-  --color-accent-content: hsl(var(--accent-foreground));
-  --color-neutral: hsl(var(--muted));
-  --color-neutral-content: hsl(var(--muted-foreground));
-
-  /* DaisyUI error → destructive alias */
-  --color-error: hsl(var(--destructive));
-  --color-error-content: hsl(var(--destructive-foreground));
-  
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -142,27 +121,6 @@ calendar-date {
   overflow: hidden;
 }
 
-/* Prevent DaisyUI base-layer styles from bleeding into the shadcn Calendar.
-   DaisyUI can inject padding, vertical-align, and display:table-row on bare
-   table elements which breaks the flex-based layout react-day-picker v9 uses. */
-[data-slot="calendar"] td,
-[data-slot="calendar"] th {
-  border-width: 0;
-  padding: 0;
-  vertical-align: middle;
-}
-
-[data-slot="calendar"] tr {
-  display: flex;
-}
-
-.btn-success {
-  background-color: hsl(var(--success));
-  color: hsl(var(--success-foreground));
-}
-.btn-success:hover {
-  background-color: hsl(var(--success) / 0.9);
-}
 
 .stage-sp-approval  { --stage-bg: hsl(45 80% 50% / 0.10); --stage-border: hsl(45 80% 50% / 0.20); }
 .stage-hc-approval  { --stage-bg: hsl(25 80% 55% / 0.10); --stage-border: hsl(25 80% 55% / 0.20); }

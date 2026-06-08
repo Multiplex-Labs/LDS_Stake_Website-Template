@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -447,7 +448,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                       <p className="text-sm text-destructive py-2">Failed to load comments.</p>
                     ) : commentsLoading ? (
                       <div className="space-y-2">
-                        {Array.from({ length: 2 }).map((_, i) => <div key={i} className="skeleton h-14 w-full rounded-md" />)}
+                        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
                       </div>
                     ) : comments.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-2">No comments yet.</p>
