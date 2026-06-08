@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, type ChangeEvent, type ChangeEventHandler } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -10,7 +10,6 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
-import "cally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +23,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Link } from "wouter";
 import { Trash2, Plus, CalendarIcon, Inbox, Undo2, ChevronDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -326,7 +334,7 @@ export default function SustainingPrep() {
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [month, setMonth] = useState<Date>(new Date());
   const [openWards, setOpenWards] = useState<Set<string>>(() =>
     new Set(
       state.wardAssignments
@@ -334,9 +342,6 @@ export default function SustainingPrep() {
         .map((wa) => (wa.wardId === "stake" ? "ward-stake" : `ward-${wa.wardId}`))
     )
   );
-  const callyRef = useRef<HTMLElement & { value: string }>(null);
-  const datePickerRef = useRef<HTMLDivElement>(null);
-
   const {
     data: board = {},
     isLoading: boardLoading,
@@ -429,6 +434,21 @@ export default function SustainingPrep() {
   const handleDateChange = useCallback((date: string) => {
     setState((prev) => ({ ...prev, sustainingDate: date || null }));
   }, []);
+
+  // react-day-picker's Dropdown onChange expects a ChangeEvent<HTMLSelectElement>; adapt shadcn Select's string onValueChange to match.
+  const handleCalendarChange = (
+    value: string | number,
+    onChange: ChangeEventHandler<HTMLSelectElement>,
+  ) => {
+    const newEvent = {
+      target: { value: String(value) },
+    } as ChangeEvent<HTMLSelectElement>;
+    try {
+      onChange(newEvent);
+    } catch (err) {
+      console.error("[sustainings-prep] Calendar dropdown onChange failed:", err);
+    }
+  };
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
     const raw = active.data.current?.item;
@@ -532,37 +552,6 @@ export default function SustainingPrep() {
     [state.sustainingDate],
   );
 
-  // Wire cally's native change event when the picker is open
-  useEffect(() => {
-    if (!datePickerOpen) return;
-    const el = callyRef.current;
-    if (!el) {
-      console.error("[sustainings-prep] callyRef.current is null — cally may not have upgraded yet");
-      return;
-    }
-    const handler = (e: Event) => {
-      const value = (e.target as HTMLElement & { value: string }).value;
-      if (value) {
-        handleDateChange(value);
-        setDatePickerOpen(false);
-      }
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, [datePickerOpen, handleDateChange]);
-
-  // Close picker on outside click
-  useEffect(() => {
-    if (!datePickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
-        setDatePickerOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [datePickerOpen]);
-
   if (!hasAccess) {
     return (
       <Layout>
@@ -611,36 +600,59 @@ export default function SustainingPrep() {
               </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative" ref={datePickerRef}>
-              <Button
-                variant="outline"
-                className="gap-2 min-w-[160px] justify-start font-normal"
-                onClick={() => setDatePickerOpen(!datePickerOpen)}
-              >
-                <CalendarIcon className="size-4" />
-                {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
-              </Button>
-              {datePickerOpen && (
-                <div className="absolute right-0 top-full mt-1 z-50 bg-background rounded-xl shadow-lg border border-border overflow-hidden">
-                  {/* @ts-expect-error cally custom element — types flow via HTMLElementTagNameMap */}
-                  <calendar-date
-                    className="cally"
-                    ref={callyRef}
-                    value={state.sustainingDate ?? ""}
-                  >
-                    <svg aria-label="Previous" className="fill-current size-4" {...{ slot: "previous" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                      <path d="M15.75 19.5 8.25 12l7.5-7.5" />
-                    </svg>
-                    <svg aria-label="Next" className="fill-current size-4" {...{ slot: "next" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                      <path d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                    </svg>
-                    {/* @ts-expect-error cally custom element */}
-                    <calendar-month />
-                  {/* @ts-expect-error cally custom element */}
-                  </calendar-date>
-                </div>
-              )}
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="gap-2 min-w-[160px] justify-start font-normal"
+                >
+                  <CalendarIcon className="size-4" />
+                  {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  captionLayout="dropdown"
+                  components={{
+                    MonthCaption: (props) => <>{props.children}</>,
+                    DropdownNav: (props) => (
+                      <div className="flex w-full items-center gap-2">{props.children}</div>
+                    ),
+                    Dropdown: (props) => (
+                      <Select
+                        onValueChange={(value) => {
+                          if (props.onChange) {
+                            handleCalendarChange(value, props.onChange);
+                          }
+                        }}
+                        value={String(props.value)}
+                      >
+                        <SelectTrigger className="first:flex-1 last:shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {props.options?.map((option) => (
+                            <SelectItem
+                              disabled={option.disabled}
+                              key={option.value}
+                              value={String(option.value)}
+                            >
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ),
+                  }}
+                  hideNavigation
+                  mode="single"
+                  month={month}
+                  onMonthChange={setMonth}
+                  onSelect={(date) => handleDateChange(date ? format(date, "yyyy-MM-dd") : "")}
+                  selected={selectedDate}
+                />
+              </PopoverContent>
+            </Popover>
 
             <Button
               variant="outline"

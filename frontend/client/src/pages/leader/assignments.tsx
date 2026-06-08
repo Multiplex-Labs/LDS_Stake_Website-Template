@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout/Layout";
 import { HC_CALLING_NAME } from "@/lib/constants";
 import { fullName } from "@/lib/utils";
@@ -100,8 +101,32 @@ export default function HighCouncilAssignments() {
                           {fullName(user)}
                         </TableCell>
                         <TableCell>{user.phone ?? "—"}</TableCell>
-                        <TableCell>{assignment?.responsibility ?? "—"}</TableCell>
-                        <TableCell>{assignment?.committee ?? "—"}</TableCell>
+                        <TableCell>
+                          {assignment?.responsibility ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {assignment.responsibility
+                                    .split(",")
+                                    .map((item) => item.trim())
+                                    .filter(Boolean)
+                                    .map((item) => (
+                                        <Badge key={item} variant="secondary">
+                                          {item}
+                                        </Badge>
+                                    ))}
+                              </div>
+                          ) : (
+                              "—"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {assignment?.committee ? (
+                              <Badge variant="secondary">
+                                {assignment.committee}
+                              </Badge>
+                          ) : (
+                              "—"
+                          )}
+                        </TableCell>
                       </TableRow>
                     );
                   })}

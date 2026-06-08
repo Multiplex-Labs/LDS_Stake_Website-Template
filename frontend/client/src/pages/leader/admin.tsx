@@ -44,7 +44,6 @@ export default function AdminHub() {
   return (
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-xl font-bold text-foreground mb-6">Administration</h1>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">

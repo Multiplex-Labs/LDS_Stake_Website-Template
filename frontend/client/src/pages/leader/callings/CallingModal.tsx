@@ -297,7 +297,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
             {proposal && `${proposal.fname} ${proposal.lname}`}
           </DialogTitle>
           <DialogDescription>
-            {canManage ? "Edit proposal details or advance the pipeline stage." : "Proposal details."}
+            {canManage ? "Modify or advance a calling or release proposal." : "Calling or release proposal details."}
           </DialogDescription>
         </DialogHeader>
 
@@ -400,7 +400,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                           <Input value={editForm.lname} onChange={(e) => setEditForm({ ...editForm, lname: e.target.value })} />
                         </div>
                         <div className="space-y-1.5">
-                          <Label>Spouse Name</Label>
+                          <Label>Spouse's First Name</Label>
                           <Input value={editForm.spouse_name} onChange={(e) => setEditForm({ ...editForm, spouse_name: e.target.value })} />
                         </div>
                         <div className="space-y-1.5">
@@ -417,16 +417,30 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                           )}
                         </div>
                         <div className="col-span-2 space-y-1.5">
-                          <Label>Proposed Calling</Label>
+                          <Label>Calling / Assignment</Label>
                           <Input value={editForm.proposed_calling} onChange={(e) => setEditForm({ ...editForm, proposed_calling: e.target.value })} />
                         </div>
-                        <div className="col-span-2 flex items-center gap-3">
-                          <Checkbox
-                            id="is_release"
-                            checked={editForm.is_release}
-                            onCheckedChange={(v) => setEditForm({ ...editForm, is_release: !!v })}
-                          />
-                          <Label htmlFor="is_release" className="cursor-pointer">This is a release (not a new calling)</Label>
+                        <div className="col-span-2">
+                          <div className="flex flex-row items-start gap-3 space-y-0">
+                            <Checkbox
+                                id="is_release"
+                                checked={editForm.is_release}
+                                onCheckedChange={(v) =>
+                                    setEditForm({ ...editForm, is_release: !!v })}
+                            />
+
+                            <div className="grid gap-1.5 leading-none">
+                              <Label
+                                  htmlFor="is_release"
+                                  className="font-normal cursor-pointer"
+                              >
+                                Mark as release
+                              </Label>
+                              <p className="text-sm text-muted-foreground">
+                                Select this checkbox when the submission is for a release rather than a new calling.
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
