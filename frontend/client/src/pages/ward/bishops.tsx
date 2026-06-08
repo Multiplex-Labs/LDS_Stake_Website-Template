@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Phone } from "lucide-react";
 import { useUserCallingMap } from "@/lib/hooks";
@@ -59,7 +60,7 @@ export default function MeetOurBishops() {
                     <CardHeader className="text-center pb-2">
                       <div className="w-20 h-20 mx-auto bg-muted rounded-full flex items-center justify-center text-xl font-serif text-muted-foreground mb-3 border-4 border-background shadow-sm">
                         {isEmpty ? (
-                          <span className="skeleton w-full h-full rounded-full" />
+                          <Skeleton className="w-full h-full rounded-full" />
                         ) : (
                           ward.bishopName!
                             .split(" ")
@@ -71,8 +72,8 @@ export default function MeetOurBishops() {
                       </div>
                       {isEmpty ? (
                         <>
-                          <div className="skeleton h-5 w-36 rounded mx-auto" />
-                          <div className="skeleton h-3 w-44 rounded mx-auto mt-2" />
+                          <Skeleton className="h-5 w-36 mx-auto" />
+                          <Skeleton className="h-3 w-44 mx-auto mt-2" />
                         </>
                       ) : (
                         <>
@@ -88,7 +89,7 @@ export default function MeetOurBishops() {
                         <div className="flex items-center gap-3 text-muted-foreground">
                           <Phone className="w-4 h-4 text-primary" />
                           {isEmpty ? (
-                            <div className="skeleton h-4 w-28 rounded" />
+                            <Skeleton className="h-4 w-28" />
                           ) : (
                             <span>{ward.bishopPhone ?? "—"}</span>
                           )}
@@ -108,15 +109,15 @@ function BishopCardSkeleton() {
   return (
     <Card className="overflow-hidden border-t-4 border-t-primary flex flex-col">
       <CardHeader className="text-center pb-2">
-        <div className="w-20 h-20 mx-auto bg-muted rounded-full mb-3 border-4 border-background skeleton" />
-        <div className="skeleton h-5 w-36 rounded mx-auto" />
-        <div className="skeleton h-3 w-44 rounded mx-auto mt-2" />
+        <Skeleton className="w-20 h-20 mx-auto rounded-full mb-3" />
+        <Skeleton className="h-5 w-36 mx-auto" />
+        <Skeleton className="h-3 w-44 mx-auto mt-2" />
       </CardHeader>
       <CardContent className="flex-1 flex flex-col pt-2">
         <div className="space-y-3 mt-auto pt-4 border-t text-sm">
           <div className="flex items-center gap-3">
-            <div className="skeleton h-4 w-4 rounded" />
-            <div className="skeleton h-4 w-28 rounded" />
+            <Skeleton className="h-4 w-4" />
+            <Skeleton className="h-4 w-28" />
           </div>
         </div>
       </CardContent>

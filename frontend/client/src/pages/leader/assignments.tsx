@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -85,10 +86,10 @@ export default function HighCouncilAssignments() {
                   {isLoading ? (
                     Array.from({ length: 12 }).map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell><div className="skeleton h-4 w-32 rounded" /></TableCell>
-                        <TableCell><div className="skeleton h-4 w-24 rounded" /></TableCell>
-                        <TableCell><div className="skeleton h-4 w-48 rounded" /></TableCell>
-                        <TableCell><div className="skeleton h-4 w-32 rounded" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                       </TableRow>
                     ))
                   ) : hcMembers.map(({ user, ucId, slot }) => {

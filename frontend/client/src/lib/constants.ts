@@ -13,12 +13,12 @@ export const MONTHS = [
 
 
 export const KANBAN_STAGES = [
-  { key: "0", id: "pending-stake-approval", label: "Stake Presidency Approval", badgeClass: "badge-warning",   cssClass: "stage-sp-approval"  },
-  { key: "1", id: "pending-hc-approval",    label: "High Council Approval",     badgeClass: "badge-ghost",     cssClass: "stage-hc-approval"  },
-  { key: "2", id: "pending-interview",      label: "Interview",                 badgeClass: "badge-info",      cssClass: "stage-interview"    },
-  { key: "3", id: "pending-sustainment",    label: "Sustainment",               badgeClass: "badge-secondary", cssClass: "stage-sustain"      },
-  { key: "4", id: "pending-setting-apart",  label: "Setting Apart",             badgeClass: "badge-accent",    cssClass: "stage-set-apart"    },
-  { key: "5", id: "pending-lcr",            label: "LCR Update",               badgeClass: "badge-primary",   cssClass: "stage-lcr-update"   },
+  { key: "0", id: "pending-stake-approval", label: "Stake Presidency Approval", badgeVariant: "outline",    cssClass: "stage-sp-approval"  },
+  { key: "1", id: "pending-hc-approval",    label: "High Council Approval",     badgeVariant: "ghost",      cssClass: "stage-hc-approval"  },
+  { key: "2", id: "pending-interview",      label: "Interview",                 badgeVariant: "secondary",  cssClass: "stage-interview"    },
+  { key: "3", id: "pending-sustainment",    label: "Sustainment",               badgeVariant: "secondary",  cssClass: "stage-sustain"      },
+  { key: "4", id: "pending-setting-apart",  label: "Setting Apart",             badgeVariant: "neutral",    cssClass: "stage-set-apart"    },
+  { key: "5", id: "pending-lcr",            label: "LCR Update",                badgeVariant: "default",    cssClass: "stage-lcr-update"   },
 ] as const;
 
 export const SK_SUSTAIN = KANBAN_STAGES[3].key;
@@ -28,8 +28,8 @@ export const STAGE_LABELS: Record<string, string> = Object.fromEntries(
   KANBAN_STAGES.map((s) => [s.key, s.label]),
 );
 
-export const STAGE_BADGE_CLASS: Record<string, string> = Object.fromEntries(
-  KANBAN_STAGES.map((s) => [s.key, s.badgeClass]),
+export const STAGE_BADGE_VARIANT: Record<string, string> = Object.fromEntries(
+  KANBAN_STAGES.map((s) => [s.key, s.badgeVariant]),
 );
 
 export const Permission = {

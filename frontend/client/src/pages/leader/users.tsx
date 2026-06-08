@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import Cropper from "react-easy-crop";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Area } from "react-easy-crop";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
@@ -647,10 +648,10 @@ export function UserAdminContent() {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell className="pl-4"><div className="skeleton h-4 w-4 rounded" /></TableCell>
-                    <TableCell><div className="skeleton h-4 w-40 rounded" /></TableCell>
-                    <TableCell><div className="skeleton h-4 w-16 rounded" /></TableCell>
-                    <TableCell><div className="skeleton h-4 w-32 rounded" /></TableCell>
+                    <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell />
                   </TableRow>
                 ))

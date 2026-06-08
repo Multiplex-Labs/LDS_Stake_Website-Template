@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,14 +31,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { STAGE_LABELS, STAGE_BADGE_CLASS, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
+import { STAGE_LABELS, STAGE_BADGE_VARIANT, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
 import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
@@ -305,7 +306,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
             <div className="space-y-6 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Current stage:</span>
-                <Badge variant="secondary" className={STAGE_BADGE_CLASS[proposal.stageKey] ?? ""}>
+                <Badge variant={(STAGE_BADGE_VARIANT[proposal.stageKey] ?? "secondary") as BadgeProps["variant"]}>
                   {STAGE_LABELS[proposal.stageKey] ?? `Stage ${proposal.stageKey}`}
                 </Badge>
               </div>
@@ -447,7 +448,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                       <p className="text-sm text-destructive py-2">Failed to load comments.</p>
                     ) : commentsLoading ? (
                       <div className="space-y-2">
-                        {Array.from({ length: 2 }).map((_, i) => <div key={i} className="skeleton h-14 w-full rounded-md" />)}
+                        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
                       </div>
                     ) : comments.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-2">No comments yet.</p>

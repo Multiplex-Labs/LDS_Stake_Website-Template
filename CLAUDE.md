@@ -217,18 +217,20 @@ Permissions can be granted at user level (`is_calling=false`) or calling level (
 
 ## Frontend Conventions
 
-### Component Library Priority
+### Component Library
 
-Both DaisyUI and shadcn/ui are active. Follow this rule:
+shadcn/ui and Tailwind CSS are the only UI systems. Do not use DaisyUI.
 
 | Need | Use |
 |------|-----|
-| Buttons, badges, tables, alerts, loading skeletons, toasts | DaisyUI classes (`btn`, `badge`, `table`, `skeleton`, etc.) |
-| Cards, tabs, drawers, simple modals | DaisyUI |
-| Dialog (accessible), Dropdown, Select, Popover, Command, Sheet, Tooltip, Accordion | shadcn (`components/ui/`) |
+| Buttons, badges, inputs, checkboxes, selects, textareas | shadcn (`components/ui/`) |
+| Loading skeletons | `<Skeleton>` from `components/ui/skeleton.tsx` |
+| Spinners / full-page loading | `<Spinner>` from `components/ui/spinner.tsx` |
+| Dialog, Dropdown, Popover, Command, Sheet, Tooltip, Accordion | shadcn (`components/ui/`) |
+| Cards, tabs, tables | shadcn (`components/ui/`) |
 | Layout, spacing, custom positioning | Raw Tailwind |
 
-Never build a custom version of something either library already provides.
+Never build a custom version of something shadcn already provides.
 
 Add new shadcn components via CLI only — do not hand-write into `ui/`:
 ```bash
@@ -259,7 +261,7 @@ npx shadcn@latest add <component-name>
 
 - Do not use raw Tailwind color classes (`bg-blue-500`). Use semantic tokens only: `primary`, `secondary`, `accent`, `muted`, `background`, `card`, `destructive`.
 - Max content width: `max-w-6xl mx-auto`. Page padding: `px-4 sm:px-6 lg:px-8`. Section spacing: `py-12`.
-- Typography: Inter for body, Playfair Display (`font-serif`) for hero/section headings.
+- Typography: Plus Jakarta Sans for body, Fraunces (`font-serif`) for hero/section headings.
 - Icons: Lucide React only. `size-4` for inline icons, `size-5` for standalone.
 - Dark mode is class-based and works automatically when semantic tokens are used.
 - Do not use `any` in TypeScript. Use `unknown` and narrow explicitly.
