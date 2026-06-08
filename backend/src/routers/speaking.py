@@ -130,10 +130,15 @@ def add_speaking_override(
             session.add(other_override)
             session.commit()
             session.refresh(other_override)
-            calendar.speakers[speaker.high_councilor_id - 1].assignments[other_override.month - 1] = SpeakingAssignmentAPI(
-                ward_id=other_override.ward_id,
-                speaker2=other_override.speaker2
+            other_speaker_idx = next(
+                (i for i, s in enumerate(calendar.speakers) if s.high_councilor_id == speaker.high_councilor_id),
+                None
             )
+            if other_speaker_idx is not None:
+                calendar.speakers[other_speaker_idx].assignments[other_override.month.month - 1] = SpeakingAssignmentAPI(
+                    ward_id=other_override.ward_id,
+                    speaker2=other_override.speaker2
+                )
             break
     # Update the calendar with the new override
     calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1] = SpeakingAssignmentAPI(

@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Calendar, BookOpen } from "lucide-react";
 import { cn, extractWardNumber, fullName } from "@/lib/utils";
 import { MONTHS } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
+import { apiRequest } from "@/lib/queryClient";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -16,14 +17,17 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 export default function SpeakingSchedule() {
   const [currentMonthIndex, setCurrentMonthIndex] = useState(new Date().getMonth());
+  const [year, setYear] = useState(CURRENT_YEAR);
   const [viewMode, setViewMode] = useState<"month" | "year">("month");
 
   const { data: calendar, isError: calendarError } = useQuery<SpeakingCalendar>({
-    queryKey: [`/api/speaking/calendar`],
+    queryKey: ["/api/speaking/calendar/", year],
+    queryFn: () => apiRequest("GET", `/api/speaking/calendar/${year}`).then((r) => r.json()),
     retry: false,
   });
   const { data: topics = [] } = useQuery<SpeakingTopic[]>({
-    queryKey: [`/api/speaking/topics/${CURRENT_YEAR}`],
+    queryKey: ["/api/speaking/topics/", year],
+    queryFn: () => apiRequest("GET", `/api/speaking/topics/${year}`).then((r) => r.json()),
     retry: false,
   });
   const { data: users = [] } = useQuery<ApiUser[]>({
@@ -114,34 +118,62 @@ export default function SpeakingSchedule() {
           </div>
         ) : viewMode === "month" ? (
           <div className="space-y-6">
+            {/* Month nav — always visible */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-primary uppercase tracking-wider">
+                <Calendar className="h-4 w-4" />
+                <span>{MONTHS[currentMonthIndex]} {year}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    if (currentMonthIndex > 0) {
+                      setCurrentMonthIndex((p) => p - 1);
+                    } else {
+                      setCurrentMonthIndex(11);
+                      setYear((y) => y - 1);
+                    }
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    if (currentMonthIndex < 11) {
+                      setCurrentMonthIndex((p) => p + 1);
+                    } else {
+                      setCurrentMonthIndex(0);
+                      setYear((y) => y + 1);
+                    }
+                  }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
             {/* Topic Card */}
-            <Card className="border-l-4 border-l-primary shadow-md">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-primary uppercase tracking-wider">
-                    <Calendar className="h-4 w-4" />
-                    <span>{MONTHS[currentMonthIndex]} {CURRENT_YEAR}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" onClick={() => setCurrentMonthIndex((p) => (p > 0 ? p - 1 : 11))} className="h-8 w-8">
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => setCurrentMonthIndex((p) => (p < 11 ? p + 1 : 0))} className="h-8 w-8">
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <CardTitle className="text-2xl mt-2">
-                  {hasNoTopic ? "No topic set" : currentTopic!.topic}
-                </CardTitle>
-                {currentTopic?.reference_material && (
-                  <CardDescription className="flex items-start gap-2 mt-2 text-base">
-                    <BookOpen className="h-4 w-4 mt-1 shrink-0" />
-                    <span>{currentTopic.reference_material}</span>
-                  </CardDescription>
-                )}
-              </CardHeader>
-            </Card>
+            {(monthlyAssignments.length > 0 || currentTopic?.topic) && (
+              <Card className="border-l-4 border-l-primary shadow-md">
+                <CardHeader>
+                  <CardTitle className="text-2xl">
+                    {hasNoTopic ? "No topic set" : currentTopic!.topic}
+                  </CardTitle>
+                  {currentTopic?.reference_material && (
+                    <CardDescription className="flex items-start gap-2 mt-2 text-base">
+                      <BookOpen className="h-4 w-4 mt-1 shrink-0" />
+                      <span>{currentTopic.reference_material}</span>
+                    </CardDescription>
+                  )}
+                </CardHeader>
+              </Card>
+            )}
 
             {/* Assignments */}
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -173,7 +205,7 @@ export default function SpeakingSchedule() {
             </div>
 
             {/* Not speaking this month */}
-            {notSpeakingThisMonth.length > 0 && (
+            {monthlyAssignments.length > 0 && notSpeakingThisMonth.length > 0 && (
               <div className="mt-8 pt-6 border-t">
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">Not Speaking This Month</h4>
                 <div className="flex flex-wrap gap-2">
@@ -193,7 +225,7 @@ export default function SpeakingSchedule() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[180px] sticky left-0 bg-background z-10 font-bold">High Councilor</TableHead>
+                    <TableHead className="w-[180px] sticky left-0 z-10 font-bold">High Councilor</TableHead>
                     {MONTHS.map((m, i) => (
                       <TableHead key={i} className="text-center min-w-[60px]">{m.slice(0, 3)}</TableHead>
                     ))}
@@ -202,7 +234,7 @@ export default function SpeakingSchedule() {
                 <TableBody>
                   {speakerRows.map((row, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="sticky left-0 bg-background font-medium">{row.name}</TableCell>
+                      <TableCell className="sticky left-0 font-medium">{row.name}</TableCell>
                       {row.assignments.map((assn, mIdx) => {
                         const wardName = assn.ward_id != null ? (wardMap.get(assn.ward_id) ?? `${assn.ward_id}`) : null;
                         const wardNum = wardName ? extractWardNumber(wardName) : null;
