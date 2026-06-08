@@ -56,5 +56,6 @@ export function clearSustainingPrep(): void {
     localStorage.removeItem(KEY);
   } catch (err) {
     console.error("[sustainingPrep] Failed to clear sustaining prep state:", err);
+    toast.error("Could not clear saved state. Your changes may reappear on reload.");
   }
 }

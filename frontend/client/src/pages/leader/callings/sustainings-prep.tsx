@@ -435,14 +435,19 @@ export default function SustainingPrep() {
     setState((prev) => ({ ...prev, sustainingDate: date || null }));
   }, []);
 
+  // react-day-picker's Dropdown onChange expects a ChangeEvent<HTMLSelectElement>; adapt shadcn Select's string onValueChange to match.
   const handleCalendarChange = (
     value: string | number,
-    event: ChangeEventHandler<HTMLSelectElement>,
+    onChange: ChangeEventHandler<HTMLSelectElement>,
   ) => {
     const newEvent = {
       target: { value: String(value) },
     } as ChangeEvent<HTMLSelectElement>;
-    event(newEvent);
+    try {
+      onChange(newEvent);
+    } catch (err) {
+      console.error("[sustainings-prep] Calendar dropdown onChange failed:", err);
+    }
   };
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {

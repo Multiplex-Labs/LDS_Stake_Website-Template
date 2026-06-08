@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -107,7 +107,9 @@ export default function ReviewCallings() {
   const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  if (wardsError) console.error("[review] failed to load /api/wards/:", wardsQueryError);
+  useEffect(() => {
+    if (wardsError) console.error("[review] failed to load /api/wards/:", wardsQueryError);
+  }, [wardsError, wardsQueryError]);
 
   const wardMap = useWardMap(wards);
 
@@ -238,9 +240,9 @@ export default function ReviewCallings() {
                         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Spouse Name</Label>
                         <div className="flex items-center gap-2">
                           <span>
-                            {selectedProposal.spouse_name || selectedProposal.lname
-                              ? `${selectedProposal.spouse_name ?? ""} ${selectedProposal.lname ?? ""}`.trim()
-                                : "N/A"}
+                            {selectedProposal.spouse_name
+                              ? `${selectedProposal.spouse_name} ${selectedProposal.lname ?? ""}`.trim()
+                              : "N/A"}
                           </span>
                         </div>
                       </div>

@@ -67,30 +67,23 @@ def add_speaking_override(
     calendar = get_speaking_calendar(request, session, override.year)
     if calendar is None:
         raise HTTPException(status_code=503, detail="Speaking schedule not available")
-    # Check if the high councilor exists and is valid
     userCalling = session.get(UserCalling, override.high_councilor_id)
     if userCalling is None:
         raise HTTPException(status_code=404, detail=f"High councilor with id {override.high_councilor_id} not found")
-    # Check if the month is valid
     if override.month < 1 or override.month > 12:
         raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
-    # Check if the ward_id is valid (you may want to add additional validation here)
-    # TODO: Add validation for ward_id
-    # Check if an override already exists for the given month and high councilor
     statement = select(SpeakingAssignment).where(
         SpeakingAssignment.high_councilor_id == override.high_councilor_id).where(
             SpeakingAssignment.month == datetime(override.year, override.month, 1)
         )
     existing_override = session.exec(statement).first()
     if existing_override:
-        # Update the existing override
         existing_override.ward_id = override.ward_id
         existing_override.speaker2 = override.speaker2
         session.add(existing_override)
         session.commit()
         session.refresh(existing_override)
     else:
-        # Create a new override
         existing_override = SpeakingAssignment(
             high_councilor_id=override.high_councilor_id,
             month=datetime(override.year, override.month, 1),
@@ -100,19 +93,17 @@ def add_speaking_override(
         session.add(existing_override)
         session.commit()
         session.refresh(existing_override)
-    # ward_id=None is a "cleared" override — it supresses the base schedule for this slot.
-    # Skip the swap logic since there is no target ward to trade.
+    # ward_id=None marks the slot as cleared; return early because there is no target ward
+    # to swap and the DB write above is the only state change needed.
     if override.ward_id is None:
         return {"ok": True}
-    # Check who is currently assigned to speak in the given month in the given ward
+    # high_councilor_id is a UserCalling PK, not a list index — enumerate to get the index directly.
     previous_assignment = calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1]
-    for speaker in calendar.speakers:
+    for other_speaker_idx, speaker in enumerate(calendar.speakers):
         if speaker.high_councilor_id == override.high_councilor_id:
             continue
         assn = speaker.assignments[override.month - 1]
         if assn.ward_id == override.ward_id:
-            # We found someone who was going to speak in this ward originally
-            # Trade assignments between the two high councilors
             statement = select(SpeakingAssignment)\
             .where(SpeakingAssignment.high_councilor_id == speaker.high_councilor_id)\
             .where(SpeakingAssignment.month == datetime(override.year, override.month, 1))
@@ -130,17 +121,11 @@ def add_speaking_override(
             session.add(other_override)
             session.commit()
             session.refresh(other_override)
-            other_speaker_idx = next(
-                (i for i, s in enumerate(calendar.speakers) if s.high_councilor_id == speaker.high_councilor_id),
-                None
+            calendar.speakers[other_speaker_idx].assignments[other_override.month.month - 1] = SpeakingAssignmentAPI(
+                ward_id=other_override.ward_id,
+                speaker2=other_override.speaker2
             )
-            if other_speaker_idx is not None:
-                calendar.speakers[other_speaker_idx].assignments[other_override.month.month - 1] = SpeakingAssignmentAPI(
-                    ward_id=other_override.ward_id,
-                    speaker2=other_override.speaker2
-                )
             break
-    # Update the calendar with the new override
     calendar.speakers[userCalling.slot_number - 1].assignments[override.month - 1] = SpeakingAssignmentAPI(
         ward_id=override.ward_id,
         speaker2=override.speaker2

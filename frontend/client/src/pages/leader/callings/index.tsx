@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   DndContext,
@@ -163,8 +163,10 @@ export default function CallingSystem() {
   const { data: users = [], isError: usersError, error: usersQueryError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
-  if (wardsError) console.error("[callings] failed to load /api/wards/:", wardsQueryError);
-  if (usersError) console.error("[callings] failed to load /api/users/:", usersQueryError);
+  useEffect(() => {
+    if (wardsError) console.error("[callings] failed to load /api/wards/:", wardsQueryError);
+    if (usersError) console.error("[callings] failed to load /api/users/:", usersQueryError);
+  }, [wardsError, wardsQueryError, usersError, usersQueryError]);
 
   const wardMap = useWardMap(wards);
 

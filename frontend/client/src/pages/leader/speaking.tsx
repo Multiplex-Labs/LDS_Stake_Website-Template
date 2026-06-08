@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar, BookOpen } from "lucide-react";
-import { cn, extractWardNumber, fullName } from "@/lib/utils";
+import { cn, extractWardNumber, fullName, apiErrorStatus } from "@/lib/utils";
 import { MONTHS } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import { apiRequest } from "@/lib/queryClient";
@@ -20,11 +20,15 @@ export default function SpeakingSchedule() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [viewMode, setViewMode] = useState<"month" | "year">("month");
 
-  const { data: calendar, isError: calendarError } = useQuery<SpeakingCalendar>({
+  const { data: calendar, isError: calendarError, error: calendarQueryError } = useQuery<SpeakingCalendar>({
     queryKey: ["/api/speaking/calendar/", year],
     queryFn: () => apiRequest("GET", `/api/speaking/calendar/${year}`).then((r) => r.json()),
     retry: false,
   });
+
+  useEffect(() => {
+    if (calendarError) console.error("[speaking] calendar query failed:", calendarQueryError);
+  }, [calendarError, calendarQueryError]);
   const { data: topics = [] } = useQuery<SpeakingTopic[]>({
     queryKey: ["/api/speaking/topics/", year],
     queryFn: () => apiRequest("GET", `/api/speaking/topics/${year}`).then((r) => r.json()),
@@ -113,8 +117,13 @@ export default function SpeakingSchedule() {
 
         {isScheduleUnavailable ? (
           <div className="py-16 text-center text-muted-foreground bg-muted/30 rounded-lg border border-dashed">
-            <p className="text-lg font-medium">Speaking schedule is not available.</p>
-            <p className="text-sm mt-2">The schedule CSV may not be configured on the server. Contact your administrator.</p>
+            <p className="text-lg font-medium">
+              {apiErrorStatus(calendarQueryError) === 401
+                ? "Your session has expired. Please log in again."
+                : apiErrorStatus(calendarQueryError) === 404
+                ? `No speaking schedule found for ${year}.`
+                : "Speaking schedule is not available. Contact your administrator if this persists."}
+            </p>
           </div>
         ) : viewMode === "month" ? (
           <div className="space-y-6">
@@ -225,7 +234,7 @@ export default function SpeakingSchedule() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[180px] sticky left-0 z-10 font-bold">High Councilor</TableHead>
+                    <TableHead className="w-[180px] sticky left-0 z-10 font-bold bg-background">High Councilor</TableHead>
                     {MONTHS.map((m, i) => (
                       <TableHead key={i} className="text-center min-w-[60px]">{m.slice(0, 3)}</TableHead>
                     ))}
@@ -234,7 +243,7 @@ export default function SpeakingSchedule() {
                 <TableBody>
                   {speakerRows.map((row, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="sticky left-0 font-medium">{row.name}</TableCell>
+                      <TableCell className="sticky left-0 font-medium bg-background">{row.name}</TableCell>
                       {row.assignments.map((assn, mIdx) => {
                         const wardName = assn.ward_id != null ? (wardMap.get(assn.ward_id) ?? `${assn.ward_id}`) : null;
                         const wardNum = wardName ? extractWardNumber(wardName) : null;
