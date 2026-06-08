@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, User, Check, X } from "lucide-react";
+import { User, Check, X, Undo2} from "lucide-react";
 import { Link } from "wouter";
 import { useWardMap } from "@/lib/hooks";
 import {
@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn, apiErrorStatus } from "@/lib/utils";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
+import {Badge} from "@/components/ui/badge.tsx";
 
 // SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
 const SP_APPROVAL_KEY = "0";
@@ -169,16 +170,20 @@ export default function ReviewCallings() {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <Link href="/leader/calling-system">
-          <Button variant="ghost" className="gap-2 mb-6 pl-0 hover:bg-transparent hover:text-primary">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Calling System
-          </Button>
-        </Link>
+      <div className="container mx-auto px-4 py-4 max-w-5xl">
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold">Review Callings</h1>
+            <Button
+            variant="secondary"
+            className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+            size="icon"
+            asChild
+        >
+          <Link href="/leader/calling-system">
+            <Undo2 />
+          </Link>
+        </Button>
           </div>
 
           <div className="space-y-8">
@@ -213,13 +218,13 @@ export default function ReviewCallings() {
           <DialogContent className="max-w-[90vw] sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl">Review Recommendation</DialogTitle>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex justify-between items-center gap-2 mt-1">
                 <DialogDescription>
                   Review details for {selectedProposal?.fname} {selectedProposal?.lname}
                 </DialogDescription>
-                <span className="badge badge-secondary text-xs">
-                  {selectedStage === "HC" ? "HC Review" : "SP Review"}
-                </span>
+                <Badge variant="secondary" className="badge-ghost text-xs">
+                  Review Stage: {selectedStage === "HC" ? "High Council" : "Stake Presidency"}
+                </Badge>
               </div>
             </DialogHeader>
 

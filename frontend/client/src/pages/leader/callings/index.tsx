@@ -15,7 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PlusCircle, FileCheck, Archive, Users } from "lucide-react";
+import { FileCheck, Megaphone, MailPlus, FileArchive} from "lucide-react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
@@ -281,27 +281,42 @@ export default function CallingSystem() {
       <div className="container mx-auto px-4 py-8 max-w-[1600px]">
         <div className="flex justify-between items-center mb-8">
           <div className="flex gap-4">
-            <Link href="/leader/callings/submit">
-              <Button className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <PlusCircle className="h-4 w-4" />
-                Submit a Calling
+            <Button
+                  variant="default"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/callings/submit">
+                  <MailPlus className="h-4 w-4" />
+                  New Recommendation
+                </Link>
               </Button>
-            </Link>
-            <Link href="/leader/callings/review">
-              <Button variant="secondary" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <FileCheck className="h-4 w-4" />
+            <Button
+                  variant="secondary"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/callings/review">
+                  <FileCheck className="h-4 w-4" />
                 Review Callings
+                </Link>
               </Button>
-            </Link>
           </div>
           <div className="flex gap-2">
             {canViewSustainings && (
-              <Link href="/leader/sustainings">
-                <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                  <Users className="h-4 w-4" />
-                  Releases &amp; Sustainings
-                </Button>
-              </Link>
+              <Button
+                  variant="secondary"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/sustainings">
+                  <Megaphone className="h-4 w-4" />
+                  Release & Sustainment Form
+                </Link>
+              </Button>
             )}
           </div>
         </div>
@@ -370,8 +385,8 @@ export default function CallingSystem() {
         <div className="flex justify-end mt-4">
           <Link href="/leader/callings/archive">
             <Button variant="ghost" size="sm" className="text-muted-foreground gap-2 hover:text-foreground">
-              <Archive className="h-4 w-4" />
-              View Archive
+              <FileArchive className="h-4 w-4" />
+              Historical Records
             </Button>
           </Link>
         </div>

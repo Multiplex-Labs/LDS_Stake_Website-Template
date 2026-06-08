@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
-import { ChevronLeft, Trash2, Plus, CalendarIcon, Inbox } from "lucide-react";
+import { Trash2, Plus, CalendarIcon, Inbox, Undo2} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useWardMap } from "@/lib/hooks";
 import { useForm } from "react-hook-form";
@@ -550,12 +550,17 @@ export default function SustainingPrep() {
       <div className="container mx-auto px-4 py-8 max-w-[1400px]">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
-            <Link href="/leader/sustainings">
-              <Button variant="ghost" className="gap-2 pl-0 hover:bg-transparent hover:text-primary">
-                <ChevronLeft className="size-4" />
-                Back to Sustainment/Release Form
+              <Button
+                  variant="outline"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/sustainings">
+                  <Undo2 />
+                  Previous Page
+                </Link>
               </Button>
-            </Link>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative" ref={datePickerRef}>

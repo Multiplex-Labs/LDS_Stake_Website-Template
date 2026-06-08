@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ClipboardList, Printer } from "lucide-react";
+import { ClipboardList, Printer, Undo2 } from "lucide-react";
 import { Link } from "wouter";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -291,12 +291,17 @@ export default function ReleasesAndSustainings() {
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-8 print:hidden">
-          <Link href="/leader/calling-system">
-            <Button variant="ghost" className="gap-2 pl-0 hover:bg-transparent hover:text-primary">
-              <ChevronLeft className="h-4 w-4" />
-              Back to Calling System
-            </Button>
-          </Link>
+          <Button
+                  variant="outline"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/calling-system">
+                  <Undo2 />
+                  Previous Page
+                </Link>
+              </Button>
           <div className="flex items-center gap-2">
             {canManageCallings && (
               <Link href="/leader/callings/sustainings-prep">
