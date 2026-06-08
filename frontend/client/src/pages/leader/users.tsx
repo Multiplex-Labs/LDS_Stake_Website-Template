@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, memo } from "react";
 import Cropper from "react-easy-crop";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Area } from "react-easy-crop";
@@ -47,7 +47,6 @@ import {
   ArrowUpDown,
   X,
   Camera,
-  Camera as CameraIcon,
   Check as CheckIcon,
   User as UserIcon,
   AlignLeft as AlignLeftIcon,
@@ -111,22 +110,13 @@ const INITIAL_WIZARD_STATE: AddWizardState = {
   photo: null,
 };
 
-const STEP_TITLES: Record<WizardStep, string> = {
-  1: "Basic Info",
-  2: "Bio",
-  3: "Password",
-  4: "Assign Calling",
-  5: "Profile Photo",
-  6: "Review",
-};
-
 const WIZARD_STEPS = [
-  { id: 1 as WizardStep, label: "Basic Info",    description: "Name, email, and contact details.", icon: <UserIcon className="size-3.5" />,      skippable: false },
-  { id: 2 as WizardStep, label: "Bio",            description: "Optional biography or notes.",      icon: <AlignLeftIcon className="size-3.5" />,  skippable: true  },
-  { id: 3 as WizardStep, label: "Password",       description: "Set an initial login password.",    icon: <LockIcon className="size-3.5" />,       skippable: false },
-  { id: 4 as WizardStep, label: "Assign Calling", description: "Optionally assign a calling.",      icon: <BriefcaseIcon className="size-3.5" />,  skippable: true  },
-  { id: 5 as WizardStep, label: "Profile Photo",  description: "Optionally add a profile photo.",   icon: <CameraIcon className="size-3.5" />,     skippable: true  },
-  { id: 6 as WizardStep, label: "Review",         description: "Confirm details and create user.",  icon: <CheckIcon className="size-3.5" />,      skippable: false },
+  { id: 1 as WizardStep, label: "Basic Info",    description: "Name, email, and contact details.", icon: <UserIcon className="size-3.5" />,     skippable: false },
+  { id: 2 as WizardStep, label: "Bio",            description: "Optional biography or notes.",      icon: <AlignLeftIcon className="size-3.5" />, skippable: true  },
+  { id: 3 as WizardStep, label: "Password",       description: "Set an initial login password.",    icon: <LockIcon className="size-3.5" />,      skippable: false },
+  { id: 4 as WizardStep, label: "Assign Calling", description: "Optionally assign a calling.",      icon: <BriefcaseIcon className="size-3.5" />, skippable: true  },
+  { id: 5 as WizardStep, label: "Profile Photo",  description: "Optionally add a profile photo.",   icon: <Camera className="size-3.5" />,        skippable: true  },
+  { id: 6 as WizardStep, label: "Review",         description: "Confirm details and create user.",  icon: <CheckIcon className="size-3.5" />,     skippable: false },
 ] as const;
 
 interface AddUserWizardProps {
@@ -139,7 +129,6 @@ interface AddUserWizardProps {
   addImgSrc: string | null;
   addCrop: { x: number; y: number };
   addZoom: number;
-  addCroppedAreaPixels: Area | null;
   addFileInputRef: React.RefObject<HTMLInputElement | null>;
   onClose: (open: boolean) => void;
   onAdvance: () => void;
@@ -153,15 +142,13 @@ interface AddUserWizardProps {
   onSetAddCroppedAreaPixels: (area: Area | null) => void;
   onCropComplete: (_: Area, pixels: Area) => void;
   onReleaseAddCropState: () => void;
+  onOpenCrop: (url: string) => void;
   onConfirmCrop: () => Promise<void>;
   onSubmit: () => void;
   isSubmitting: boolean;
-  // Internal photo-picker state setters (used by step 5 file input)
-  onSetAddImgSrc: (src: string | null) => void;
-  onSetAddPhotoCropView: (active: boolean) => void;
 }
 
-function AddUserWizard({
+const AddUserWizard = memo(function AddUserWizard({
   open,
   wizard,
   callings,
@@ -171,7 +158,6 @@ function AddUserWizard({
   addImgSrc,
   addCrop,
   addZoom,
-  addCroppedAreaPixels,
   addFileInputRef,
   onClose,
   onAdvance,
@@ -185,11 +171,10 @@ function AddUserWizard({
   onSetAddCroppedAreaPixels,
   onCropComplete,
   onReleaseAddCropState,
+  onOpenCrop,
   onConfirmCrop,
   onSubmit,
   isSubmitting,
-  onSetAddImgSrc,
-  onSetAddPhotoCropView,
 }: AddUserWizardProps) {
   const stepIndex = wizard.step - 1;
   const currentStep = WIZARD_STEPS[stepIndex];
@@ -202,22 +187,21 @@ function AddUserWizard({
   }
 
   const reviewRows = [
-    { label: "Name",    value: `${wizard.form.fname} ${wizard.form.lname}`.trim(), show: true },
-    { label: "Email",   value: wizard.form.email,                                  show: true },
-    { label: "Phone",   value: wizard.form.phone || "—",                           show: true },
-    { label: "Bio",     value: wizard.form.bio   || "—",                           show: true },
+    { label: "Name",    value: `${wizard.form.fname} ${wizard.form.lname}`.trim() },
+    { label: "Email",   value: wizard.form.email },
+    { label: "Phone",   value: wizard.form.phone || "—" },
+    { label: "Bio",     value: wizard.form.bio   || "—" },
     { label: "Calling", value: addSelectedCalling
         ? addSelectedCalling.max_slots > 1
           ? `${addSelectedCalling.name} · Slot ${wizard.slotNumber}`
           : addSelectedCalling.name
-        : "—",                                                                      show: true },
-    { label: "Photo",   value: wizard.photo ? "Added" : "—",                       show: true },
+        : "—" },
+    { label: "Photo",   value: wizard.photo ? "Added" : "—" },
   ];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-[90vw] sm:max-w-lg p-0 gap-0 overflow-hidden">
-        {/* Header bar */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2.5">
             <span className="text-muted-foreground">{currentStep.icon}</span>
@@ -231,7 +215,6 @@ function AddUserWizard({
           </Button>
         </div>
 
-        {/* Segmented progress bar */}
         <div className="flex gap-1 border-b px-4 py-2.5">
           {WIZARD_STEPS.map((step, index) => (
             <div
@@ -248,12 +231,10 @@ function AddUserWizard({
           ))}
         </div>
 
-        {/* Content area — hidden when crop view is active (crop manages its own padding) */}
         {!addPhotoCropView && (
           <div className="px-4 py-4">
             <p className="mb-4 text-muted-foreground text-xs">{currentStep.description}</p>
 
-            {/* Step 1: Basic Info */}
             {wizard.step === 1 && (
               <div className="grid gap-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -315,7 +296,6 @@ function AddUserWizard({
               </div>
             )}
 
-            {/* Step 2: Bio */}
             {wizard.step === 2 && (
               <div className="space-y-1.5">
                 <Label>Bio</Label>
@@ -328,7 +308,6 @@ function AddUserWizard({
               </div>
             )}
 
-            {/* Step 3: Password */}
             {wizard.step === 3 && (
               <div className="grid gap-4">
                 <div className="space-y-1.5">
@@ -366,7 +345,6 @@ function AddUserWizard({
               </div>
             )}
 
-            {/* Step 4: Assign Calling */}
             {wizard.step === 4 && (
               <div className="space-y-3">
                 <div className="flex gap-2">
@@ -412,7 +390,6 @@ function AddUserWizard({
               </div>
             )}
 
-            {/* Step 5: Profile Photo (non-crop view) */}
             {wizard.step === 5 && (
               <div className="flex flex-col items-center gap-4">
                 <Avatar className="h-24 w-24">
@@ -441,19 +418,12 @@ function AddUserWizard({
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    if (addImgSrc) URL.revokeObjectURL(addImgSrc);
-                    const url = URL.createObjectURL(file);
-                    onSetAddImgSrc(url);
-                    onSetAddCrop({ x: 0, y: 0 });
-                    onSetAddZoom(1);
-                    onSetAddCroppedAreaPixels(null);
-                    onSetAddPhotoCropView(true);
+                    onOpenCrop(URL.createObjectURL(file));
                   }}
                 />
               </div>
             )}
 
-            {/* Step 6: Review */}
             {wizard.step === 6 && (
               <div>
                 {reviewRows.map((row, index) => (
@@ -476,7 +446,6 @@ function AddUserWizard({
           </div>
         )}
 
-        {/* Step 5 crop view — manages its own padding */}
         {addPhotoCropView && (
           <div className="px-4 pb-4 space-y-4 pt-4">
             <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
@@ -511,7 +480,6 @@ function AddUserWizard({
           </div>
         )}
 
-        {/* Step quick-nav */}
         {!addPhotoCropView && (
           <div className="border-t px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -543,7 +511,6 @@ function AddUserWizard({
           </div>
         )}
 
-        {/* Footer navigation */}
         {!addPhotoCropView && (
           <div className="flex items-center justify-between border-t px-4 py-3">
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onBack} disabled={stepIndex === 0}>
@@ -573,7 +540,7 @@ function AddUserWizard({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 export function UserAdminContent() {
   // --- Queries ---
@@ -1468,7 +1435,6 @@ export function UserAdminContent() {
           addImgSrc={addImgSrc}
           addCrop={addCrop}
           addZoom={addZoom}
-          addCroppedAreaPixels={addCroppedAreaPixels}
           addFileInputRef={addFileInputRef}
           onClose={handleCloseAddUser}
           onAdvance={advanceStep}
@@ -1485,8 +1451,14 @@ export function UserAdminContent() {
           onSetAddCroppedAreaPixels={setAddCroppedAreaPixels}
           onCropComplete={onAddCropComplete}
           onReleaseAddCropState={releaseAddCropState}
-          onSetAddImgSrc={setAddImgSrc}
-          onSetAddPhotoCropView={setAddPhotoCropView}
+          onOpenCrop={(url) => {
+            if (addImgSrc) URL.revokeObjectURL(addImgSrc);
+            setAddImgSrc(url);
+            setAddCrop({ x: 0, y: 0 });
+            setAddZoom(1);
+            setAddCroppedAreaPixels(null);
+            setAddPhotoCropView(true);
+          }}
           onConfirmCrop={async () => {
             if (!addImgSrc || !addCroppedAreaPixels) return;
             let blob: Blob;
