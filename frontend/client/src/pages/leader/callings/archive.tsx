@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Calendar, User, Search, MessageSquare } from "lucide-react";
+import { Calendar, User, Search, MessageSquare, Undo2 } from "lucide-react";
 import { Link } from "wouter";
 import {
   Table,
@@ -20,11 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -34,9 +30,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/queryClient";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
+
+const LOAD_BATCH = 50;
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -96,13 +95,32 @@ export default function ArchiveCallings() {
   const [completedDateEnd, setCompletedDateEnd] = useState("");
   const [releaseDateStart, setReleaseDateStart] = useState("");
   const [releaseDateEnd, setReleaseDateEnd] = useState("");
+  const [visibleCount, setVisibleCount] = useState(LOAD_BATCH);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Comments query — only fires when an archived item is selected
   const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
     queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "comments"],
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem!.id}/comments`).then((r) => r.json()),
     enabled: !!selectedItem,
   });
+
+  useEffect(() => {
+    setVisibleCount(LOAD_BATCH);
+  }, [searchTerm, typeFilter, wardFilter, callingFilter, completedDateStart, completedDateEnd, releaseDateStart, releaseDateEnd]);
+
+  const onSentinel = useCallback((entries: IntersectionObserverEntry[]) => {
+    if (entries[0]?.isIntersecting) {
+      setVisibleCount((n) => n + LOAD_BATCH);
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(onSentinel, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onSentinel]);
 
   const filteredData = useMemo(() => {
     return archived.filter((item) => {
@@ -125,6 +143,9 @@ export default function ArchiveCallings() {
       return true;
     });
   }, [archived, searchTerm, typeFilter, wardFilter, callingFilter, completedDateStart, completedDateEnd, releaseDateStart, releaseDateEnd]);
+
+  const visibleData = filteredData.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredData.length;
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -150,185 +171,225 @@ export default function ArchiveCallings() {
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <Link href="/leader/calling-system">
-          <Button variant="ghost" className="gap-2 mb-6 pl-0 hover:bg-transparent hover:text-primary">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Calling System
+        <div className="mb-6">
+          <Button
+            variant="outline"
+            className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+            size="default"
+            asChild
+          >
+            <Link href="/leader/calling-system">
+              <Undo2 />
+              Previous Page
+            </Link>
           </Button>
-        </Link>
+        </div>
 
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-primary">Calling Archive</h1>
-            <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2 border-dashed">
-              Clear Filters
-            </Button>
-          </div>
+        <div className="flex gap-6 items-start">
+          {/* Left sidebar — filters */}
+          <aside className="w-56 shrink-0 rounded-lg border bg-card shadow-sm overflow-hidden">
 
-          {/* Filters Bar */}
-          <div className="grid gap-4 p-4 bg-muted/30 rounded-lg border">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <Input
-                placeholder="Filter by calling..."
-                value={callingFilter}
-                onChange={(e) => setCallingFilter(e.target.value)}
-              />
-
-              <Select value={wardFilter} onValueChange={setWardFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by Ward" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Wards</SelectItem>
-                  {wards.map((w) => (
-                    <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="calling">Calling</SelectItem>
-                  <SelectItem value="release">Release</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal w-full">
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {completedDateStart || completedDateEnd
-                      ? `${completedDateStart || "Start"} – ${completedDateEnd || "End"} (Completed)`
-                      : "Date Completed Range"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 p-4" align="start">
-                  <div className="grid gap-4">
-                    <div className="space-y-1">
-                      <h4 className="font-medium">Date Completed Range</h4>
-                      <p className="text-sm text-muted-foreground">Filter by when the calling was finalized.</p>
-                    </div>
-                    <div className="grid gap-2">
-                      <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm">Start</span>
-                        <Input type="date" className="col-span-2 h-8" value={completedDateStart} onChange={(e) => setCompletedDateStart(e.target.value)} />
-                      </div>
-                      <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm">End</span>
-                        <Input type="date" className="col-span-2 h-8" value={completedDateEnd} onChange={(e) => setCompletedDateEnd(e.target.value)} />
-                      </div>
-                    </div>
+            <Accordion type="multiple" defaultValue={[]} className="px-4">
+              <AccordionItem value="name">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Name</AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name..."
+                      className="pl-8 h-9"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                   </div>
-                </PopoverContent>
-              </Popover>
+                </AccordionContent>
+              </AccordionItem>
 
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal w-full">
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {releaseDateStart || releaseDateEnd
-                      ? `${releaseDateStart || "Start"} – ${releaseDateEnd || "End"} (Release)`
-                      : "Expected Release Range"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 p-4" align="start">
-                  <div className="grid gap-4">
-                    <div className="space-y-1">
-                      <h4 className="font-medium">Expected Release Range</h4>
-                      <p className="text-sm text-muted-foreground">Filter by estimated release date.</p>
-                    </div>
-                    <div className="grid gap-2">
-                      <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm">Start</span>
-                        <Input type="date" className="col-span-2 h-8" value={releaseDateStart} onChange={(e) => setReleaseDateStart(e.target.value)} />
-                      </div>
-                      <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm">End</span>
-                        <Input type="date" className="col-span-2 h-8" value={releaseDateEnd} onChange={(e) => setReleaseDateEnd(e.target.value)} />
-                      </div>
-                    </div>
+              <AccordionItem value="calling">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Calling</AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by calling..."
+                      className="pl-8 h-9"
+                      value={callingFilter}
+                      onChange={(e) => setCallingFilter(e.target.value)}
+                    />
                   </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
+                </AccordionContent>
+              </AccordionItem>
 
-          <div className="rounded-md border bg-card overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member Name</TableHead>
-                  <TableHead>Calling</TableHead>
-                  <TableHead>Ward</TableHead>
-                  <TableHead>Date Submitted</TableHead>
-                  <TableHead>Date Completed</TableHead>
-                  <TableHead>Est. Release</TableHead>
-                  <TableHead className="text-right">Type</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((__, j) => (
-                        <TableCell key={j}><div className="skeleton h-4 w-24 rounded" /></TableCell>
+              <AccordionItem value="ward">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Ward</AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <Select value={wardFilter} onValueChange={setWardFilter}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Wards" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Wards</SelectItem>
+                      {wards.map((w) => (
+                        <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
                       ))}
-                    </TableRow>
-                  ))
-                ) : filteredData.length > 0 ? (
-                  filteredData.map((item) => {
-                    const completedDate = item.updated_at;
-                    const releaseDate = !item.is_release && completedDate
-                      ? estimatedRelease(completedDate, item.proposed_calling)
-                      : null;
+                    </SelectContent>
+                  </Select>
+                </AccordionContent>
+              </AccordionItem>
 
-                    return (
-                      <TableRow
-                        key={item.id}
-                        className={`cursor-pointer transition-colors hover:bg-muted/50 ${
-                          item.is_release ? "bg-destructive/5" : "bg-primary/5"
-                        }`}
-                        onClick={() => setSelectedItem(item)}
-                      >
-                        <TableCell className="font-medium">{item.fname} {item.lname}</TableCell>
-                        <TableCell>{item.proposed_calling}</TableCell>
-                        <TableCell>{wardMap.get(item.ward_id) ?? "—"}</TableCell>
-                        <TableCell>{formatDate(item.submitted_at)}</TableCell>
-                        <TableCell>{formatDate(completedDate)}</TableCell>
-                        <TableCell>{releaseDate ? formatDate(releaseDate) : "—"}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={item.is_release ? "destructive" : "default"}>
-                            {item.is_release ? "Release" : "Calling"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
+              <AccordionItem value="type">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Type</AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="calling">Calling</SelectItem>
+                      <SelectItem value="release">Release</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="completed">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Completed Date</AccordionTrigger>
+                <AccordionContent className="pb-3 space-y-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="completed-date-start" className="text-xs text-muted-foreground">Start</Label>
+                    <Input
+                      id="completed-date-start"
+                      type="date"
+                      value={completedDateStart}
+                      onChange={(e) => setCompletedDateStart(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="completed-date-end" className="text-xs text-muted-foreground">End</Label>
+                    <Input
+                      id="completed-date-end"
+                      type="date"
+                      value={completedDateEnd}
+                      onChange={(e) => setCompletedDateEnd(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="release" className="border-b-0">
+                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Expected Release</AccordionTrigger>
+                <AccordionContent className="pb-3 space-y-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="release-date-start" className="text-xs text-muted-foreground">Start</Label>
+                    <Input
+                      id="release-date-start"
+                      type="date"
+                      value={releaseDateStart}
+                      onChange={(e) => setReleaseDateStart(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="release-date-end" className="text-xs text-muted-foreground">End</Label>
+                    <Input
+                      id="release-date-end"
+                      type="date"
+                      value={releaseDateEnd}
+                      onChange={(e) => setReleaseDateEnd(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+            <div className="px-4 py-3 border-t">
+              <Button
+                variant="secondary"
+                className="w-full gap-2 border-dashed hover:scale-105 hover:shadow-lg transition-all duration-200"
+                size="xs"
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </Button>
+            </div>
+          </aside>
+
+          {/* Right panel — results */}
+          <div className="flex-1 min-w-0 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? "Loading…" : `${filteredData.length} ${filteredData.length === 1 ? "result" : "results"} found`}
+            </p>
+
+            <div className="rounded-md border bg-card overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                      {archived.length === 0 ? "No completed callings in the archive yet." : "No results match your filters."}
-                    </TableCell>
+                    <TableHead>Member Name</TableHead>
+                    <TableHead>Calling</TableHead>
+                    <TableHead>Ward</TableHead>
+                    <TableHead>Date Submitted</TableHead>
+                    <TableHead>Date Completed</TableHead>
+                    <TableHead>Est. Release</TableHead>
+                    <TableHead className="text-right">Type</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        {Array.from({ length: 7 }).map((__, j) => (
+                          <TableCell key={j}><div className="skeleton h-4 w-24 rounded" /></TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : visibleData.length > 0 ? (
+                    visibleData.map((item) => {
+                      const completedDate = item.updated_at;
+                      const releaseDate = !item.is_release && completedDate
+                        ? estimatedRelease(completedDate, item.proposed_calling)
+                        : null;
+
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className={`cursor-pointer transition-colors hover:bg-muted/50 ${
+                            item.is_release ? "bg-destructive/5" : "bg-primary/5"
+                          }`}
+                          onClick={() => setSelectedItem(item)}
+                        >
+                          <TableCell className="font-medium">{item.fname} {item.lname}</TableCell>
+                          <TableCell>{item.proposed_calling}</TableCell>
+                          <TableCell>{wardMap.get(item.ward_id) ?? "—"}</TableCell>
+                          <TableCell>{formatDate(item.submitted_at)}</TableCell>
+                          <TableCell>{formatDate(completedDate)}</TableCell>
+                          <TableCell>{releaseDate ? formatDate(releaseDate) : "—"}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={item.is_release ? "destructive" : "default"}>
+                              {item.is_release ? "Release" : "Calling"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                        {archived.length === 0 ? "No completed callings in the archive yet." : "No results match your filters."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="py-2 text-center text-xs text-muted-foreground">
+              {hasMore ? "Loading more…" : filteredData.length > 0 ? `All ${filteredData.length} ${filteredData.length === 1 ? "result" : "results"} loaded` : null}
+            </div>
           </div>
         </div>
 
@@ -399,7 +460,6 @@ export default function ArchiveCallings() {
 
                   <Separator />
 
-                  {/* Read-only Comments */}
                   <div className="space-y-3">
                     <h3 className="font-semibold flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
