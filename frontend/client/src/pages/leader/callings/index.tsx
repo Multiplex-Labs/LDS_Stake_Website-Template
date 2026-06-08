@@ -14,6 +14,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card";
 import { FileCheck, Megaphone, MailPlus, FileArchive} from "lucide-react";
 import { Link } from "wouter";
@@ -83,7 +84,7 @@ function DraggableCard({ item, stageKey, canManage, wardName, onOpen }: Draggabl
       >
         <CardContent className="p-3 space-y-2">
           <div>
-            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Member Name</div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Name</div>
             <div className="font-semibold text-sm">{item.fname} {item.lname}</div>
           </div>
           <div>
@@ -94,9 +95,21 @@ function DraggableCard({ item, stageKey, canManage, wardName, onOpen }: Draggabl
             <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ward</div>
             <div className="text-sm">{wardName}</div>
           </div>
-          <div className="flex gap-3 text-xs text-muted-foreground pt-0.5">
-            <span>Submitted {new Date(item.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-            <span>Updated {new Date(item.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+          <div className="flex gap-2 pt-0.5">
+            <Badge variant="secondary" className="text-xs font-normal ">
+              Submitted: {" "}
+              {new Date(item.submitted_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}
+            </Badge>
+            <Badge variant="default" className="text-xs font-normal">
+              Updated: {" "}
+              {new Date(item.updated_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -326,13 +339,16 @@ export default function CallingSystem() {
               return (
                 <div key={column.id} className={`min-w-[280px] w-[280px] flex flex-col ${column.cssClass}`}>
                   <div
-                    className="p-3 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm"
+                    className="p-3 gap-2 min-h-[4rem] rounded-t-lg border-b-2 font-semibold text-xs uppercase tracking-tight flex items-center justify-between bg-card border shadow-sm"
                     style={{ borderBottomColor: "var(--stage-border)" }}
                   >
                     <span className="line-clamp-2">{column.title}</span>
-                    <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border shrink-0 ml-2">
+                    <Badge
+                        className="flex size-6 items-end justify-center rounded-full p-1 text-xs"
+                        variant={boardError ? "destructive" : "secondary"}
+                    >
                       {boardLoading ? "…" : boardError ? "!" : items.length}
-                    </span>
+                    </Badge>
                   </div>
                   <DroppableColumn
                     id={column.id}
