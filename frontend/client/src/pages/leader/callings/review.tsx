@@ -47,7 +47,7 @@ function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTabl
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Proposed Calling</TableHead>
+            <TableHead>Calling / Assignment</TableHead>
             <TableHead>Ward</TableHead>
             <TableHead>Approvals</TableHead>
             <TableHead>Date Submitted</TableHead>
@@ -219,9 +219,6 @@ export default function ReviewCallings() {
             <DialogHeader>
               <DialogTitle className="text-2xl">Review Recommendation</DialogTitle>
               <div className="flex justify-between items-center gap-2 mt-1">
-                <DialogDescription>
-                  Review details for {selectedProposal?.fname} {selectedProposal?.lname}
-                </DialogDescription>
                 <Badge variant="secondary" className="text-xs">
                   Review Stage: {selectedStage === "HC" ? "High Council" : "Stake Presidency"}
                 </Badge>
@@ -238,10 +235,13 @@ export default function ReviewCallings() {
                         <div className="font-medium">{selectedProposal.fname} {selectedProposal.lname}</div>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Spouse</Label>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Spouse Name</Label>
                         <div className="flex items-center gap-2">
-                          <User className="h-3 w-3 text-muted-foreground" />
-                          <span>{selectedProposal.spouse_name || "N/A"}</span>
+                          <span>
+                            {selectedProposal.spouse_name || selectedProposal.lname
+                              ? `${selectedProposal.spouse_name ?? ""} ${selectedProposal.lname ?? ""}`.trim()
+                                : "N/A"}
+                          </span>
                         </div>
                       </div>
                       <div className="space-y-1">
@@ -249,7 +249,7 @@ export default function ReviewCallings() {
                         <div>{wardMap.get(selectedProposal.ward_id) ?? `Ward ${selectedProposal.ward_id}`}</div>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Proposed Calling</Label>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Calling / Assignment</Label>
                         <div className="font-semibold text-primary">{selectedProposal.proposed_calling}</div>
                       </div>
                       <div className="space-y-1">
