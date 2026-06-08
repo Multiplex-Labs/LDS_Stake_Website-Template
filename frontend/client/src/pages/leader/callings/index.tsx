@@ -304,21 +304,19 @@ export default function CallingSystem() {
                 </Link>
               </Button>
           </div>
-          <div className="flex gap-2">
-            {canViewSustainings && (
-              <Button
-                  variant="secondary"
-                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
-                  size="default"
-                  asChild
-              >
-                <Link href="/leader/sustainings">
-                  <Megaphone className="h-4 w-4" />
-                  Release & Sustainment Form
-                </Link>
-              </Button>
-            )}
-          </div>
+          {canViewSustainings && (
+            <Button
+                variant="secondary"
+                className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                size="default"
+                asChild
+            >
+              <Link href="/leader/sustainings">
+                <Megaphone className="h-4 w-4" />
+                Release & Sustainment Form
+              </Link>
+            </Button>
+          )}
         </div>
 
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

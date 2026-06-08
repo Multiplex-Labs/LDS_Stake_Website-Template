@@ -166,6 +166,7 @@ export default function ReleasesAndSustainings() {
 
   const {
     data: board = {},
+    isLoading: boardLoading,
     isError: boardError,
     error: boardQueryError,
   } = useQuery<KanbanBoard>({
@@ -255,7 +256,7 @@ export default function ReleasesAndSustainings() {
   const safeActive = Math.min(activeTab, Math.max(0, visibleTabs.length - 1));
   const activeTabData = visibleTabs[safeActive] ?? null;
 
-  if (isLoading) {
+  if (isLoading || boardLoading) {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -287,7 +288,27 @@ export default function ReleasesAndSustainings() {
 
   return (
     <Layout>
-      <style>{`@media print { nav, footer { display: none !important; } }`}</style>
+      <style>{`
+  @media print {
+    nav, footer { display: none !important; }
+    html, body, main, div, span, p, h1, h2, h3, h4 {
+      background: transparent !important;
+      color: hsl(var(--foreground)) !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+    .print-borders {
+      border-color: hsl(var(--border)) !important;
+    }
+    @page {
+      size: auto;
+      margin: 0;
+    }
+    body {
+      padding: 15mm;
+    }
+  }
+`}</style>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex justify-between items-center mb-8 print:hidden">

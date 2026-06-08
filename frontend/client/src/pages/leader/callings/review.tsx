@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn, apiErrorStatus } from "@/lib/utils";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
-import {Badge} from "@/components/ui/badge.tsx";
+import { Badge } from "@/components/ui/badge";
 
 // SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
 const SP_APPROVAL_KEY = "0";

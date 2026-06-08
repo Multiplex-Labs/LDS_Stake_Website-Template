@@ -170,22 +170,3 @@ calendar-date {
 .stage-sustain      { --stage-bg: hsl(270 60% 55% / 0.10); --stage-border: hsl(270 60% 55% / 0.20); }
 .stage-set-apart    { --stage-bg: hsl(320 60% 55% / 0.10); --stage-border: hsl(320 60% 55% / 0.20); }
 .stage-lcr-update   { --stage-bg: hsl(145 60% 40% / 0.10); --stage-border: hsl(145 60% 40% / 0.20); }
-
-@media print {
-  html, body, main, div, span, p, h1, h2, h3, h4 {
-    background: transparent !important;
-    color: #000000 !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
-  .print-borders {
-    border-color: #d1d5db !important;
-  }
-  @page {
-    size: auto;
-    margin: 0;
-  }
-  body {
-    padding: 15mm;
-  }
-}

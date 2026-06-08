@@ -33,6 +33,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/queryClient";
+import { apiErrorStatus } from "@/lib/utils";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 const LOAD_BATCH = 50;
@@ -62,13 +63,13 @@ function estimatedRelease(completedIso: string, callingName: string): string {
 }
 
 export default function ArchiveCallings() {
-  const { data: board, isLoading, isError } = useQuery<KanbanBoard>({
+  const { data: board, isLoading, isError, error } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
   });
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  const { data: users = [] } = useQuery<ApiUser[]>({
+  const { data: users = [], isError: usersError, error: usersQueryError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
 
@@ -84,6 +85,9 @@ export default function ArchiveCallings() {
     return m;
   }, [users]);
 
+  if (wardsError) console.error("[archive] Failed to load wards:", wardsQueryError);
+  if (usersError) console.error("[archive] Failed to load users:", usersQueryError);
+
   const archived: CallingProposal[] = board?.["6"] ?? [];
 
   const [selectedItem, setSelectedItem] = useState<CallingProposal | null>(null);
@@ -97,22 +101,34 @@ export default function ArchiveCallings() {
   const [releaseDateEnd, setReleaseDateEnd] = useState("");
   const [visibleCount, setVisibleCount] = useState(LOAD_BATCH);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const skipSentinelRef = useRef(false);
 
   const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
     queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "comments"],
-    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem!.id}/comments`).then((r) => r.json()),
+    queryFn: () => {
+      if (!selectedItem) throw new Error("[archive] commentsQuery fired without selectedItem");
+      return apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem.id}/comments`).then((r) => r.json());
+    },
     enabled: !!selectedItem,
   });
 
   useEffect(() => {
+    skipSentinelRef.current = true;
     setVisibleCount(LOAD_BATCH);
   }, [searchTerm, typeFilter, wardFilter, callingFilter, completedDateStart, completedDateEnd, releaseDateStart, releaseDateEnd]);
 
   const onSentinel = useCallback((entries: IntersectionObserverEntry[]) => {
-    if (entries[0]?.isIntersecting) {
-      setVisibleCount((n) => n + LOAD_BATCH);
+    if (!entries[0]?.isIntersecting) return;
+    if (skipSentinelRef.current) {
+      skipSentinelRef.current = false;
+      return;
     }
+    setVisibleCount((n) => n + LOAD_BATCH);
   }, []);
+
+  useEffect(() => {
+    if (commentsError) console.error("[archive] Failed to load comments for proposal", selectedItem?.id, ":", commentsError);
+  }, [commentsError, selectedItem?.id]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -158,11 +174,19 @@ export default function ArchiveCallings() {
     setReleaseDateEnd("");
   };
 
+  const triggerCls = "font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline";
+
   if (isError) {
+    console.error("[archive] Failed to load kanban board:", error);
+    const is401 = apiErrorStatus(error) === 401;
     return (
       <Layout>
         <div className="text-center py-16">
-          <p className="text-destructive">Failed to load the calling archive. Please refresh.</p>
+          <p className="text-destructive">
+            {is401
+              ? "Your session has expired. Please log out and log in again."
+              : "Failed to load the calling archive. Please refresh."}
+          </p>
         </div>
       </Layout>
     );
@@ -191,7 +215,7 @@ export default function ArchiveCallings() {
 
             <Accordion type="multiple" defaultValue={[]} className="px-4">
               <AccordionItem value="name">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Name</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Name</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
@@ -206,7 +230,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="calling">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Calling</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Calling</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
@@ -221,7 +245,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="ward">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Ward</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Ward</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <Select value={wardFilter} onValueChange={setWardFilter}>
                     <SelectTrigger className="h-9">
@@ -238,7 +262,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="type">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Type</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Type</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
                     <SelectTrigger className="h-9">
@@ -254,7 +278,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="completed">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Completed Date</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Completed Date</AccordionTrigger>
                 <AccordionContent className="pb-3 space-y-2">
                   <div className="space-y-1">
                     <Label htmlFor="completed-date-start" className="text-xs text-muted-foreground">Start</Label>
@@ -280,7 +304,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="release" className="border-b-0">
-                <AccordionTrigger className="font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline">Expected Release</AccordionTrigger>
+                <AccordionTrigger className={triggerCls}>Expected Release</AccordionTrigger>
                 <AccordionContent className="pb-3 space-y-2">
                   <div className="space-y-1">
                     <Label htmlFor="release-date-start" className="text-xs text-muted-foreground">Start</Label>
@@ -310,7 +334,7 @@ export default function ArchiveCallings() {
               <Button
                 variant="secondary"
                 className="w-full gap-2 border-dashed hover:scale-105 hover:shadow-lg transition-all duration-200"
-                size="xs"
+                size="sm"
                 onClick={clearFilters}
               >
                 Clear Filters
@@ -388,7 +412,7 @@ export default function ArchiveCallings() {
 
             {/* Infinite scroll sentinel */}
             <div ref={sentinelRef} className="py-2 text-center text-xs text-muted-foreground">
-              {hasMore ? "Loading more…" : filteredData.length > 0 ? `All ${filteredData.length} ${filteredData.length === 1 ? "result" : "results"} loaded` : null}
+              {hasMore ? "Scroll for more" : filteredData.length > 0 ? `All ${filteredData.length} ${filteredData.length === 1 ? "result" : "results"} loaded` : null}
             </div>
           </div>
         </div>

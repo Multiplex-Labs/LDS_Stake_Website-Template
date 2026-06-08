@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import {Save, Undo2, X} from "lucide-react";
+import {Save, X} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -306,24 +306,14 @@ export default function SubmitCalling() {
 
             <div className="flex justify-end gap-4">
               <Button
-                variant="secondary"
-                className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
-                size="icon"
-                asChild
-                >
-                  <Link href="/leader/calling-system">
-                      <Undo2 />
-                  </Link>
-              </Button>
-              <Button
                 variant="destructive"
                 className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
                 size="default"
                 asChild
-                >
-                  <Link href="/leader/calling-system">
-                      Cancel
-                  </Link>
+              >
+                <Link href="/leader/calling-system">
+                  Cancel
+                </Link>
               </Button>
               <Button type="submit" className="gap-2" disabled={submitMutation.isPending}>
                 <Save className="h-4 w-4" />

@@ -30,7 +30,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
-import { fullName, extractWardNumber } from "@/lib/utils";
+import { fullName, extractWardNumber, apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { hasPermission, Permission } from "@/lib/constants";
 
@@ -155,17 +155,23 @@ interface WardDropZoneProps {
   proposals: KanbanBoard;
   ordinations: OrdinationEntry[];
   wardMap: Map<number, string>;
+  isOpen: boolean;
+  onToggle: () => void;
 }
 
-function WardDropZone({ droppableId, label, items, proposals, ordinations, wardMap }: WardDropZoneProps) {
+function WardDropZone({ droppableId, label, items, proposals, ordinations, wardMap, isOpen, onToggle }: WardDropZoneProps) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
     <div className="collapse collapse-arrow bg-card border rounded-lg shadow-sm">
-      <input type="checkbox" defaultChecked={items.length > 0} />
+      <input
+        type="checkbox"
+        checked={isOpen}
+        onChange={onToggle}
+      />
       <div className="collapse-title flex items-center justify-between pr-12 py-2.5 px-4">
         <span className="font-semibold text-sm">{label}</span>
-        <span className="badge-ghost badge-sm badge-neutral">
+        <span className="badge badge-sm badge-neutral">
           Pending: {items.length}
         </span>
       </div>
@@ -315,6 +321,14 @@ export default function SustainingPrep() {
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [openWards, setOpenWards] = useState<Set<string>>(() => {
+    const s = loadSustainingPrep();
+    return new Set(
+      s.wardAssignments
+        .filter((wa) => wa.items.length > 0)
+        .map((wa) => (wa.wardId === "stake" ? "ward-stake" : `ward-${wa.wardId}`))
+    );
+  });
   const callyRef = useRef<HTMLElement & { value: string }>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
 
@@ -337,8 +351,13 @@ export default function SustainingPrep() {
     enabled: hasAccess,
   });
 
-  if (boardError) console.error("[sustainings-prep] Failed to load kanban board:", boardQueryError);
-  if (wardsError) console.error("[sustainings-prep] Failed to load wards:", wardsQueryError);
+  useEffect(() => {
+    if (boardError) console.error("[sustainings-prep] Failed to load kanban board:", boardQueryError);
+  }, [boardError, boardQueryError]);
+
+  useEffect(() => {
+    if (wardsError) console.error("[sustainings-prep] Failed to load wards:", wardsQueryError);
+  }, [wardsError, wardsQueryError]);
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useWardMap(wards);
@@ -374,6 +393,7 @@ export default function SustainingPrep() {
   const handleClearAll = useCallback(() => {
     clearSustainingPrep();
     setInitialized(false);
+    setOpenWards(new Set());
     setState({
       version: 1,
       sustainingDate: null,
@@ -410,6 +430,11 @@ export default function SustainingPrep() {
     if (!isSustainingItem(raw)) return;
     const item = raw;
     const targetId = over.id as string;
+
+    // Open the target ward when a card is dropped into it
+    if (targetId.startsWith("ward-")) {
+      setOpenWards((prev) => new Set([...Array.from(prev), targetId]));
+    }
 
     setState((prev) => {
       const sourceId = findItemSource(prev, item);
@@ -493,7 +518,10 @@ export default function SustainingPrep() {
   useEffect(() => {
     if (!datePickerOpen) return;
     const el = callyRef.current;
-    if (!el) return;
+    if (!el) {
+      console.error("[sustainings-prep] callyRef.current is null — cally may not have upgraded yet");
+      return;
+    }
     const handler = (e: Event) => {
       const value = (e.target as HTMLElement & { value: string }).value;
       if (value) {
@@ -531,12 +559,14 @@ export default function SustainingPrep() {
   }
 
   if (boardError || wardsError) {
+    const is401 = apiErrorStatus(boardQueryError) === 401 || apiErrorStatus(wardsQueryError) === 401;
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-          <p className="text-destructive font-medium">Failed to load sustaining data.</p>
-          <p className="text-muted-foreground text-sm mt-2">
-            Please refresh the page. If this continues, contact your administrator.
+          <p className="text-destructive font-medium">
+            {is401
+              ? "Your session has expired. Please log out and log in again."
+              : `Failed to load ${boardError ? "calling board" : "ward"} data. Please refresh and try again.`}
           </p>
         </div>
       </Layout>
@@ -684,6 +714,15 @@ export default function SustainingPrep() {
                 proposals={board}
                 ordinations={state.ordinations}
                 wardMap={wardMap}
+                isOpen={openWards.has("ward-stake")}
+                onToggle={() =>
+                  setOpenWards((prev) => {
+                    const next = new Set(prev);
+                    if (next.has("ward-stake")) next.delete("ward-stake");
+                    else next.add("ward-stake");
+                    return next;
+                  })
+                }
               />
 
               {sortedWards.map((ward) => {
@@ -697,6 +736,16 @@ export default function SustainingPrep() {
                     proposals={board}
                     ordinations={state.ordinations}
                     wardMap={wardMap}
+                    isOpen={openWards.has(`ward-${ward.id}`)}
+                    onToggle={() =>
+                      setOpenWards((prev) => {
+                        const next = new Set(prev);
+                        const id = `ward-${ward.id}`;
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      })
+                    }
                   />
                 );
               })}
