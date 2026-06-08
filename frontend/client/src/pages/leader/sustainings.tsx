@@ -1,11 +1,15 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { ClipboardList, Printer, Undo2 } from "lucide-react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout/Layout";
+import { Button } from "@/components/ui/button";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
 import { useWardMap } from "@/lib/hooks";
 import { fullName, apiErrorStatus } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useAuthStore } from "@/stores/auth";
+import { hasPermission, Permission } from "@/lib/constants";
 import type { Ward, KanbanBoard } from "@/types";
 
 interface Release {
@@ -141,6 +145,9 @@ function TabContent({ tab }: { tab: TabData }) {
 }
 
 export default function ReleasesAndSustainings() {
+  const user = useAuthStore((s) => s.user);
+  const canManageCallings = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+
   const {
     data: wards = [],
     isLoading,
@@ -159,6 +166,7 @@ export default function ReleasesAndSustainings() {
 
   const {
     data: board = {},
+    isLoading: boardLoading,
     isError: boardError,
     error: boardQueryError,
   } = useQuery<KanbanBoard>({
@@ -248,15 +256,10 @@ export default function ReleasesAndSustainings() {
   const safeActive = Math.min(activeTab, Math.max(0, visibleTabs.length - 1));
   const activeTabData = visibleTabs[safeActive] ?? null;
 
-  if (isLoading) {
+  if (isLoading || boardLoading) {
     return (
       <Layout>
-        <div className="bg-muted/30 py-12 print:hidden">
-          <div className="container mx-auto px-4">
-            <h1 className="font-serif text-4xl font-bold text-center">Releases &amp; Sustainings</h1>
-          </div>
-        </div>
-        <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
           <div className="skeleton h-8 w-48 mb-6" />
           <div className="skeleton h-4 w-full mb-2" />
           <div className="skeleton h-4 w-3/4 mb-2" />
@@ -272,11 +275,6 @@ export default function ReleasesAndSustainings() {
     const is401 = apiErrorStatus(error) === 401 || apiErrorStatus(boardQueryError) === 401;
     return (
       <Layout>
-        <div className="bg-muted/30 py-12 print:hidden">
-          <div className="container mx-auto px-4">
-            <h1 className="font-serif text-4xl font-bold text-center">Releases &amp; Sustainings</h1>
-          </div>
-        </div>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
           <p className="text-destructive">
             {is401
@@ -290,31 +288,56 @@ export default function ReleasesAndSustainings() {
 
   return (
     <Layout>
-      <style>{`@media print { nav, footer { display: none !important; } }`}</style>
-
-      <div className="bg-muted/30 py-12 print:hidden">
-        <div className="container mx-auto px-4 flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="font-serif text-4xl font-bold">Releases &amp; Sustainings</h1>
-            {prepState.sustainingDate && (
-              <p className="text-muted-foreground mt-1">
-                {new Date(prepState.sustainingDate + "T00:00:00").toLocaleDateString(undefined, {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-            )}
-          </div>
-          <button className="btn btn-outline gap-2" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            Print
-          </button>
-        </div>
-      </div>
+      <style>{`
+  @media print {
+    nav, footer { display: none !important; }
+    html, body, main, div, span, p, h1, h2, h3, h4 {
+      background: transparent !important;
+      color: hsl(var(--foreground)) !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+    .print-borders {
+      border-color: hsl(var(--border)) !important;
+    }
+    @page {
+      size: auto;
+      margin: 0;
+    }
+    body {
+      padding: 15mm;
+    }
+  }
+`}</style>
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="flex justify-between items-center mb-8 print:hidden">
+          <Button
+                  variant="outline"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/calling-system">
+                  <Undo2 />
+                  Previous Page
+                </Link>
+              </Button>
+          <div className="flex items-center gap-2">
+            {canManageCallings && (
+              <Link href="/leader/callings/sustainings-prep">
+                <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                  <ClipboardList className="h-4 w-4" />
+                  Prepare Form
+                </Button>
+              </Link>
+            )}
+            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" />
+              Print
+            </Button>
+          </div>
+        </div>
         {allEmpty ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <h2 className="font-serif text-3xl font-bold mb-3">No Stake Business at this time</h2>

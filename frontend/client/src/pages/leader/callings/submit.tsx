@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Save } from "lucide-react";
+import {Save, X} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -14,6 +14,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -118,17 +119,10 @@ export default function SubmitCalling() {
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 max-w-3xl">
-        <Link href="/leader/calling-system">
-          <Button variant="ghost" className="gap-2 mb-6 pl-0 hover:bg-transparent hover:text-primary">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Calling System
-          </Button>
-        </Link>
-
-        <div className="mb-8">
+          <div className="mb-8">
           <h1 className="text-3xl font-bold">Submit a Calling</h1>
           <p className="text-muted-foreground mt-2">
-            Submit a new calling recommendation for Stake Approval and Action.
+            Submit a calling or release for stake review and approval.
           </p>
         </div>
 
@@ -174,9 +168,9 @@ export default function SubmitCalling() {
                     name="spouseName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Spouse Name</FormLabel>
+                        <FormLabel>Spouse's First Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Jane Doe" {...field} />
+                          <Input placeholder="Jane" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -216,22 +210,23 @@ export default function SubmitCalling() {
                   name="proposedCalling"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Proposed Calling</FormLabel>
+                      <FormLabel>Calling / Assignment</FormLabel>
                       {showOtherCalling ? (
-                        <div className="flex gap-2">
+                        <div className="flex gap-4">
                           <FormControl>
                             <Input placeholder="Enter custom calling" {...field} />
                           </FormControl>
                           <Button
                             type="button"
-                            variant="ghost"
-                            size="sm"
+                            className="hover:scale-105 hover:shadow-lg transition-all duration-200"
+                            variant="secondary"
+                            size="icon"
                             onClick={() => {
                               setShowOtherCalling(false);
                               field.onChange("");
                             }}
                           >
-                            Cancel
+                              <X />
                           </Button>
                         </div>
                       ) : (
@@ -266,19 +261,27 @@ export default function SubmitCalling() {
                 />
 
                 <FormField
-                  control={form.control}
-                  name="isRelease"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-3">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormLabel className="!mt-0">This is a release (not a new calling)</FormLabel>
-                    </FormItem>
-                  )}
+                    control={form.control}
+                    name="isRelease"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-start gap-3 space-y-0">
+                            <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                />
+                            </FormControl>
+
+                            <div className="grid gap-1.5 leading-none">
+                                <FormLabel className="font-normal">
+                                    Mark as release
+                                </FormLabel>
+                                <FormDescription>
+                                    Select this checkbox when the submission is for a release rather than a new calling.
+                                </FormDescription>
+                            </div>
+                        </FormItem>
+                    )}
                 />
 
                 <FormField
@@ -302,9 +305,16 @@ export default function SubmitCalling() {
             </Card>
 
             <div className="flex justify-end gap-4">
-              <Link href="/leader/calling-system">
-                <Button type="button" variant="outline">Cancel</Button>
-              </Link>
+              <Button
+                variant="destructive"
+                className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                size="default"
+                asChild
+              >
+                <Link href="/leader/calling-system">
+                  Cancel
+                </Link>
+              </Button>
               <Button type="submit" className="gap-2" disabled={submitMutation.isPending}>
                 <Save className="h-4 w-4" />
                 {submitMutation.isPending ? "Submitting…" : "Submit Recommendation"}

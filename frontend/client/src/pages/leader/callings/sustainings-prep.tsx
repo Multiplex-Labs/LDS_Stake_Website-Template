@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -10,7 +10,10 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Layout } from "@/components/layout/Layout";
+import "cally";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
-import { Eye, Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, CalendarIcon, Inbox, Undo2} from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { useWardMap } from "@/lib/hooks";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,6 +30,9 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
+import { fullName, extractWardNumber, apiErrorStatus } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
+import { hasPermission, Permission } from "@/lib/constants";
 
 // ---------- helpers ----------
 
@@ -66,8 +73,6 @@ function parseWardDropId(id: string): number | "stake" | null {
   return parsed;
 }
 
-// ---------- PoolCard ----------
-
 interface PoolCardProps {
   item: SustainingItem;
   proposals: KanbanBoard;
@@ -93,7 +98,7 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
       console.error("[sustainings-prep] Ordination ID in state not found in ordinations list:", item.ordinationId);
       return null;
     }
-    name = `${ord.fname} ${ord.lname}`;
+    name = fullName(ord);
     subtitle = ord.office;
   } else {
     const proposal = (proposals["3"] ?? []).find((p) => p.id === item.proposalId);
@@ -101,25 +106,25 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
       console.error("[sustainings-prep] Proposal ID in state not found in board stage 3:", item.proposalId);
       return null;
     }
-    name = `${proposal.fname} ${proposal.lname}`;
+    name = fullName(proposal);
     subtitle = proposal.proposed_calling;
   }
 
   return (
-    <div
-      className={`bg-card border border-l-4 ${borderClass} rounded-md p-3 shadow-sm select-none`}
-    >
-      <div className="font-semibold text-sm">{name}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>
-      {item.type === "proposal" && wardName && (
-        <div className="text-xs text-muted-foreground/60 mt-1">{wardName}</div>
-      )}
-      {item.type === "ordination" && (
-        <span className="mt-1 inline-block text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-          Ordination
-        </span>
-      )}
-    </div>
+    <Card className={`border-l-4 ${borderClass} hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing`}>
+      <CardHeader className="p-3">
+        <CardTitle className="text-sm font-semibold">{name}</CardTitle>
+        <CardDescription className="text-xs mt-1 space-y-1">
+          <div>{subtitle}</div>
+          {item.type === "proposal" && wardName && (
+            <div className="opacity-60">{wardName}</div>
+          )}
+          {item.type === "ordination" && (
+            <span className="badge badge-sm badge-secondary mt-1">Ordination</span>
+          )}
+        </CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -132,7 +137,6 @@ function DraggableCard({ item, proposals, ordinations, wardName }: PoolCardProps
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.4 : 1,
-    cursor: isDragging ? "grabbing" : "grab",
   };
 
   return (
@@ -151,44 +155,56 @@ interface WardDropZoneProps {
   proposals: KanbanBoard;
   ordinations: OrdinationEntry[];
   wardMap: Map<number, string>;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
 }
 
-function WardDropZone({ droppableId, label, items, proposals, ordinations, wardMap }: WardDropZoneProps) {
+function WardDropZone({ droppableId, label, items, proposals, ordinations, wardMap, isOpen, onToggle }: WardDropZoneProps) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
-    <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-      <div className="px-4 py-2.5 border-b bg-muted/40">
+    <div className="collapse collapse-arrow bg-card border rounded-lg shadow-sm">
+      <input
+        type="checkbox"
+        checked={isOpen}
+        onChange={() => onToggle(droppableId)}
+      />
+      <div className="collapse-title flex items-center justify-between pr-12 py-2.5 px-4">
         <span className="font-semibold text-sm">{label}</span>
-        {items.length > 0 && (
-          <span className="ml-2 text-xs text-muted-foreground">({items.length})</span>
-        )}
+        <span className="badge badge-sm badge-neutral">
+          Pending: {items.length}
+        </span>
       </div>
-      <div
-        ref={setNodeRef}
-        className={`min-h-[80px] p-3 space-y-2 transition-colors ${
-          isOver ? "bg-primary/5 ring-2 ring-inset ring-primary/30" : ""
-        }`}
-      >
-        {items.length === 0 ? (
-          <div className="h-16 flex items-center justify-center border-2 border-dashed border-muted-foreground/20 rounded text-xs text-muted-foreground/40">
-            Drop here
-          </div>
-        ) : (
-          items.map((item) => (
-            <DraggableCard
-              key={itemKey(item)}
-              item={item}
-              proposals={proposals}
-              ordinations={ordinations}
-              wardName={
-                item.type === "proposal"
-                  ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
-                  : undefined
-              }
-            />
-          ))
-        )}
+      <div className="collapse-content px-3 pb-3 pt-0">
+        <div
+          ref={setNodeRef}
+          className={`min-h-[56px] rounded-md border border-dashed transition-all p-2 ${
+            isOver ? "border-primary bg-primary/10" : "border-base-content/20 bg-base-300/30"
+          }`}
+        >
+          {items.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
+              <Inbox className="size-4" />
+              <span className="text-xs">Drop callings or ordinations here</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+            {items.map((item) => (
+              <DraggableCard
+                key={itemKey(item)}
+                item={item}
+                proposals={proposals}
+                ordinations={ordinations}
+                wardName={
+                  item.type === "proposal"
+                    ? wardMap.get((proposals["3"] ?? []).find((p) => p.id === item.proposalId)?.ward_id ?? -1)
+                    : undefined
+                }
+              />
+            ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -296,33 +312,56 @@ function OrdinationDialog({
 // ---------- Main Page ----------
 
 export default function SustainingPrep() {
+  const user = useAuthStore((s) => s.user);
+  const hasAccess = hasPermission(user?.permissions ?? 0, Permission.MANAGE_CALLING_PROPOSALS);
+
   const [state, setState] = useState<SustainingPrepState>(() => loadSustainingPrep());
   const [ordinationOpen, setOrdinationOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [openWards, setOpenWards] = useState<Set<string>>(() =>
+    new Set(
+      state.wardAssignments
+        .filter((wa) => wa.items.length > 0)
+        .map((wa) => (wa.wardId === "stake" ? "ward-stake" : `ward-${wa.wardId}`))
+    )
+  );
+  const callyRef = useRef<HTMLElement & { value: string }>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
 
   const {
     data: board = {},
     isLoading: boardLoading,
     isError: boardError,
+    error: boardQueryError,
   } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
+    enabled: hasAccess,
   });
   const {
     data: wards = [],
     isLoading: wardsLoading,
     isError: wardsError,
+    error: wardsQueryError,
   } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
+    enabled: hasAccess,
   });
 
-  if (boardError) console.error("[sustainings-prep] Failed to load kanban board");
-  if (wardsError) console.error("[sustainings-prep] Failed to load wards");
+  useEffect(() => {
+    if (boardError) console.error("[sustainings-prep] Failed to load kanban board:", boardQueryError);
+  }, [boardError, boardQueryError]);
+
+  useEffect(() => {
+    if (wardsError) console.error("[sustainings-prep] Failed to load wards:", wardsQueryError);
+  }, [wardsError, wardsQueryError]);
 
   const sustainProposals = useMemo(() => board["3"] ?? [], [board]);
   const wardMap = useWardMap(wards);
   const sortedWards = useMemo(
-    () => [...wards].sort((a, b) => parseInt(a.name) - parseInt(b.name)),
+    () => [...wards].sort((a, b) => parseInt(extractWardNumber(a.name)) - parseInt(extractWardNumber(b.name))),
     [wards],
   );
 
@@ -353,6 +392,7 @@ export default function SustainingPrep() {
   const handleClearAll = useCallback(() => {
     clearSustainingPrep();
     setInitialized(false);
+    setOpenWards(new Set());
     setState({
       version: 1,
       sustainingDate: null,
@@ -362,6 +402,15 @@ export default function SustainingPrep() {
     });
     toast.success("Cleared all assignments");
   }, [sustainProposals]);
+
+  const toggleWard = useCallback((id: string) => {
+    setOpenWards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleAddOrdination = useCallback((entry: OrdinationEntry) => {
     setState((prev) => ({
@@ -389,6 +438,15 @@ export default function SustainingPrep() {
     if (!isSustainingItem(raw)) return;
     const item = raw;
     const targetId = over.id as string;
+
+    if (targetId.startsWith("ward-")) {
+      setOpenWards((prev) => {
+        if (prev.has(targetId)) return prev;
+        const next = new Set(prev);
+        next.add(targetId);
+        return next;
+      });
+    }
 
     setState((prev) => {
       const sourceId = findItemSource(prev, item);
@@ -442,13 +500,85 @@ export default function SustainingPrep() {
 
   const { setNodeRef: poolRef, isOver: isOverPool } = useDroppable({ id: "pool" });
 
-  if (boardError || wardsError) {
+  const filteredUnassigned = useMemo(() => {
+    if (!searchQuery.trim()) return state.unassigned;
+    const q = searchQuery.toLowerCase();
+    const proposalMap = new Map(sustainProposals.map((p) => [p.id, p]));
+    return state.unassigned.filter((item) => {
+      if (item.type === "ordination") {
+        const ord = state.ordinations.find((o) => o.id === item.ordinationId);
+        if (!ord) return false;
+        return fullName(ord).toLowerCase().includes(q) || ord.office.toLowerCase().includes(q);
+      }
+      const proposal = proposalMap.get(item.proposalId);
+      if (!proposal) return false;
+      const wName = wardMap.get(proposal.ward_id) ?? "";
+      return (
+        fullName(proposal).toLowerCase().includes(q) ||
+        proposal.proposed_calling.toLowerCase().includes(q) ||
+        wName.toLowerCase().includes(q)
+      );
+    });
+  }, [searchQuery, state.unassigned, state.ordinations, sustainProposals, wardMap]);
+
+  const selectedDate = useMemo<Date | undefined>(
+    () => (state.sustainingDate ? parseISO(state.sustainingDate) : undefined),
+    [state.sustainingDate],
+  );
+
+  // Wire cally's native change event when the picker is open
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    const el = callyRef.current;
+    if (!el) {
+      console.error("[sustainings-prep] callyRef.current is null — cally may not have upgraded yet");
+      return;
+    }
+    const handler = (e: Event) => {
+      const value = (e.target as HTMLElement & { value: string }).value;
+      if (value) {
+        handleDateChange(value);
+        setDatePickerOpen(false);
+      }
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, [datePickerOpen, handleDateChange]);
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setDatePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [datePickerOpen]);
+
+  if (!hasAccess) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-          <p className="text-destructive font-medium">Failed to load sustaining data.</p>
+          <p className="text-destructive font-medium">Access denied.</p>
           <p className="text-muted-foreground text-sm mt-2">
-            Please refresh the page. If this continues, contact your administrator.
+            You don't have permission to access Sustaining Prep.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (boardError || wardsError) {
+    const is401 = apiErrorStatus(boardQueryError) === 401 || apiErrorStatus(wardsQueryError) === 401;
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+          <p className="text-destructive font-medium">
+            {is401
+              ? "Your session has expired. Please log out and log in again."
+              : `Failed to load ${boardError ? "calling board" : "ward"} data. Please refresh and try again.`}
           </p>
         </div>
       </Layout>
@@ -460,52 +590,92 @@ export default function SustainingPrep() {
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 max-w-[1400px]">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-serif text-3xl font-bold">Sustaining Prep</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Assign callings, releases, and ordinations to ward sections
-            </p>
+              <Button
+                  variant="outline"
+                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  size="default"
+                  asChild
+              >
+                <Link href="/leader/sustainings">
+                  <Undo2 />
+                  Previous Page
+                </Link>
+              </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">Sustaining Date</label>
-              <input
-                type="date"
-                className="input input-bordered input-sm"
-                value={state.sustainingDate ?? ""}
-                onChange={(e) => handleDateChange(e.target.value)}
-              />
+            <div className="relative" ref={datePickerRef}>
+              <Button
+                variant="outline"
+                className="gap-2 min-w-[160px] justify-start font-normal"
+                onClick={() => setDatePickerOpen(!datePickerOpen)}
+              >
+                <CalendarIcon className="size-4" />
+                {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Select date"}
+              </Button>
+              {datePickerOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 bg-base-100 rounded-xl shadow-lg border border-border overflow-hidden">
+                  {/* @ts-expect-error cally custom element — types flow via HTMLElementTagNameMap */}
+                  <calendar-date
+                    className="cally"
+                    ref={callyRef}
+                    value={state.sustainingDate ?? ""}
+                  >
+                    <svg aria-label="Previous" className="fill-current size-4" {...{ slot: "previous" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                      <path d="M15.75 19.5 8.25 12l7.5-7.5" />
+                    </svg>
+                    <svg aria-label="Next" className="fill-current size-4" {...{ slot: "next" }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                      <path d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
+                    {/* @ts-expect-error cally custom element */}
+                    <calendar-month />
+                  {/* @ts-expect-error cally custom element */}
+                  </calendar-date>
+                </div>
+              )}
             </div>
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => setOrdinationOpen(true)}>
+
+            <Button
+              variant="outline"
+              className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+              onClick={() => setOrdinationOpen(true)}
+            >
               <Plus className="size-4" />
               Add Ordination
             </Button>
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200 text-destructive hover:text-destructive" onClick={handleClearAll}>
+
+            <Button
+              variant="outline"
+              className="gap-2 border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleClearAll}
+            >
               <Trash2 className="size-4" />
               Clear All
             </Button>
-            <Link href="/leader/sustainings">
-              <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
-                <Eye className="size-4" />
-                Preview Viewer
-              </Button>
-            </Link>
           </div>
         </div>
 
         <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-6 items-start">
-            {/* Left: Unassigned Pool */}
-            <div className="w-72 shrink-0">
-              <div className="rounded-lg border bg-card shadow-sm overflow-hidden sticky top-4">
+            <div className="w-64 shrink-0 sticky top-4">
+              <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
                 <div className="px-4 py-2.5 border-b bg-muted/40 flex items-center justify-between">
-                  <span className="font-semibold text-sm">Unassigned Pool</span>
-                  <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full border">
-                    {state.unassigned.length}
+                  <span className="font-semibold text-sm">Unassigned Callings</span>
+                  <span className="text-[11px] font-normal tracking-wide">
+                    Total: {state.unassigned.length}
                   </span>
                 </div>
+
+                <div className="px-3 pt-3 pb-2">
+                  <Input
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+
                 <div
                   ref={poolRef}
                   className={`min-h-[300px] p-3 space-y-2 transition-colors ${
@@ -517,13 +687,18 @@ export default function SustainingPrep() {
                       <div className="skeleton h-16 w-full rounded-md" />
                       <div className="skeleton h-16 w-full rounded-md" />
                     </>
-                  ) : state.unassigned.length === 0 ? (
+                  ) : filteredUnassigned.length === 0 && state.unassigned.length > 0 ? (
+                    <div className="h-32 flex flex-col items-center justify-center text-center gap-1 text-muted-foreground/50 text-xs">
+                      <p>No results</p>
+                      <p>Try a different search</p>
+                    </div>
+                  ) : filteredUnassigned.length === 0 ? (
                     <div className="h-40 flex flex-col items-center justify-center text-center gap-2 text-muted-foreground/50 text-sm">
                       <p>Pool is empty</p>
                       <p className="text-xs">All items have been assigned</p>
                     </div>
                   ) : (
-                    state.unassigned.map((item) => (
+                    filteredUnassigned.map((item) => (
                       <DraggableCard
                         key={itemKey(item)}
                         item={item}
@@ -543,9 +718,7 @@ export default function SustainingPrep() {
               </div>
             </div>
 
-            {/* Right: Ward Sections */}
-            <div className="flex-1 space-y-4">
-              {/* Stake section first */}
+            <div className="flex-1 grid md:grid-cols-2 gap-4">
               <WardDropZone
                 droppableId="ward-stake"
                 label="Stake"
@@ -553,6 +726,8 @@ export default function SustainingPrep() {
                 proposals={board}
                 ordinations={state.ordinations}
                 wardMap={wardMap}
+                isOpen={openWards.has("ward-stake")}
+                onToggle={toggleWard}
               />
 
               {sortedWards.map((ward) => {
@@ -566,6 +741,8 @@ export default function SustainingPrep() {
                     proposals={board}
                     ordinations={state.ordinations}
                     wardMap={wardMap}
+                    isOpen={openWards.has(`ward-${ward.id}`)}
+                    onToggle={toggleWard}
                   />
                 );
               })}
