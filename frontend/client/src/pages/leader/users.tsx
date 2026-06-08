@@ -201,7 +201,7 @@ const AddUserWizard = memo(function AddUserWizard({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-[90vw] sm:max-w-lg p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-[90vw] sm:max-w-lg p-0 gap-0 overflow-hidden [&>button:last-child]:hidden">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2.5">
             <span className="text-muted-foreground">{currentStep.icon}</span>
