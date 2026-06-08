@@ -32,11 +32,13 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
+import { useWardMap } from "@/lib/hooks";
 import { apiRequest } from "@/lib/queryClient";
-import { apiErrorStatus } from "@/lib/utils";
+import { apiErrorStatus, fullName } from "@/lib/utils";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 const LOAD_BATCH = 50;
+const TRIGGER_CLS = "font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline";
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -73,11 +75,7 @@ export default function ArchiveCallings() {
     queryKey: ["/api/users/"],
   });
 
-  const wardMap = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const w of wards) m.set(w.id, w.name);
-    return m;
-  }, [wards]);
+  const wardMap = useWardMap(wards);
 
   const userMap = useMemo(() => {
     const m = new Map<number, ApiUser>();
@@ -140,8 +138,7 @@ export default function ArchiveCallings() {
 
   const filteredData = useMemo(() => {
     return archived.filter((item) => {
-      const fullName = `${item.fname} ${item.lname}`.toLowerCase();
-      if (searchTerm && !fullName.includes(searchTerm.toLowerCase())) return false;
+      if (searchTerm && !fullName(item).toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (typeFilter !== "all" && (typeFilter === "release") !== item.is_release) return false;
       if (wardFilter !== "all" && item.ward_id !== Number(wardFilter)) return false;
       if (callingFilter && !item.proposed_calling.toLowerCase().includes(callingFilter.toLowerCase())) return false;
@@ -173,8 +170,6 @@ export default function ArchiveCallings() {
     setReleaseDateStart("");
     setReleaseDateEnd("");
   };
-
-  const triggerCls = "font-semibold text-xs uppercase tracking-tight py-3 hover:no-underline";
 
   if (isError) {
     console.error("[archive] Failed to load kanban board:", error);
@@ -215,7 +210,7 @@ export default function ArchiveCallings() {
 
             <Accordion type="multiple" defaultValue={[]} className="px-4">
               <AccordionItem value="name">
-                <AccordionTrigger className={triggerCls}>Name</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Name</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
@@ -230,7 +225,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="calling">
-                <AccordionTrigger className={triggerCls}>Calling</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Calling</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
@@ -245,7 +240,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="ward">
-                <AccordionTrigger className={triggerCls}>Ward</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Ward</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <Select value={wardFilter} onValueChange={setWardFilter}>
                     <SelectTrigger className="h-9">
@@ -262,7 +257,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="type">
-                <AccordionTrigger className={triggerCls}>Type</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Type</AccordionTrigger>
                 <AccordionContent className="pb-3">
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
                     <SelectTrigger className="h-9">
@@ -278,7 +273,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="completed">
-                <AccordionTrigger className={triggerCls}>Completed Date</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Completed Date</AccordionTrigger>
                 <AccordionContent className="pb-3 space-y-2">
                   <div className="space-y-1">
                     <Label htmlFor="completed-date-start" className="text-xs text-muted-foreground">Start</Label>
@@ -304,7 +299,7 @@ export default function ArchiveCallings() {
               </AccordionItem>
 
               <AccordionItem value="release" className="border-b-0">
-                <AccordionTrigger className={triggerCls}>Expected Release</AccordionTrigger>
+                <AccordionTrigger className={TRIGGER_CLS}>Expected Release</AccordionTrigger>
                 <AccordionContent className="pb-3 space-y-2">
                   <div className="space-y-1">
                     <Label htmlFor="release-date-start" className="text-xs text-muted-foreground">Start</Label>
@@ -507,7 +502,7 @@ export default function ArchiveCallings() {
                       <div className="space-y-3">
                         {comments.map((c) => {
                           const commenter = userMap.get(c.commenter_id);
-                          const commenterName = commenter ? `${commenter.fname} ${commenter.lname}` : `User ${c.commenter_id}`;
+                          const commenterName = commenter ? fullName(commenter) : `User ${c.commenter_id}`;
                           return (
                             <div key={c.id} className="rounded-md border bg-muted/30 p-3 space-y-1.5">
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">

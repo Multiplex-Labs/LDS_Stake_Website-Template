@@ -156,7 +156,7 @@ interface WardDropZoneProps {
   ordinations: OrdinationEntry[];
   wardMap: Map<number, string>;
   isOpen: boolean;
-  onToggle: () => void;
+  onToggle: (id: string) => void;
 }
 
 function WardDropZone({ droppableId, label, items, proposals, ordinations, wardMap, isOpen, onToggle }: WardDropZoneProps) {
@@ -167,7 +167,7 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
       <input
         type="checkbox"
         checked={isOpen}
-        onChange={onToggle}
+        onChange={() => onToggle(droppableId)}
       />
       <div className="collapse-title flex items-center justify-between pr-12 py-2.5 px-4">
         <span className="font-semibold text-sm">{label}</span>
@@ -321,14 +321,13 @@ export default function SustainingPrep() {
   const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [openWards, setOpenWards] = useState<Set<string>>(() => {
-    const s = loadSustainingPrep();
-    return new Set(
-      s.wardAssignments
+  const [openWards, setOpenWards] = useState<Set<string>>(() =>
+    new Set(
+      state.wardAssignments
         .filter((wa) => wa.items.length > 0)
         .map((wa) => (wa.wardId === "stake" ? "ward-stake" : `ward-${wa.wardId}`))
-    );
-  });
+    )
+  );
   const callyRef = useRef<HTMLElement & { value: string }>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
 
@@ -404,6 +403,15 @@ export default function SustainingPrep() {
     toast.success("Cleared all assignments");
   }, [sustainProposals]);
 
+  const toggleWard = useCallback((id: string) => {
+    setOpenWards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleAddOrdination = useCallback((entry: OrdinationEntry) => {
     setState((prev) => ({
       ...prev,
@@ -431,9 +439,13 @@ export default function SustainingPrep() {
     const item = raw;
     const targetId = over.id as string;
 
-    // Open the target ward when a card is dropped into it
     if (targetId.startsWith("ward-")) {
-      setOpenWards((prev) => new Set([...Array.from(prev), targetId]));
+      setOpenWards((prev) => {
+        if (prev.has(targetId)) return prev;
+        const next = new Set(prev);
+        next.add(targetId);
+        return next;
+      });
     }
 
     setState((prev) => {
@@ -715,14 +727,7 @@ export default function SustainingPrep() {
                 ordinations={state.ordinations}
                 wardMap={wardMap}
                 isOpen={openWards.has("ward-stake")}
-                onToggle={() =>
-                  setOpenWards((prev) => {
-                    const next = new Set(prev);
-                    if (next.has("ward-stake")) next.delete("ward-stake");
-                    else next.add("ward-stake");
-                    return next;
-                  })
-                }
+                onToggle={toggleWard}
               />
 
               {sortedWards.map((ward) => {
@@ -737,15 +742,7 @@ export default function SustainingPrep() {
                     ordinations={state.ordinations}
                     wardMap={wardMap}
                     isOpen={openWards.has(`ward-${ward.id}`)}
-                    onToggle={() =>
-                      setOpenWards((prev) => {
-                        const next = new Set(prev);
-                        const id = `ward-${ward.id}`;
-                        if (next.has(id)) next.delete(id);
-                        else next.add(id);
-                        return next;
-                      })
-                    }
+                    onToggle={toggleWard}
                   />
                 );
               })}
