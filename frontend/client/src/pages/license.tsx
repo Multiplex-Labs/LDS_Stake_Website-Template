@@ -12,7 +12,7 @@ export default function License() {
 
       <div className="container mx-auto px-4 py-16">
         <Card className="max-w-3xl mx-auto border-t-4 border-t-primary shadow-lg">
-          <CardContent className="pt-6 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+          <CardContent className="pt-6 text-sm leading-relaxed whitespace-pre-wrap">
             <p className="mb-4 font-bold">Copyright © 2026 Multiplex Labs</p>
 
             <p className="mb-4">
