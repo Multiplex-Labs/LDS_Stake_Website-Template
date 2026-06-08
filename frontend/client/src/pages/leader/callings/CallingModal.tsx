@@ -31,14 +31,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { STAGE_LABELS, STAGE_BADGE_CLASS, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
+import { STAGE_LABELS, STAGE_BADGE_VARIANT, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
 import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
@@ -306,7 +306,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
             <div className="space-y-6 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Current stage:</span>
-                <Badge variant="secondary" className={STAGE_BADGE_CLASS[proposal.stageKey] ?? ""}>
+                <Badge variant={(STAGE_BADGE_VARIANT[proposal.stageKey] ?? "secondary") as BadgeProps["variant"]}>
                   {STAGE_LABELS[proposal.stageKey] ?? `Stage ${proposal.stageKey}`}
                 </Badge>
               </div>

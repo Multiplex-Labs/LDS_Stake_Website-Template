@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog,
@@ -24,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
-import { Trash2, Plus, CalendarIcon, Inbox, Undo2} from "lucide-react";
+import { Trash2, Plus, CalendarIcon, Inbox, Undo2, ChevronDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useWardMap } from "@/lib/hooks";
 import { useForm } from "react-hook-form";
@@ -33,7 +34,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, OrdinationEntry } from "@/types";
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
-import { fullName, extractWardNumber, apiErrorStatus } from "@/lib/utils";
+import { cn, fullName, extractWardNumber, apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { hasPermission, Permission } from "@/lib/constants";
 
@@ -117,15 +118,15 @@ function PoolCardContent({ item, proposals, ordinations, wardName }: PoolCardPro
     <Card className={`border-l-4 ${borderClass} hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing`}>
       <CardHeader className="p-3">
         <CardTitle className="text-sm font-semibold">{name}</CardTitle>
-        <CardDescription className="text-xs mt-1 space-y-1">
+        <div className="text-xs text-muted-foreground mt-1 space-y-1">
           <div>{subtitle}</div>
           {item.type === "proposal" && wardName && (
             <div className="opacity-60">{wardName}</div>
           )}
           {item.type === "ordination" && (
-            <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-1">Ordination</Badge>
+            <Badge variant="secondary" size="sm">Ordination</Badge>
           )}
-        </CardDescription>
+        </div>
       </CardHeader>
     </Card>
   );
@@ -166,36 +167,35 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
-    <Accordion
-      type="single"
-      collapsible
-      value={isOpen ? droppableId : ""}
-      onValueChange={() => onToggle(droppableId)}
+    <Collapsible
+      open={isOpen}
+      onOpenChange={() => onToggle(droppableId)}
       className="bg-card border rounded-lg shadow-sm overflow-hidden"
     >
-      <AccordionItem value={droppableId} className="border-0">
-        <AccordionTrigger className="px-4 py-2.5 hover:no-underline">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">{label}</span>
-            <Badge variant="neutral" className="text-xs px-1.5 py-0">
-              Pending: {items.length}
-            </Badge>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-3 pb-3 pt-0">
-          <div
-            ref={setNodeRef}
-            className={`min-h-[56px] rounded-md border border-dashed transition-all p-2 ${
-              isOver ? "border-primary bg-primary/10" : "border-foreground/20 bg-muted/30"
-            }`}
-          >
-            {items.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
-                <Inbox className="size-4" />
-                <span className="text-xs">Drop callings or ordinations here</span>
-              </div>
-            ) : (
-              <div className="space-y-2">
+      <CollapsibleTrigger className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-muted/50 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-sm">{label}</span>
+          <Badge variant="neutral" size="sm">
+            Pending: {items.length}
+          </Badge>
+        </div>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-3 pb-3 pt-0">
+        <div
+          ref={setNodeRef}
+          className={cn(
+            "min-h-[56px] rounded-md border border-dashed transition-all p-2",
+            isOver ? "border-primary bg-primary/10" : "border-foreground/20 bg-muted/30"
+          )}
+        >
+          {items.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-1 text-muted-foreground/40 py-1">
+              <Inbox className="size-4" />
+              <span className="text-xs">Drop callings or ordinations here</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
               {items.map((item) => (
                 <DraggableCard
                   key={itemKey(item)}
@@ -209,12 +209,11 @@ function WardDropZone({ droppableId, label, items, proposals, ordinations, wardM
                   }
                 />
               ))}
-              </div>
-            )}
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -290,19 +289,18 @@ function OrdinationDialog({
           </div>
           <div>
             <label className="text-sm font-medium block mb-1">Office</label>
-            <div className="flex gap-3">
+            <RadioGroup
+              value={office}
+              onValueChange={(v) => setValue("office", v as "Elder" | "High Priest", { shouldValidate: true })}
+              className="flex gap-4"
+            >
               {(["Elder", "High Priest"] as const).map((o) => (
                 <label key={o} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    className="size-4 accent-primary"
-                    checked={office === o}
-                    onChange={() => setValue("office", o, { shouldValidate: true })}
-                  />
+                  <RadioGroupItem value={o} id={`office-${o}`} />
                   <span className="text-sm">{o}</span>
                 </label>
               ))}
-            </div>
+            </RadioGroup>
             {errors.office && (
               <p className="text-xs text-destructive mt-1">{errors.office.message}</p>
             )}

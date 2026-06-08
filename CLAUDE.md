@@ -261,7 +261,7 @@ npx shadcn@latest add <component-name>
 
 - Do not use raw Tailwind color classes (`bg-blue-500`). Use semantic tokens only: `primary`, `secondary`, `accent`, `muted`, `background`, `card`, `destructive`.
 - Max content width: `max-w-6xl mx-auto`. Page padding: `px-4 sm:px-6 lg:px-8`. Section spacing: `py-12`.
-- Typography: Inter for body, Playfair Display (`font-serif`) for hero/section headings.
+- Typography: Plus Jakarta Sans for body, Fraunces (`font-serif`) for hero/section headings.
 - Icons: Lucide React only. `size-4` for inline icons, `size-5` for standalone.
 - Dark mode is class-based and works automatically when semantic tokens are used.
 - Do not use `any` in TypeScript. Use `unknown` and narrow explicitly.

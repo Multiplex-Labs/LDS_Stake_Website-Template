@@ -72,7 +72,7 @@ function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTabl
                 <TableCell>{wardMap.get(proposal.ward_id) ?? `Ward ${proposal.ward_id}`}</TableCell>
                 <TableCell>
                   {hasVoted ? (
-                    <Badge variant="ghost" className="text-xs px-1.5 py-0">Voted</Badge>
+                    <Badge variant="ghost" size="sm">Voted</Badge>
                   ) : (
                     <span className="tabular-nums">
                       {proposal.stage_approval_count} {proposal.stage_approval_count === 1 ? "approval" : "approvals"}
@@ -300,7 +300,8 @@ export default function ReviewCallings() {
                     Deny
                   </Button>
                   <Button
-                    className="gap-2 bg-success text-success-foreground hover:bg-success/90"
+                    variant="success"
+                    className="gap-2"
                     disabled={approveMutation.isPending || alreadyVoted}
                     onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: true })}
                   >
