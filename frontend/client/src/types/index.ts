@@ -156,3 +156,8 @@ export interface PresidencyAssignmentUpdate {
   responsibilities: string | null;
   ward_ids: number[];
 }
+
+export interface ApiUserPermissions {
+  scopes: number;
+  flags: string[];
+}

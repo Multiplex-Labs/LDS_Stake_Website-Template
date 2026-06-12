@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, memo } from "react";
+import { useState, useMemo, useRef, useCallback, memo, useEffect, Fragment } from "react";
 import Cropper from "react-easy-crop";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Area } from "react-easy-crop";
@@ -53,6 +53,10 @@ import {
   Lock as LockIcon,
   Briefcase as BriefcaseIcon,
   ChevronRight as ChevronRightIcon,
+  CheckCircle2,
+  Circle,
+  Shield,
+  ChevronLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -61,7 +65,16 @@ import { getCroppedImageBlob } from "@/lib/cropImage";
 import { getInitials, fullName, apiErrorStatus, apiErrorBody, meetsPasswordComplexity, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import type { ApiUser, ApiCalling } from "@/types";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
 
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
@@ -542,6 +555,206 @@ const AddUserWizard = memo(function AddUserWizard({
   );
 });
 
+// --- Permissions helpers ---
+
+function popcount(n: number): number {
+  let count = 0;
+  let v = n;
+  while (v) { count += v & 1; v >>>= 1; }
+  return count;
+}
+
+const ASSIGNABLE_PERMISSIONS = [
+  { flag: 1,  label: "Manage Users" },
+  { flag: 2,  label: "Manage Callings" },
+  { flag: 4,  label: "Manage Assignments" },
+  { flag: 8,  label: "Manage Speaking Schedule" },
+  { flag: 16, label: "Submit Calling Proposals" },
+  { flag: 32, label: "Manage Calling Proposals" },
+  { flag: 64, label: "View Calling Proposals" },
+] as const;
+
+interface PermissionsDialogProps {
+  open: boolean;
+  user: ApiUser | null;
+  permissions: ApiUserPermissions;
+  permissionsLoading: boolean;
+  callings: ApiCalling[];
+  occupiedSlotsMap: Map<number, Set<number>>;
+  onClose: () => void;
+  onTogglePermission: (newScopes: number) => void;
+  onRemoveCalling: (args: { callingId: number; slotNumber: number }) => void;
+  onAssignCalling: (args: { callingId: number; slotNumber: number; userId: number; onSuccess?: () => void }) => void;
+}
+
+const PermissionsDialog = memo(function PermissionsDialog({
+  open,
+  user,
+  permissions,
+  permissionsLoading,
+  callings,
+  occupiedSlotsMap,
+  onClose,
+  onTogglePermission,
+  onRemoveCalling,
+  onAssignCalling,
+}: PermissionsDialogProps) {
+  const [permMode, setPermMode] = useState<"default" | "assign-calling">("default");
+  const [expandedCallingId, setExpandedCallingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPermMode("default");
+      setExpandedCallingId(null);
+    }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl [&>button:last-child]:hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Permissions — {user ? fullName(user) : ""}</DialogTitle>
+        </DialogHeader>
+
+        <Command>
+          <div className="border-b px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Shield className="size-4 text-primary" />
+              <span className="font-medium text-sm">
+                {permMode === "assign-calling" ? "Assign Calling" : `Permissions — ${user ? fullName(user) : ""}`}
+              </span>
+            </div>
+            {permMode === "default" && (
+              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{user?.callings?.length ?? 0} callings</span>
+                <span>·</span>
+                <span>{popcount(permissions.scopes)} permissions</span>
+              </div>
+            )}
+          </div>
+
+          <CommandInput placeholder={permMode === "assign-calling" ? "Search callings…" : "Search permissions…"} />
+
+          <CommandList className="max-h-[380px]">
+            <CommandEmpty>No results found.</CommandEmpty>
+
+            {permMode === "default" && (
+              <>
+                <CommandGroup heading="Callings">
+                  {(user?.callings ?? []).map((uc) => {
+                    const calling = callings.find((c) => c.id === uc.calling_id);
+                    if (!calling) return null;
+                    return (
+                      <CommandItem key={uc.id} className="flex items-center justify-between" onSelect={() => {}}>
+                        <div className="flex items-center gap-2">
+                          <BriefcaseIcon className="size-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {calling.name}
+                            {calling.max_slots > 1 && <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); onRemoveCalling({ callingId: uc.calling_id, slotNumber: uc.slot_number }); }}
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </CommandItem>
+                    );
+                  })}
+                  <CommandItem onSelect={() => { setPermMode("assign-calling"); setExpandedCallingId(null); }}>
+                    <Plus className="mr-2 size-4 text-muted-foreground" />
+                    <span>Assign calling…</span>
+                  </CommandItem>
+                </CommandGroup>
+
+                <CommandSeparator />
+
+                <CommandGroup heading="Direct Permissions">
+                  {permissionsLoading
+                    ? Array.from({ length: 7 }).map((_, i) => (
+                        <Skeleton key={i} className="h-8 rounded-md mx-2 my-0.5" />
+                      ))
+                    : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+                        const active = (permissions.scopes & flag) !== 0;
+                        return (
+                          <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
+                            {active
+                              ? <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
+                              : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
+                            <span className="text-sm">{label}</span>
+                          </CommandItem>
+                        );
+                      })}
+                </CommandGroup>
+              </>
+            )}
+
+            {permMode === "assign-calling" && (
+              <CommandGroup heading="Available Callings">
+                <CommandItem onSelect={() => { setPermMode("default"); setExpandedCallingId(null); }}>
+                  <ChevronLeft className="mr-2 size-4 text-muted-foreground" />
+                  <span>Back</span>
+                </CommandItem>
+                {callings.map((calling) => {
+                  const freeSlots = Array.from({ length: calling.max_slots }, (_, i) => i + 1)
+                    .filter((s) => !(occupiedSlotsMap.get(calling.id) ?? new Set()).has(s));
+                  if (freeSlots.length === 0) return null;
+
+                  if (calling.max_slots === 1) {
+                    return (
+                      <CommandItem key={calling.id} onSelect={() => {
+                        if (user) onAssignCalling({ callingId: calling.id, slotNumber: 1, userId: user.id, onSuccess: () => setPermMode("default") });
+                      }}>
+                        <BriefcaseIcon className="mr-2 size-4 text-muted-foreground" />
+                        <span>{calling.name}</span>
+                      </CommandItem>
+                    );
+                  }
+
+                  const isExpanded = expandedCallingId === calling.id;
+                  return (
+                    <Fragment key={calling.id}>
+                      <CommandItem onSelect={() => setExpandedCallingId(isExpanded ? null : calling.id)}>
+                        <BriefcaseIcon className="mr-2 size-4 text-muted-foreground" />
+                        <span className="flex-1">{calling.name}</span>
+                        <ChevronRightIcon className={cn("size-3 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+                      </CommandItem>
+                      {isExpanded && freeSlots.map((slot) => (
+                        <CommandItem
+                          key={slot}
+                          className="pl-8"
+                          onSelect={() => {
+                            if (user) onAssignCalling({ callingId: calling.id, slotNumber: slot, userId: user.id, onSuccess: () => setPermMode("default") });
+                          }}
+                        >
+                          <span className="text-muted-foreground text-xs">Slot {slot}</span>
+                        </CommandItem>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </CommandGroup>
+            )}
+          </CommandList>
+
+          <div className="flex items-center justify-end border-t px-4 py-2">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
 export function UserAdminContent() {
   // --- Queries ---
   const { data: users = [], isLoading, isError } = useQuery<ApiUser[]>({
@@ -568,8 +781,10 @@ export function UserAdminContent() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const editingUser = useMemo(() => users.find((u) => u.id === editingUserId) ?? null, [users, editingUserId]);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
-  const [editCallingId, setEditCallingId] = useState<number | "">("");
-  const [editSlotNumber, setEditSlotNumber] = useState<number | "">("");
+
+  // --- Permissions dialog state ---
+  const [permissionsUserId, setPermissionsUserId] = useState<number | null>(null);
+  const permissionsUser = useMemo(() => users.find((u) => u.id === permissionsUserId) ?? null, [users, permissionsUserId]);
 
   // --- Edit crop state ---
   const [cropMode, setCropMode] = useState(false);
@@ -604,10 +819,11 @@ export function UserAdminContent() {
     return map;
   }, [users]);
 
-  const editingUserCallings = useMemo(
-    () => editingUser?.callings ?? [],
-    [editingUser],
-  );
+  const { data: permissionsData, isLoading: permissionsLoading } = useQuery<ApiUserPermissions>({
+    queryKey: [`/api/users/${permissionsUserId}/permissions`],
+    queryFn: () => apiRequest("GET", `/api/users/${permissionsUserId}/permissions`).then(r => r.json()),
+    enabled: permissionsUserId !== null,
+  });
 
   const filteredUsers = useMemo(() => {
     return users
@@ -634,13 +850,6 @@ export function UserAdminContent() {
     const occupied = occupiedSlotsMap.get(callingId) ?? new Set<number>();
     return Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !occupied.has(s));
   }
-
-  const editSelectedCalling = callings.find((c) => c.id === editCallingId);
-  const editFreeSlots = editSelectedCalling ? getFreeSlots(editSelectedCalling.id, editSelectedCalling.max_slots) : [];
-  const editCanAdd =
-    !!editSelectedCalling &&
-    editFreeSlots.length > 0 &&
-    (editSelectedCalling.max_slots === 1 || editSlotNumber !== "");
 
   const addSelectedCalling = callings.find((c) => c.id === addWizard.callingId);
   const addFreeSlots = addSelectedCalling ? getFreeSlots(addSelectedCalling.id, addSelectedCalling.max_slots) : [];
@@ -800,8 +1009,6 @@ export function UserAdminContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Calling assigned");
-      setEditCallingId("");
-      setEditSlotNumber("");
     },
     onError: (err: unknown) => {
       const status = apiErrorStatus(err);
@@ -814,6 +1021,18 @@ export function UserAdminContent() {
       } else {
         toast.error("Failed to assign calling");
       }
+    },
+  });
+
+  const setPermissionsMutation = useMutation({
+    mutationFn: ({ userId, scopes }: { userId: number; scopes: number }) =>
+      apiRequest("PUT", `/api/users/${userId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${permissionsUserId}/permissions`] });
+    },
+    onError: (err: unknown) => {
+      console.error("[users] setPermissionsMutation error:", err);
+      toast.error("Failed to update permissions");
     },
   });
 
@@ -959,16 +1178,12 @@ export function UserAdminContent() {
       bio: user.bio ?? "",
       active: user.active,
     });
-    setEditCallingId("");
-    setEditSlotNumber("");
   };
 
   const handleCloseEdit = () => {
     releaseCropState();
     setEditingUserId(null);
     setEditForm(null);
-    setEditCallingId("");
-    setEditSlotNumber("");
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1163,6 +1378,14 @@ export function UserAdminContent() {
                       >
                         Edit
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs font-medium"
+                        onClick={() => setPermissionsUserId(user.id)}
+                      >
+                        Permissions
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1173,17 +1396,14 @@ export function UserAdminContent() {
 
         {/* Edit Dialog */}
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
-          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                {cropMode ? "Crop Photo" : "Edit User Profile"}
-              </DialogTitle>
-            </DialogHeader>
-
+          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             {editingUser && editForm && (
               <>
                 {cropMode ? (
-                  <div className="py-4 space-y-4">
+                  <div className="p-6 space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>Crop Photo</DialogTitle>
+                    </DialogHeader>
                     <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
                       <Cropper
                         image={imgSrc}
@@ -1220,38 +1440,30 @@ export function UserAdminContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid gap-6 py-4">
-                      {/* Photo upload */}
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-16 w-16 bg-primary text-primary-foreground shrink-0">
-                          <AvatarImage src={editingUser.profile_image ?? undefined} alt={`${editingUser.fname} ${editingUser.lname}`} />
-                          <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                            {getInitials(`${editingUser.fname} ${editingUser.lname}`)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
+                    {/* Hero header */}
+                    <div className="relative">
+                      <div className="h-40 bg-gradient-to-r from-primary/70 via-primary/50 to-primary/20 rounded-t-lg" />
+                      <div className="absolute left-6 -bottom-12">
+                        <div className="relative">
+                          <Avatar className="h-24 w-24 border-4 border-background">
+                            <AvatarImage src={editingUser.profile_image ?? undefined} />
+                            <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-medium">
+                              {getInitials(`${editingUser.fname} ${editingUser.lname}`)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <button
+                            type="button"
+                            className="absolute right-0 bottom-0 flex h-8 w-8 items-center justify-center rounded-full bg-background border border-border shadow-sm hover:bg-muted transition-colors"
                             onClick={() => fileInputRef.current?.click()}
                           >
                             <Camera className="size-4" />
-                            Upload Photo
-                          </Button>
-                          <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
+                          </button>
                         </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFileChange}
-                        />
                       </div>
+                    </div>
 
-                      <Separator />
-
+                    {/* Form fields */}
+                    <div className="px-6 pt-16 pb-2 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>First Name</Label>
@@ -1276,101 +1488,24 @@ export function UserAdminContent() {
                           value={editForm.bio}
                           onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                           placeholder="Brief description or notes..."
-                          className="min-h-[100px]"
+                          className="min-h-[100px] resize-none"
+                          maxLength={200}
                         />
+                        <p className="text-right text-xs text-muted-foreground">{200 - editForm.bio.length} characters remaining</p>
                       </div>
-
-                      <Separator />
-
-                      {/* Callings Section */}
-                      <div className="space-y-3">
-                        <Label className="text-sm font-semibold">Callings</Label>
-
-                        {editingUserCallings.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {editingUserCallings.map((uc) => (
-                              <div key={uc.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/30">
-                                <span className="text-foreground">
-                                  {callings.find((c) => c.id === uc.calling_id)?.name ?? "Unknown"}
-                                  {(callings.find((c) => c.id === uc.calling_id)?.max_slots ?? 1) > 1 && (
-                                    <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>
-                                  )}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                  disabled={removeCallingMutation.isPending}
-                                  onClick={() => removeCallingMutation.mutate({ callingId: uc.calling_id, slotNumber: uc.slot_number })}
-                                >
-                                  <X className="size-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No callings assigned.</p>
-                        )}
-
-                        <div className="flex gap-2 pt-1">
-                          <Select
-                            value={editCallingId === "" ? "" : String(editCallingId)}
-                            onValueChange={(v) => { setEditCallingId(Number(v)); setEditSlotNumber(""); }}
-                          >
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="Add a calling…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {callings.map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          {editSelectedCalling && editSelectedCalling.max_slots > 1 && (
-                            <Select
-                              value={editSlotNumber === "" ? "" : String(editSlotNumber)}
-                              onValueChange={(v) => setEditSlotNumber(Number(v))}
-                              disabled={editFreeSlots.length === 0}
-                            >
-                              <SelectTrigger className="w-[110px]">
-                                <SelectValue placeholder={editFreeSlots.length === 0 ? "No slots" : "Slot…"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {editFreeSlots.map((s) => (
-                                  <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!editCanAdd || assignCallingMutation.isPending || removeCallingMutation.isPending}
-                            onClick={() => {
-                              if (!editSelectedCalling || !editingUser) return;
-                              const slot = editSelectedCalling.max_slots === 1 ? 1 : Number(editSlotNumber);
-                              assignCallingMutation.mutate({ callingId: editSelectedCalling.id, slotNumber: slot, userId: editingUser.id });
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </div>
-
-                        {editSelectedCalling && editFreeSlots.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            {editSelectedCalling.max_slots === 1
-                              ? "This calling is already filled."
-                              : "All slots for this calling are occupied."}
-                          </p>
-                        )}
-                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
                     </div>
 
                     <Separator />
 
-                    <div className="flex items-center justify-between pt-2">
+                    {/* Footer */}
+                    <div className="flex items-center justify-between px-6 py-4">
                       <div className="flex gap-2">
                         {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
                           <Tooltip>
@@ -1585,6 +1720,27 @@ export function UserAdminContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Permissions Dialog */}
+        <PermissionsDialog
+          open={permissionsUserId !== null}
+          user={permissionsUser}
+          permissions={permissionsData ?? { scopes: 0, flags: [] }}
+          permissionsLoading={permissionsLoading}
+          callings={callings}
+          occupiedSlotsMap={occupiedSlotsMap}
+          onClose={() => setPermissionsUserId(null)}
+          onTogglePermission={(newScopes) => {
+            if (permissionsUserId === null) return;
+            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes });
+          }}
+          onRemoveCalling={({ callingId, slotNumber }) => removeCallingMutation.mutate({ callingId, slotNumber })}
+          onAssignCalling={({ callingId, slotNumber, userId, onSuccess }) => {
+            assignCallingMutation.mutate({ callingId, slotNumber, userId }, {
+              onSuccess,
+            });
+          }}
+        />
 
         {/* Confirm Deactivate Dialog */}
         <Dialog open={confirmTarget != null} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
