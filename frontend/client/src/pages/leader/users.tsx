@@ -57,6 +57,7 @@ import {
   Circle,
   Shield,
   ChevronLeft,
+  MoreHorizontal,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -769,6 +770,7 @@ export function UserAdminContent() {
 
   // --- Table state ---
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
@@ -843,6 +845,14 @@ export function UserAdminContent() {
         return direction === "asc" ? cmp : -cmp;
       });
   }, [users, searchTerm, sortConfig]);
+
+  const USERS_PER_PAGE = 10;
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, sortConfig]);
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE,
+  );
 
   // --- Helpers ---
 
@@ -1233,22 +1243,25 @@ export function UserAdminContent() {
 
   return (
     <TooltipProvider>
-        <div className="flex justify-between items-center mb-6 gap-4">
-          <div className="relative flex-1 max-w-2xl">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="overflow-hidden rounded-lg border bg-card">
+
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name or email"
-              className="pl-10 h-10 bg-background border-input"
+              className="border-0 bg-transparent pl-10 shadow-none focus-visible:ring-0"
+              placeholder="Search by name or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 gap-2 border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground">
+                <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs" size="sm">
                   Sort by
-                  <ArrowUpDown className="h-3 w-3" />
+                  <ArrowUpDown className="size-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -1259,140 +1272,142 @@ export function UserAdminContent() {
                 <DropdownMenuItem onClick={() => handleSort("email")}>Email</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <Button className="h-10 gap-2 shadow-sm" onClick={() => setIsAddingUser(true)}>
+            <Button className="h-8 gap-1.5 px-3 text-xs" size="sm" onClick={() => setIsAddingUser(true)}>
+              <Plus className="size-3.5" />
               Add User
-              <Plus className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50 border-border">
-                <TableHead className="w-[50px] pl-4">
-                  <Checkbox
-                    checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort("name")}>
-                  <div className="flex items-center gap-1">
-                    User
-                    {sortConfig?.key === "name" && <ArrowUpDown className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort("active")}>
-                  <div className="flex items-center gap-1">
-                    Status
-                    {sortConfig?.key === "active" && <ArrowUpDown className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Callings
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right pr-6">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell />
-                  </TableRow>
-                ))
-              ) : filteredUsers.map((user) => (
-                <TableRow key={user.id} className="hover:bg-muted/50 group border-border">
-                  <TableCell className="pl-4">
-                    <Checkbox
-                      checked={selectedIds.includes(user.id)}
-                      onCheckedChange={() =>
-                        setSelectedIds((prev) =>
-                          prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3 py-1">
-                      <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
-                        <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                          {getInitials(`${user.fname} ${user.lname}`)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-sm text-foreground">{user.fname} {user.lname}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {user.active ? (
-                      <span className="text-xs font-medium text-success">Active</span>
-                    ) : (
-                      <span className="text-xs font-medium text-muted-foreground">Disabled</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-foreground">
-                    {user.callings?.map((c) => callings.find((cal) => cal.id === c.calling_id)?.name).filter(Boolean).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-right pr-4">
-                    <div className="flex items-center justify-end gap-2">
-                      {user.active && (user.id === currentUserId || activeCount <= 1) ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
-                              <Button variant="outline" size="sm" className="h-8 text-xs font-medium" disabled>
-                                Deactivate
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {user.id === currentUserId
-                              ? "Cannot deactivate your own account"
-                              : "Cannot deactivate the last active user"}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs font-medium"
-                          disabled={toggleStatusMutation.isPending}
-                          onClick={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
-                        >
-                          {user.active ? "Deactivate" : "Activate"}
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-medium"
-                        onClick={() => handleOpenEdit(user)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-medium"
-                        onClick={() => setPermissionsUserId(user.id)}
-                      >
-                        Permissions
-                      </Button>
-                    </div>
-                  </TableCell>
+        {/* Bulk actions bar */}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center justify-between border-b bg-muted/50 px-4 py-2.5">
+            <span className="text-xs font-medium">{selectedIds.length} user{selectedIds.length !== 1 ? "s" : ""} selected</span>
+            <Button
+              className="h-7 px-2 text-xs"
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds([])}
+            >
+              Clear selection
+            </Button>
+          </div>
+        )}
+
+        {/* Table */}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px] pl-4">
+                <Checkbox
+                  checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
+              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort("name")}>
+                <div className="flex items-center gap-1">
+                  User
+                  {sortConfig?.key === "name" && <ArrowUpDown className="size-3" />}
+                </div>
+              </TableHead>
+              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort("active")}>
+                <div className="flex items-center gap-1">
+                  Status
+                  {sortConfig?.key === "active" && <ArrowUpDown className="size-3" />}
+                </div>
+              </TableHead>
+              <TableHead className="text-xs">Callings</TableHead>
+              <TableHead className="text-xs text-right pr-6">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              ))
+            ) : paginatedUsers.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="pl-4">
+                  <Checkbox
+                    checked={selectedIds.includes(user.id)}
+                    onCheckedChange={() =>
+                      setSelectedIds((prev) =>
+                        prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
+                      )
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-3 py-1">
+                    <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
+                      <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                        {getInitials(`${user.fname} ${user.lname}`)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="font-medium text-sm text-foreground">{user.fname} {user.lname}</div>
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`size-1.5 rounded-full ${user.active ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                    <span className="text-xs text-muted-foreground">{user.active ? "Active" : "Inactive"}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm text-foreground">
+                  {user.callings?.map((c) => callings.find((cal) => cal.id === c.calling_id)?.name).filter(Boolean).join(", ") || "—"}
+                </TableCell>
+                <TableCell className="text-right pr-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button className="size-7" size="sm" variant="ghost">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem onSelect={() => handleOpenEdit(user)}>Edit</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setPermissionsUserId(user.id)}>Permissions</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
+                        disabled={user.active && (user.id === currentUserId || activeCount <= 1)}
+                        className={user.active ? "text-destructive" : ""}
+                      >
+                        {user.active ? "Deactivate" : "Activate"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            {filteredUsers.length === 0
+              ? "No users found"
+              : `Showing ${(currentPage - 1) * USERS_PER_PAGE + 1}–${Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of ${filteredUsers.length} user${filteredUsers.length !== 1 ? "s" : ""}`}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+              <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+            </div>
+          )}
         </div>
+      </div>
 
         {/* Edit Dialog */}
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>

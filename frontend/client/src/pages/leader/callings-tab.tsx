@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useSetToggle } from "@/lib/hooks";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -39,13 +39,22 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   ChevronRight,
   ChevronDown,
   Plus,
-  Pencil,
-  Trash2,
+  MoreHorizontal,
+  Search,
+  ArrowUpDown,
   UserPlus,
   X,
   ChevronsUpDown,
@@ -190,7 +199,7 @@ function SlotRow({
 
   return (
     <>
-      <TableRow className="bg-muted/30">
+      <TableRow className="hover:bg-muted/50">
         <TableCell />
         <TableCell className="pl-10 text-sm text-muted-foreground">
           Slot {slot}
@@ -337,11 +346,19 @@ function CallingDialog({
   );
 }
 
+type CallingsSortKey = "name" | "max_slots" | "is_public";
+type CallingsSortConfig = { key: CallingsSortKey; direction: "asc" | "desc" } | null;
+
+const CALLINGS_PER_PAGE = 10;
+
 export function CallingsTab() {
   const [expandedIds, toggleExpand] = useSetToggle<number>();
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCalling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiCalling | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState<CallingsSortConfig>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: callings = [], isLoading: callingsLoading } = useQuery<ApiCalling[]>({
     queryKey: ["/api/callings/"],
@@ -372,6 +389,37 @@ export function CallingsTab() {
     }
     return map;
   }, [users]);
+
+  const filteredCallings = useMemo(() => {
+    return callings
+      .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .sort((a, b) => {
+        if (!sortConfig) return 0;
+        const { key, direction } = sortConfig;
+        let va: string | number = 0, vb: string | number = 0;
+        if (key === "name") { va = a.name; vb = b.name; }
+        else if (key === "max_slots") { va = a.max_slots; vb = b.max_slots; }
+        else if (key === "is_public") { va = a.is_public ? 1 : 0; vb = b.is_public ? 1 : 0; }
+        const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+        return direction === "asc" ? cmp : -cmp;
+      });
+  }, [callings, searchTerm, sortConfig]);
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, sortConfig]);
+
+  const totalPages = Math.ceil(filteredCallings.length / CALLINGS_PER_PAGE);
+  const paginatedCallings = filteredCallings.slice(
+    (currentPage - 1) * CALLINGS_PER_PAGE,
+    currentPage * CALLINGS_PER_PAGE,
+  );
+
+  const handleSort = (key: CallingsSortKey) => {
+    setSortConfig((prev) =>
+      prev?.key === key && prev.direction === "asc"
+        ? { key, direction: "desc" }
+        : { key, direction: "asc" },
+    );
+  };
 
   const addMutation = useMutation({
     mutationFn: (form: CallingForm) => apiRequest("POST", "/api/callings/", form),
@@ -411,134 +459,170 @@ export function CallingsTab() {
     },
   });
 
-  if (callingsLoading || usersLoading) {
-    return (
-      <div className="py-16 text-center text-muted-foreground text-sm">
-        Loading callings…
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {callings.length} calling{callings.length !== 1 ? "s" : ""}
-        </p>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <Plus className="size-4 mr-1" />
-          Add Calling
-        </Button>
+    <>
+    <div className="overflow-hidden rounded-lg border bg-card">
+
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="border-0 bg-transparent pl-10 shadow-none focus-visible:ring-0"
+            placeholder="Search callings..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs" size="sm">
+                Sort by
+                <ArrowUpDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Sort Columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleSort("name")}>Name</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSort("max_slots")}>Slots</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSort("is_public")}>Visibility</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button className="h-8 gap-1.5 px-3 text-xs" size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="size-3.5" />
+            Add Calling
+          </Button>
+        </div>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8" />
-              <TableHead>Name</TableHead>
-              <TableHead className="w-24 text-center">Slots</TableHead>
-              <TableHead className="w-28">Visibility</TableHead>
-              <TableHead className="w-24 text-right pr-4">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {callings.map((calling) => {
-              const isExpanded = expandedIds.has(calling.id);
-              const slots = Array.from({ length: calling.max_slots }, (_, i) => i + 1);
-
-              return (
-                <Fragment key={calling.id}>
-                  <TableRow
-                    className="cursor-pointer"
-                    onClick={() => toggleExpand(calling.id)}
-                  >
-                    <TableCell className="w-8 pl-3">
-                      {isExpanded ? (
-                        <ChevronDown className="size-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="size-4 text-muted-foreground" />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{calling.name}</TableCell>
-                    <TableCell className="text-center text-sm">
-                      {calling.max_slots}
-                    </TableCell>
-                    <TableCell>
-                      <span className={calling.is_public ? "text-sm font-medium text-success" : "text-sm text-muted-foreground"}>
-                        {calling.is_public ? "Public" : "Private"}
-                      </span>
-                    </TableCell>
-                    <TableCell
-                      className="text-right pr-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="inline-flex gap-1">
-                        {calling.system_defined ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex gap-1">
-                                <Button variant="ghost" size="icon" disabled className="size-8">
-                                  <Pencil className="size-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" disabled className="size-8">
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>System callings cannot be modified</TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              onClick={() => setEditTarget(calling)}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-destructive hover:text-destructive"
-                              onClick={() => setDeleteTarget(calling)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </>
-                        )}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-
-                  {isExpanded &&
-                    slots.map((slot) => (
-                      <SlotRow
-                        key={slot}
-                        callingId={calling.id}
-                        slot={slot}
-                        occupant={occupantMap.get(`${calling.id}:${slot}`)}
-                        activeUsers={unassignedActiveUsers}
-                      />
-                    ))}
-                </Fragment>
-              );
-            })}
-
-            {callings.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-12 text-center text-muted-foreground text-sm"
-                >
-                  No callings found.
-                </TableCell>
+      {/* Table */}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8 text-xs" />
+            <TableHead className="text-xs">Name</TableHead>
+            <TableHead className="w-24 text-center text-xs">Slots</TableHead>
+            <TableHead className="w-28 text-xs">Visibility</TableHead>
+            <TableHead className="w-24 text-right pr-4 text-xs">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {(callingsLoading || usersLoading) ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-8 mx-auto" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-7 ml-auto" /></TableCell>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            ))
+          ) : (
+            <>
+              {paginatedCallings.map((calling) => {
+                const isExpanded = expandedIds.has(calling.id);
+                const slots = Array.from({ length: calling.max_slots }, (_, i) => i + 1);
+
+                return (
+                  <Fragment key={calling.id}>
+                    <TableRow
+                      className="cursor-pointer"
+                      onClick={() => toggleExpand(calling.id)}
+                    >
+                      <TableCell className="w-8 pl-3">
+                        {isExpanded ? (
+                          <ChevronDown className="size-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="size-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{calling.name}</TableCell>
+                      <TableCell className="text-center text-sm">
+                        {calling.max_slots}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`size-1.5 rounded-full ${calling.is_public ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                          <span className="text-xs text-muted-foreground">{calling.is_public ? "Public" : "Private"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        className="text-right pr-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button className="size-7" size="sm" variant="ghost">
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onSelect={() => !calling.system_defined && setEditTarget(calling)}
+                              disabled={calling.system_defined}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onSelect={() => !calling.system_defined && setDeleteTarget(calling)}
+                              disabled={calling.system_defined}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+
+                    {isExpanded &&
+                      slots.map((slot) => (
+                        <SlotRow
+                          key={slot}
+                          callingId={calling.id}
+                          slot={slot}
+                          occupant={occupantMap.get(`${calling.id}:${slot}`)}
+                          activeUsers={unassignedActiveUsers}
+                        />
+                      ))}
+                  </Fragment>
+                );
+              })}
+
+              {filteredCallings.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="py-12 text-center text-muted-foreground text-sm"
+                  >
+                    {searchTerm ? "No callings match your search." : "No callings found."}
+                  </TableCell>
+                </TableRow>
+              )}
+            </>
+          )}
+        </TableBody>
+      </Table>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t px-4 py-3">
+        <p className="text-xs text-muted-foreground">
+          {filteredCallings.length === 0
+            ? "No callings found"
+            : `Showing ${(currentPage - 1) * CALLINGS_PER_PAGE + 1}–${Math.min(currentPage * CALLINGS_PER_PAGE, filteredCallings.length)} of ${filteredCallings.length} calling${filteredCallings.length !== 1 ? "s" : ""}`}
+        </p>
+        {totalPages > 1 && (
+          <div className="flex gap-2">
+            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+          </div>
+        )}
       </div>
+    </div>
 
       <CallingDialog
         open={addOpen}
@@ -586,6 +670,6 @@ export function CallingsTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
