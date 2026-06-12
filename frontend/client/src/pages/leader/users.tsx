@@ -676,7 +676,7 @@ const PermissionsDialog = memo(function PermissionsDialog({
                         return (
                           <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
                             {active
-                              ? <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
+                              ? <CheckCircle2 className="mr-2 size-4 text-primary" />
                               : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
                             <span className="text-sm">{label}</span>
                           </CommandItem>
@@ -694,7 +694,7 @@ const PermissionsDialog = memo(function PermissionsDialog({
                 </CommandItem>
                 {callings.map((calling) => {
                   const freeSlots = Array.from({ length: calling.max_slots }, (_, i) => i + 1)
-                    .filter((s) => !(occupiedSlotsMap.get(calling.id) ?? new Set()).has(s));
+                    .filter((s) => !(occupiedSlotsMap.get(calling.id)?.has(s) ?? false));
                   if (freeSlots.length === 0) return null;
 
                   if (calling.max_slots === 1) {
@@ -1029,8 +1029,8 @@ export function UserAdminContent() {
   const setPermissionsMutation = useMutation({
     mutationFn: ({ userId, scopes }: { userId: number; scopes: number }) =>
       apiRequest("PUT", `/api/users/${userId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/users/${permissionsUserId}/permissions`] });
+    onSuccess: (_data, { userId }) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${userId}/permissions`] });
     },
     onError: (err: unknown) => {
       console.error("[users] setPermissionsMutation error:", err);
@@ -1096,7 +1096,19 @@ export function UserAdminContent() {
       setIsAddingUser(false);
       setAddWizard(INITIAL_WIZARD_STATE);
     },
-    onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
+    onError: (err: unknown) => {
+      console.error("[users] createUserMutation error:", err);
+      const status = apiErrorStatus(err);
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Create Failed", { description: "Insufficient permissions to create users." });
+      } else if (status === 409) {
+        toast.error("Create Failed", { description: "A user with that email or phone already exists." });
+      } else {
+        toast.error("Create Failed", { description: "Could not create user." });
+      }
+    },
   });
 
   const resetPasswordMutation = useMutation({
@@ -1351,7 +1363,7 @@ export function UserAdminContent() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <span className={`size-1.5 rounded-full ${user.active ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                    <span className={`size-1.5 rounded-full ${user.active ? "bg-primary" : "bg-muted-foreground/40"}`} />
                     <span className="text-xs text-muted-foreground">{user.active ? "Active" : "Inactive"}</span>
                   </div>
                 </TableCell>

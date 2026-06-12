@@ -28,6 +28,7 @@ from ..db import get_session
 from ..utils import (
     CallingUser,
     user_has_permission,
+    get_user_effective_permissions,
     build_permissions_response,
     hash_password,
     validate_unique_field,
@@ -235,7 +236,7 @@ def get_user_permissions(
     user_id: int,
     session: Session = Depends(get_session),
     calling_user: User = Depends(CallingUser())
-):
+) -> PermissionsResponse:
     can_manage_user_or_throw(user_id, calling_user, session)
 
     row = session.exec(
@@ -257,7 +258,7 @@ def update_user_permissions(
     data: PermissionsUpdateRequest,
     session: Session = Depends(get_session),
     calling_user: User = Depends(CallingUser())
-):
+) -> PermissionsResponse:
     if not user_has_permission(calling_user, Permission.MANAGE_USERS, session):
         raise HTTPException(status_code=403, detail="Insufficient permissions to manage users.")
 
@@ -265,7 +266,7 @@ def update_user_permissions(
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    clean_scopes = data.scopes & ~Permission.DISCORD_BOT
+    clean_scopes = data.scopes & get_user_effective_permissions(calling_user, session)
 
     row = session.exec(
         select(Permissions).where(

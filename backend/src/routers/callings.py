@@ -2,7 +2,7 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, delete, select
-from ..utils import CallingUser, get_or_make_user_calling, HC_CALLING_NAME, build_permissions_response
+from ..utils import CallingUser, get_or_make_user_calling, HC_CALLING_NAME, build_permissions_response, get_user_effective_permissions
 from ..db import get_session
 from ..models import Calling, Permission, BaseModel, UserCalling, Permissions, PermissionsResponse, PermissionsUpdateRequest, User, ResponseSafeUser, Assignment
 
@@ -167,13 +167,13 @@ def update_calling_permissions(
     calling_id: int,
     data: PermissionsUpdateRequest,
     session: Session = Depends(get_session),
-    _: User = Depends(CallingUser(permissions=[Permission.MANAGE_CALLINGS]))
+    calling_user: User = Depends(CallingUser(permissions=[Permission.MANAGE_CALLINGS]))
 ) -> PermissionsResponse:
     calling = session.get(Calling, calling_id)
     if not calling:
         raise HTTPException(status_code=404, detail="Calling not found.")
 
-    clean_scopes = data.scopes & ~Permission.DISCORD_BOT
+    clean_scopes = data.scopes & get_user_effective_permissions(calling_user, session)
 
     row = session.exec(
         select(Permissions).where(

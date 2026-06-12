@@ -162,6 +162,7 @@ export interface ApiUserPermissions {
   flags: string[];
 }
 
+// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) intentionally excluded.
 export const ASSIGNABLE_PERMISSIONS = [
   { flag: 1,  label: "Manage Users" },
   { flag: 2,  label: "Manage Callings" },
