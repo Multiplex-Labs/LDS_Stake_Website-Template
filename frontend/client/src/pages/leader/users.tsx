@@ -75,6 +75,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
 
 type SortKey = "name" | "active" | "email";
@@ -566,16 +567,6 @@ function popcount(n: number): number {
   while (v) { count += v & 1; v >>>= 1; }
   return count;
 }
-
-const ASSIGNABLE_PERMISSIONS = [
-  { flag: 1,  label: "Manage Users" },
-  { flag: 2,  label: "Manage Callings" },
-  { flag: 4,  label: "Manage Assignments" },
-  { flag: 8,  label: "Manage Speaking Schedule" },
-  { flag: 16, label: "Submit Calling Proposals" },
-  { flag: 32, label: "Manage Calling Proposals" },
-  { flag: 64, label: "View Calling Proposals" },
-] as const;
 
 interface PermissionsDialogProps {
   open: boolean;

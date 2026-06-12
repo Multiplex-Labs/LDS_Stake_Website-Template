@@ -18,6 +18,8 @@ from ..models import (
     User,
     Permission,
     Permissions,
+    PermissionsResponse,
+    PermissionsUpdateRequest,
     UserSession,
     Calling,
     UserCalling
@@ -26,6 +28,7 @@ from ..db import get_session
 from ..utils import (
     CallingUser,
     user_has_permission,
+    build_permissions_response,
     hash_password,
     validate_unique_field,
     verify_password
@@ -166,15 +169,6 @@ class PasswordUpdateRequest(SQLModel):
         return _check_password_complexity(v)
 
 
-class PermissionsResponse(SQLModel):
-    scopes: int
-    flags: list[str]
-
-
-class PermissionsUpdateRequest(SQLModel):
-    scopes: int
-
-
 @router.patch("/{user_id}/password")
 def update_user_password(
     user_id: int,
@@ -236,16 +230,6 @@ def delete_user(
     return None
 
 
-def _build_permissions_response(stored_scopes: int) -> PermissionsResponse:
-    """Build a PermissionsResponse from a raw scopes bitmask, excluding DISCORD_BOT."""
-    flags = [
-        perm.name
-        for perm in Permission
-        if perm is not Permission.DISCORD_BOT and (stored_scopes & perm)
-    ]
-    return PermissionsResponse(scopes=stored_scopes, flags=flags)
-
-
 @router.get("/{user_id}/permissions")
 def get_user_permissions(
     user_id: int,
@@ -264,7 +248,7 @@ def get_user_permissions(
     if row is None:
         return PermissionsResponse(scopes=0, flags=[])
 
-    return _build_permissions_response(row.scopes)
+    return build_permissions_response(row.scopes)
 
 
 @router.put("/{user_id}/permissions")
@@ -303,7 +287,7 @@ def update_user_permissions(
     session.commit()
     session.refresh(row)
 
-    return _build_permissions_response(row.scopes)
+    return build_permissions_response(row.scopes)
 
 
 class DiscordUserEmailResponse(SQLModel):

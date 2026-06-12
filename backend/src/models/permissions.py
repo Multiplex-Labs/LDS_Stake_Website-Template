@@ -1,5 +1,5 @@
 from enum import IntFlag, auto
-from sqlmodel import Field, UniqueConstraint
+from sqlmodel import Field, SQLModel, UniqueConstraint
 from typing import Optional
 
 from .base import BaseModel
@@ -42,5 +42,14 @@ class Permissions(BaseModel, table=True):
     def revoke_permission(self, perm: Permission) -> None:
         """Revoke a specific permission from the Permissions."""
         self.scopes &= ~perm
+
+
+class PermissionsResponse(SQLModel):
+    scopes: int
+    flags: list[str]
+
+
+class PermissionsUpdateRequest(SQLModel):
+    scopes: int
 
 

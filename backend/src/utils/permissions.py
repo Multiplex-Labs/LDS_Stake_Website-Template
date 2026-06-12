@@ -1,6 +1,15 @@
 from typing import List
 from sqlmodel import Session, col, select
-from ..models import Permissions, Permission, User
+from ..models import Permissions, Permission, PermissionsResponse, User
+
+def build_permissions_response(stored_scopes: int) -> PermissionsResponse:
+    flags = [
+        perm.name
+        for perm in Permission
+        if perm is not Permission.DISCORD_BOT and (stored_scopes & perm)
+    ]
+    return PermissionsResponse(scopes=stored_scopes, flags=flags)
+
 
 def user_has_permission(
         user: User,

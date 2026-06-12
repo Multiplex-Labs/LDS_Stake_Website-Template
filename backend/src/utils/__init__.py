@@ -18,7 +18,7 @@ from .db import (
 
 from .time import format_datetime_http
 
-from .permissions import user_has_permission
+from .permissions import user_has_permission, build_permissions_response
 
 from .usercalling import get_or_make_user_calling, get_or_make_hc_assignment, user_has_calling, HC_CALLING_NAME, BISHOP_CALLING_NAME
 
