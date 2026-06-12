@@ -79,6 +79,8 @@ import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
 
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
+
+const USERS_PER_PAGE = 10;
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface EditForm {
@@ -846,7 +848,6 @@ export function UserAdminContent() {
       });
   }, [users, searchTerm, sortConfig]);
 
-  const USERS_PER_PAGE = 10;
   useEffect(() => { setCurrentPage(1); }, [searchTerm, sortConfig]);
   const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
   const paginatedUsers = filteredUsers.slice(

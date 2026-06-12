@@ -396,7 +396,7 @@ export function CallingsTab() {
       .sort((a, b) => {
         if (!sortConfig) return 0;
         const { key, direction } = sortConfig;
-        let va: string | number = 0, vb: string | number = 0;
+        let va: string | number = "", vb: string | number = "";
         if (key === "name") { va = a.name; vb = b.name; }
         else if (key === "max_slots") { va = a.max_slots; vb = b.max_slots; }
         else if (key === "is_public") { va = a.is_public ? 1 : 0; vb = b.is_public ? 1 : 0; }
@@ -561,7 +561,7 @@ export function CallingsTab() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem
-                              onSelect={() => !calling.system_defined && setEditTarget(calling)}
+                              onSelect={() => setEditTarget(calling)}
                               disabled={calling.system_defined}
                             >
                               Edit
@@ -569,7 +569,7 @@ export function CallingsTab() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive"
-                              onSelect={() => !calling.system_defined && setDeleteTarget(calling)}
+                              onSelect={() => setDeleteTarget(calling)}
                               disabled={calling.system_defined}
                             >
                               Delete
