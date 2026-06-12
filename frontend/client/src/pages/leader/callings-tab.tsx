@@ -58,11 +58,15 @@ import {
   UserPlus,
   X,
   ChevronsUpDown,
+  CheckCircle2,
+  Circle,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
-import type { ApiCalling, ApiUser } from "@/types";
+import { ASSIGNABLE_PERMISSIONS } from "@/types";
+import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
 
 interface CallingForm {
   name: string;
@@ -351,11 +355,79 @@ type CallingsSortConfig = { key: CallingsSortKey; direction: "asc" | "desc" } | 
 
 const CALLINGS_PER_PAGE = 10;
 
+function CallingPermissionsDialog({
+  open,
+  calling,
+  permissions,
+  permissionsLoading,
+  onClose,
+  onTogglePermission,
+}: {
+  open: boolean;
+  calling: ApiCalling | null;
+  permissions: ApiUserPermissions;
+  permissionsLoading: boolean;
+  onClose: () => void;
+  onTogglePermission: (newScopes: number) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md [&>button:last-child]:hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Permissions — {calling?.name ?? ""}</DialogTitle>
+        </DialogHeader>
+        <Command>
+          <div className="border-b px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Shield className="size-4 text-primary" />
+              <span className="font-medium text-sm">Permissions — {calling?.name ?? ""}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              All holders of this calling inherit these permissions.
+            </p>
+          </div>
+          <CommandInput placeholder="Search permissions…" />
+          <CommandList className="max-h-[320px]">
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup heading="Inherited Permissions">
+              {permissionsLoading
+                ? Array.from({ length: 7 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 rounded-md mx-2 my-0.5" />
+                  ))
+                : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+                    const active = (permissions.scopes & flag) !== 0;
+                    return (
+                      <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
+                        {active
+                          ? <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
+                          : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
+                        <span className="text-sm">{label}</span>
+                      </CommandItem>
+                    );
+                  })}
+            </CommandGroup>
+          </CommandList>
+          <div className="flex items-center justify-end border-t px-4 py-2">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CallingsTab() {
   const [expandedIds, toggleExpand] = useSetToggle<number>();
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCalling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiCalling | null>(null);
+  const [permissionsTarget, setPermissionsTarget] = useState<ApiCalling | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<CallingsSortConfig>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -366,6 +438,12 @@ export function CallingsTab() {
 
   const { data: users = [], isLoading: usersLoading } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
+  });
+
+  const { data: callingPermissionsData, isLoading: callingPermissionsLoading } = useQuery<ApiUserPermissions>({
+    queryKey: [`/api/callings/${permissionsTarget?.id}/permissions`],
+    queryFn: () => apiRequest("GET", `/api/callings/${permissionsTarget!.id}/permissions`).then(r => r.json()),
+    enabled: permissionsTarget !== null,
   });
 
   const activeUsers = useMemo(() => users.filter((u) => u.active), [users]);
@@ -456,6 +534,18 @@ export function CallingsTab() {
       } else {
         toast.error("Failed to delete calling.");
       }
+    },
+  });
+
+  const setCallingPermissionsMutation = useMutation({
+    mutationFn: ({ callingId, scopes }: { callingId: number; scopes: number }) =>
+      apiRequest("PUT", `/api/callings/${callingId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
+    onSuccess: (_data, { callingId }) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/callings/${callingId}/permissions`] });
+    },
+    onError: (err: unknown) => {
+      console.error("[callings-tab] setCallingPermissionsMutation error:", err);
+      toast.error("Failed to update permissions");
     },
   });
 
@@ -566,6 +656,12 @@ export function CallingsTab() {
                             >
                               Edit
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setPermissionsTarget(calling)}
+                              disabled={calling.system_defined}
+                            >
+                              Permissions
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive"
@@ -643,6 +739,18 @@ export function CallingsTab() {
           isPending={editMutation.isPending}
         />
       )}
+
+      <CallingPermissionsDialog
+        open={permissionsTarget !== null}
+        calling={permissionsTarget}
+        permissions={callingPermissionsData ?? { scopes: 0, flags: [] }}
+        permissionsLoading={callingPermissionsLoading}
+        onClose={() => setPermissionsTarget(null)}
+        onTogglePermission={(newScopes) => {
+          if (permissionsTarget === null) return;
+          setCallingPermissionsMutation.mutate({ callingId: permissionsTarget.id, scopes: newScopes });
+        }}
+      />
 
       <AlertDialog
         open={!!deleteTarget}

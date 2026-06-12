@@ -2,9 +2,9 @@
 from logging import getLogger
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, delete, select
-from ..utils import CallingUser, get_or_make_user_calling, HC_CALLING_NAME
+from ..utils import CallingUser, get_or_make_user_calling, HC_CALLING_NAME, build_permissions_response
 from ..db import get_session
-from ..models import Calling, Permission, BaseModel, UserCalling, Permissions, User, ResponseSafeUser, Assignment
+from ..models import Calling, Permission, BaseModel, UserCalling, Permissions, PermissionsResponse, PermissionsUpdateRequest, User, ResponseSafeUser, Assignment
 
 logger = getLogger("application")
 
@@ -143,6 +143,59 @@ def delete_calling(
         session.delete(calling)
         session.commit()
     return None
+
+@router.get("/{calling_id}/permissions")
+def get_calling_permissions(
+    calling_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=[Permission.MANAGE_CALLINGS]))
+) -> PermissionsResponse:
+    row = session.exec(
+        select(Permissions).where(
+            Permissions.foreign_id == str(calling_id),
+            Permissions.is_calling == True
+        )
+    ).first()
+
+    if row is None:
+        return PermissionsResponse(scopes=0, flags=[])
+
+    return build_permissions_response(row.scopes)
+
+@router.put("/{calling_id}/permissions")
+def update_calling_permissions(
+    calling_id: int,
+    data: PermissionsUpdateRequest,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=[Permission.MANAGE_CALLINGS]))
+) -> PermissionsResponse:
+    calling = session.get(Calling, calling_id)
+    if not calling:
+        raise HTTPException(status_code=404, detail="Calling not found.")
+
+    clean_scopes = data.scopes & ~Permission.DISCORD_BOT
+
+    row = session.exec(
+        select(Permissions).where(
+            Permissions.foreign_id == str(calling_id),
+            Permissions.is_calling == True
+        )
+    ).first()
+
+    if row is None:
+        row = Permissions(
+            foreign_id=str(calling_id),
+            is_calling=True,
+            scopes=clean_scopes
+        )
+    else:
+        row.scopes = clean_scopes
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    return build_permissions_response(row.scopes)
 
 @router.get("/{calling_id}/{slot_id}")
 def get_calling_slot(
