@@ -10,7 +10,7 @@ from src.models import Calling, Permissions, Permission, PresidencyAssignment, U
 from src.routers.presidency import _parse_responsibilities, _parse_wards_overseen
 
 
-PRESIDENCY_CALLING_NAMES = {"Stake President", "First Counselor", "Second Counselor"}
+PRESIDENCY_CALLING_NAMES = {"Stake President", "Stake First Counselor", "Stake Second Counselor"}
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +111,9 @@ def test_put_success_and_round_trip(
     admin_user, admin_password = admin
     headers = auth_headers(client, admin_user.email, admin_password)
 
-    # Find the calling_id for "First Counselor"
+    # Find the calling_id for "Stake First Counselor"
     calling = db_session.exec(
-        select(Calling).where(Calling.name == "First Counselor")
+        select(Calling).where(Calling.name == "Stake First Counselor")
     ).first()
     assert calling is not None
 
@@ -128,7 +128,7 @@ def test_put_success_and_round_trip(
     )
     assert r.status_code == 200, f"PUT failed: {r.text}"
     body = r.json()
-    assert body["calling_name"] == "First Counselor"
+    assert body["calling_name"] == "Stake First Counselor"
     assert body["responsibilities"] == ["Sunday School", "Emergency Preparedness"]
     assert body["wards_overseen"] == []
 
@@ -136,7 +136,7 @@ def test_put_success_and_round_trip(
     r2 = client.get("/presidency-assignments/", headers=headers)
     assert r2.status_code == 200
     fc_row = next(
-        (item for item in r2.json() if item["calling_name"] == "First Counselor"), None
+        (item for item in r2.json() if item["calling_name"] == "Stake First Counselor"), None
     )
     assert fc_row is not None
     assert fc_row["responsibilities"] == ["Sunday School", "Emergency Preparedness"]
@@ -209,7 +209,7 @@ def test_put_invalid_ward_id_returns_400(
     headers = auth_headers(client, admin_user.email, admin_password)
 
     calling = db_session.exec(
-        select(Calling).where(Calling.name == "Second Counselor")
+        select(Calling).where(Calling.name == "Stake Second Counselor")
     ).first()
     assert calling is not None
 
@@ -233,9 +233,9 @@ def test_put_with_ward_ids_round_trip(
     admin_user, admin_password = admin
     headers = auth_headers(client, admin_user.email, admin_password)
 
-    # Find the calling_id for "First Counselor"
+    # Find the calling_id for "Stake First Counselor"
     calling = db_session.exec(
-        select(Calling).where(Calling.name == "First Counselor")
+        select(Calling).where(Calling.name == "Stake First Counselor")
     ).first()
     assert calling is not None
 
@@ -262,7 +262,7 @@ def test_put_with_ward_ids_round_trip(
     r2 = client.get("/presidency-assignments/", headers=headers)
     assert r2.status_code == 200
     fc_row = next(
-        (item for item in r2.json() if item["calling_name"] == "First Counselor"), None
+        (item for item in r2.json() if item["calling_name"] == "Stake First Counselor"), None
     )
     assert fc_row is not None
     assert fc_row["wards_overseen"] == [1, 2]
@@ -281,7 +281,7 @@ def test_legacy_comma_string_responsibilities(
     headers = auth_headers(client, user.email, password)
 
     calling = db_session.exec(
-        select(Calling).where(Calling.name == "Second Counselor")
+        select(Calling).where(Calling.name == "Stake Second Counselor")
     ).first()
     assert calling is not None
 
@@ -301,7 +301,7 @@ def test_legacy_comma_string_responsibilities(
     assert r.status_code == 200
 
     sc_row = next(
-        (item for item in r.json() if item["calling_name"] == "Second Counselor"), None
+        (item for item in r.json() if item["calling_name"] == "Stake Second Counselor"), None
     )
     assert sc_row is not None
     assert sc_row["responsibilities"] == ["Sunday School", "Emergency Preparedness"]
@@ -441,7 +441,7 @@ def test_put_filters_blank_responsibilities(
     headers = auth_headers(client, admin_user.email, admin_password)
 
     calling = db_session.exec(
-        select(Calling).where(Calling.name == "First Counselor")
+        select(Calling).where(Calling.name == "Stake First Counselor")
     ).first()
     assert calling is not None
 

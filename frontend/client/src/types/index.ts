@@ -32,6 +32,15 @@ export interface ApiCalling {
   max_slots: number;
   is_public: boolean;
   system_defined: boolean;
+  /**
+   * `display_group` and `display_order` are always null or non-null together.
+   * A calling is only shown on the public leadership page when both are set
+   * and `is_public` is true. Treat either being null as "ungrouped / hidden".
+   */
+  display_group: string | null;
+  display_order: number | null;
+  group_order: number | null;
+  lock_slots: boolean;
 }
 
 export interface ApiUserCalling {

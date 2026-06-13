@@ -1,9 +1,13 @@
+import csv
+import os
+import tempfile
 from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from src.models import Permission, Permissions, SpeakingAssignment, UserCalling
+from src.utils.speaking_assignments import load_speaking_schedule
 
 
 def make_schedule(rows: int = 15, cols: int = 12):
@@ -104,4 +108,60 @@ def test_override_requires_permission_and_updates(client, db_session, userpass, 
             break
     assert speaker is not None
     assert speaker["assignments"][payload["month"] - 1]["ward_id"] == 999
+
+
+# ---------------------------------------------------------------------------
+# B5 — load_speaking_schedule() truncate and pad behaviour
+# ---------------------------------------------------------------------------
+
+def test_load_speaking_schedule_truncates_extra_rows(client, high_councilor_calling):
+    """When the CSV has more rows than HC slots, the result is truncated to max_slots."""
+    slots = high_councilor_calling.max_slots
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    old_val = os.environ.get("SPEAKING_SCHEDULE_CSV_PATH")
+    try:
+        with open(tmp_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            for _ in range(slots + 5):
+                writer.writerow([str(i) for i in range(1, 13)])
+        os.environ["SPEAKING_SCHEDULE_CSV_PATH"] = tmp_path
+        result = load_speaking_schedule()
+        assert len(result) == slots
+        assert len(result[0]) == 12
+    finally:
+        if old_val is None:
+            os.environ.pop("SPEAKING_SCHEDULE_CSV_PATH", None)
+        else:
+            os.environ["SPEAKING_SCHEDULE_CSV_PATH"] = old_val
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_load_speaking_schedule_pads_missing_rows(client, high_councilor_calling):
+    """When the CSV has fewer rows than HC slots, the result is padded with distinct empty lists."""
+    slots = high_councilor_calling.max_slots
+    real_rows = 5
+    fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    old_val = os.environ.get("SPEAKING_SCHEDULE_CSV_PATH")
+    try:
+        with open(tmp_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            for i in range(real_rows):
+                writer.writerow([str(i + 1)] * 12)
+        os.environ["SPEAKING_SCHEDULE_CSV_PATH"] = tmp_path
+        result = load_speaking_schedule()
+        assert len(result) == slots
+        assert result[real_rows - 1] != [""] * 12
+        for idx in range(real_rows, slots):
+            assert result[idx] == [""] * 12
+        assert result[real_rows] is not result[real_rows + 1]
+    finally:
+        if old_val is None:
+            os.environ.pop("SPEAKING_SCHEDULE_CSV_PATH", None)
+        else:
+            os.environ["SPEAKING_SCHEDULE_CSV_PATH"] = old_val
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 

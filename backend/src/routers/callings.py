@@ -57,7 +57,10 @@ def create_calling(
         name=data.name,
         max_slots=data.max_slots,
         is_public=data.is_public,
-        system_defined=False
+        system_defined=False,
+        display_group=data.display_group,
+        display_order=data.display_order,
+        group_order=data.group_order,
     )
     session.add(new_calling)
     session.commit()
@@ -113,6 +116,9 @@ def update_calling(
     calling.name = data.name
     calling.max_slots = data.max_slots
     calling.is_public = data.is_public
+    calling.display_group = data.display_group
+    calling.display_order = data.display_order
+    calling.group_order = data.group_order
 
     session.add(calling)
     session.commit()
@@ -282,6 +288,8 @@ def unassign_calling_slot(
     calling = session.get(Calling, calling_id)
     if calling is None:
         raise HTTPException(status_code=404, detail="Calling not found")
+    if calling.lock_slots:
+        raise HTTPException(status_code=403, detail="This calling's slot assignments are locked and cannot be removed.")
     if slot_id < 1 or slot_id > calling.max_slots:
         raise HTTPException(status_code=400, detail="Slot ID is out of range for this calling.")
     existing_assignment = session.exec(

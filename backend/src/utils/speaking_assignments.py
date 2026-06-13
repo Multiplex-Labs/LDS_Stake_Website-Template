@@ -64,14 +64,23 @@ def load_speaking_schedule() -> list[list[str]]:
             )
             return []
         slots = high_councilor_calling.max_slots
-        if len(schedule) != slots:
+        if len(schedule) > slots:
             logger.warning(
-                f"Speaking schedule has {len(schedule)} rows but the High Councilor calling has {slots} slots."
-                "Speaking assignment slots will be disabled until the mismatch is resolved."
-                "To fix this, adjust the number of rows in the schedule to match the number of slots in the High Councilor calling."
+                f"Speaking schedule CSV has {len(schedule)} rows but the High Councilor calling has {slots} slots. "
+                f"Truncating to {slots} rows."
             )
-            return []
-    logger.info(f"Loaded speaking schedule with {len(schedule)} rows and {len(schedule[0])} columns")
+            schedule = schedule[:slots]
+        elif len(schedule) < slots:
+            logger.warning(
+                f"Speaking schedule CSV has {len(schedule)} rows but the High Councilor calling has {slots} slots. "
+                f"Padding {slots - len(schedule)} missing rows with empty assignments."
+            )
+            cols = len(schedule[0]) if schedule else 12
+            schedule += [[""] * cols for _ in range(slots - len(schedule))]
+    if schedule:
+        logger.info(f"Loaded speaking schedule with {len(schedule)} rows and {len(schedule[0])} columns")
+    else:
+        logger.warning("Speaking schedule is empty after truncation/padding.")
     return schedule
 
 
