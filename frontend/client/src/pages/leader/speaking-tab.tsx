@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon } from "lucide-react";
+import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon, PencilLine, ClipboardClock } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,7 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
         disabled={year <= YEAR_OPTIONS[0]}
         onClick={() => onChange(year - 1)}
         aria-label="Previous year"
+        className="text-muted-foreground/50 hover:text-foreground transition-colors"
       >
         <ChevronLeftIcon className="size-4" />
       </Button>
@@ -85,6 +86,7 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
         disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
         onClick={() => onChange(year + 1)}
         aria-label="Next year"
+        className="text-muted-foreground/50 hover:text-foreground transition-colors"
       >
         <ChevronRightIcon className="size-4" />
       </Button>
@@ -257,7 +259,7 @@ export function SpeakingTab() {
           {/* Header */}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-3">
-              <CalendarIcon className="size-5 text-muted-foreground" />
+              <PencilLine className="size-5 text-muted-foreground" />
               <p className="font-semibold text-sm">Speaking Topics</p>
             </div>
             <YearNav year={year} onChange={handleYearChange} />
@@ -354,7 +356,7 @@ export function SpeakingTab() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8"
+                        className="h-8 hover:scale-105 hover:shadow-lg transition-all duration-200"
                         onClick={() =>
                           setEdits((prev) => ({
                             ...prev,
@@ -370,7 +372,7 @@ export function SpeakingTab() {
                     ) : (
                       <Button
                         size="sm"
-                        className="h-8"
+                        className="h-8 hover:scale-105 hover:shadow-lg transition-all duration-200"
                         disabled={!row.topic.trim() || isSaving || isAnyBatchSaving}
                         onClick={() => saveTopicMutation.mutate({ monthIdx, topic: row.topic, ref: row.ref })}
                       >
@@ -402,7 +404,7 @@ export function SpeakingTab() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 hover:scale-105 hover:shadow-lg transition-all duration-200"
               disabled={savableCount === 0 || saveAllMutation.isPending}
               onClick={() =>
                 saveAllMutation.mutate({
@@ -429,7 +431,7 @@ export function SpeakingTab() {
           {/* Card header */}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-3">
-              <CalendarIcon className="size-5 text-muted-foreground" />
+              <ClipboardClock className="size-5 text-muted-foreground" />
               <div>
                 <p className="font-semibold text-sm">Ward Schedule</p>
               </div>
