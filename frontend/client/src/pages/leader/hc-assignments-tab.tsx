@@ -25,7 +25,7 @@ import { User, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { HC_CALLING_NAME, ICON_BTN_HOVER } from "@/lib/constants";
-import { fullName, parseCommaList, cn } from "@/lib/utils";
+import { fullName, parseCommaList, cn, apiErrorStatus } from "@/lib/utils";
 import { useChipInput } from "@/hooks/useChipInput";
 import { ChipInput } from "@/components/ui/chip-input";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
@@ -135,7 +135,14 @@ export function HCAssignmentsTab() {
     },
     onError: (err: Error) => {
       console.error("[hc-assignments-tab] save:", err);
-      toast.error("Failed to save assignment.");
+      const status = apiErrorStatus(err);
+      if (status === 403) {
+        toast.error("You don't have permission to edit assignments.");
+      } else if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to save assignment.");
+      }
     },
   });
 

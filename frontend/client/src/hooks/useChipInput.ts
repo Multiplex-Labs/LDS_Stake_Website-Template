@@ -62,7 +62,7 @@ export function useChipInput(): UseChipInputResult {
   }
 
   function reset(newChips: string[]) {
-    setChips(newChips);
+    setChips(Array.from(new Set(newChips.map((s) => s.trim()).filter(Boolean))));
     setChipDraft("");
   }
 

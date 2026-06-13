@@ -1,11 +1,10 @@
-import { useState, useMemo, useEffect, useRef, Fragment } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useSetToggle } from "@/lib/hooks";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -15,13 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +55,6 @@ import {
   Circle,
   Shield,
   FileText,
-  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -71,6 +62,8 @@ import { apiErrorStatus, cn } from "@/lib/utils";
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
+import { WizardShell } from "@/components/ui/wizard-shell";
+import type { WizardStep } from "@/components/ui/wizard-shell";
 
 interface CallingForm {
   name: string;
@@ -275,9 +268,9 @@ function SlotRow({
 // ---------------------------------------------------------------------------
 
 const CALLING_WIZARD_STEPS = [
-  { id: 1 as const, label: "Basic Info",   description: "Name, slot count, and visibility settings.", icon: <FileText className="size-3.5" /> },
-  { id: 2 as const, label: "Permissions",  description: "Grant permissions to all holders of this calling.", icon: <Shield className="size-3.5" /> },
-] as const;
+  { id: 1, label: "Basic Info",   description: "Name, slot count, and visibility settings.", icon: <FileText className="size-3.5" /> },
+  { id: 2, label: "Permissions",  description: "Grant permissions to all holders of this calling.", icon: <Shield className="size-3.5" /> },
+] as const satisfies readonly WizardStep[];
 
 type CallingWizardStep = 1 | 2;
 
@@ -286,7 +279,6 @@ function CallingWizard({
   onOpenChange,
   initial,
   initialPermissions = 0,
-  permissionsLoading = false,
   onSave,
   isPending,
 }: {
@@ -294,7 +286,6 @@ function CallingWizard({
   onOpenChange: (v: boolean) => void;
   initial?: ApiCalling;
   initialPermissions?: number;
-  permissionsLoading?: boolean;
   onSave: (form: CallingForm, permissions: number) => void;
   isPending: boolean;
 }) {
@@ -306,14 +297,6 @@ function CallingWizard({
   );
   const [nameError, setNameError] = useState("");
   const [permissions, setPermissions] = useState(initialPermissions);
-  const permSyncedRef = useRef(false);
-
-  useEffect(() => {
-    if (!permissionsLoading && !permSyncedRef.current) {
-      permSyncedRef.current = true;
-      setPermissions(initialPermissions);
-    }
-  }, [initialPermissions, permissionsLoading]);
 
   const stepIndex = step - 1;
 
@@ -330,177 +313,92 @@ function CallingWizard({
     setStep(1);
   }
 
+  function handleStepSelect(id: number) {
+    setStep(id as CallingWizardStep);
+  }
+
+  const submitLabel = initial ? "Save Changes" : "Add Calling";
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] sm:max-w-md p-0 gap-0 overflow-hidden [&>button:last-child]:hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-muted-foreground">{CALLING_WIZARD_STEPS[stepIndex].icon}</span>
-            <div>
-              <span className="font-medium text-sm">{CALLING_WIZARD_STEPS[stepIndex].label}</span>
-              <p className="text-muted-foreground text-xs">Step {step} of {CALLING_WIZARD_STEPS.length}</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => onOpenChange(false)}>
-            <X className="size-3.5" />
-          </Button>
-        </div>
-
-        {/* Progress bar */}
-        <div className="flex gap-1 border-b px-4 py-2.5">
-          {CALLING_WIZARD_STEPS.map((s, index) => (
-            <div
-              key={s.id}
-              className={cn(
-                "h-1 flex-1 rounded-full transition-colors duration-300",
-                index < stepIndex
-                  ? "bg-primary"
-                  : index === stepIndex
-                  ? "bg-primary/60"
-                  : "bg-muted-foreground/15",
-              )}
+    <WizardShell
+      open={open}
+      onOpenChange={onOpenChange}
+      steps={CALLING_WIZARD_STEPS}
+      stepIndex={stepIndex}
+      onBack={handleBack}
+      onNext={handleNext}
+      onStepSelect={handleStepSelect}
+      onSubmit={() => onSave(form, permissions)}
+      submitLabel={isPending ? "Saving…" : submitLabel}
+      isPending={isPending}
+    >
+      {step === 1 && (
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label htmlFor="calling-name">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="calling-name"
+              value={form.name}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                if (nameError) setNameError("");
+              }}
+              placeholder="e.g. Sunday School Teacher"
             />
-          ))}
-        </div>
-
-        {/* Content */}
-        <div className="px-4 py-4">
-          <p className="mb-4 text-muted-foreground text-xs">{CALLING_WIZARD_STEPS[stepIndex].description}</p>
-
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label htmlFor="calling-name">
-                  Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="calling-name"
-                  value={form.name}
-                  onChange={(e) => {
-                    setForm({ ...form, name: e.target.value });
-                    if (nameError) setNameError("");
-                  }}
-                  placeholder="e.g. Sunday School Teacher"
-                />
-                {nameError && <p className="text-xs text-destructive">{nameError}</p>}
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="calling-slots">Max Slots</Label>
-                <Input
-                  id="calling-slots"
-                  type="number"
-                  min={1}
-                  value={form.max_slots}
-                  onChange={(e) =>
-                    setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
-                  }
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="calling-public"
-                  checked={form.is_public}
-                  onCheckedChange={(checked) =>
-                    setForm({ ...form, is_public: checked === true })
-                  }
-                />
-                <Label htmlFor="calling-public" className="cursor-pointer">
-                  Public (visible on the website)
-                </Label>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-0.5">
-              {permissionsLoading
-                ? Array.from({ length: 7 }).map((_, i) => (
-                    <Skeleton key={i} className="h-9 rounded-md" />
-                  ))
-                : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
-                    const active = (permissions & flag) !== 0;
-                    return (
-                      <button
-                        key={flag}
-                        type="button"
-                        className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
-                        onClick={() => setPermissions((p) => p ^ flag)}
-                      >
-                        {active
-                          ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                          : <Circle className="size-4 text-muted-foreground/40 shrink-0" />}
-                        <span className={active ? "text-foreground" : "text-muted-foreground"}>
-                          {label}
-                        </span>
-                      </button>
-                    );
-                  })}
-            </div>
-          )}
-        </div>
-
-        {/* Step breadcrumbs */}
-        <div className="border-t px-4 py-2.5">
+            {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="calling-slots">Max Slots</Label>
+            <Input
+              id="calling-slots"
+              type="number"
+              min={1}
+              value={form.max_slots}
+              onChange={(e) =>
+                setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
+              }
+            />
+          </div>
           <div className="flex items-center gap-2">
-            {CALLING_WIZARD_STEPS.map((s, index) => {
-              const isCompleted = index < stepIndex;
-              const isActive = index === stepIndex;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => isCompleted && setStep(s.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
-                    isActive
-                      ? "bg-muted font-medium text-foreground"
-                      : isCompleted
-                      ? "text-muted-foreground hover:bg-muted/50"
-                      : "cursor-default text-muted-foreground/50",
-                  )}
-                >
-                  {isCompleted
-                    ? <Check className="size-3 text-primary" />
-                    : <span className="tabular-nums">{index + 1}</span>}
-                  <span className="hidden sm:inline">{s.label}</span>
-                </button>
-              );
-            })}
+            <Checkbox
+              id="calling-public"
+              checked={form.is_public}
+              onCheckedChange={(checked) =>
+                setForm({ ...form, is_public: checked === true })
+              }
+            />
+            <Label htmlFor="calling-public" className="cursor-pointer">
+              Public (visible on the website)
+            </Label>
           </div>
         </div>
+      )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t px-4 py-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={handleBack}
-            disabled={step === 1}
-          >
-            Back
-          </Button>
-          <Badge variant="secondary" className="font-normal text-xs tabular-nums">
-            {step}/{CALLING_WIZARD_STEPS.length}
-          </Badge>
-          {step < 2 ? (
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleNext}>
-              Next <ChevronRight className="size-3" />
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => onSave(form, permissions)}
-              disabled={isPending}
-            >
-              {isPending ? "Saving…" : initial ? "Save Changes" : "Add Calling"}
-            </Button>
-          )}
+      {step === 2 && (
+        <div className="space-y-0.5">
+          {ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+            const active = (permissions & flag) !== 0;
+            return (
+              <button
+                key={flag}
+                type="button"
+                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
+                onClick={() => setPermissions((p) => p ^ flag)}
+              >
+                {active
+                  ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                  : <Circle className="size-4 text-muted-foreground/40 shrink-0" />}
+                <span className={active ? "text-foreground" : "text-muted-foreground"}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </WizardShell>
   );
 }
 
@@ -590,33 +488,56 @@ export function CallingsTab() {
     );
   };
 
+  // Fix B: addMutation — wrap permissions PUT in try/catch; warn on partial failure
   const addMutation = useMutation({
     mutationFn: async ({ form, permissions }: { form: CallingForm; permissions: number }) => {
       const res = await apiRequest("POST", "/api/callings/", form);
       const calling = await res.json() as ApiCalling;
+      let permissionsSet = true;
       if (permissions > 0) {
-        await apiRequest("PUT", `/api/callings/${calling.id}/permissions`, { scopes: permissions });
+        try {
+          await apiRequest("PUT", `/api/callings/${calling.id}/permissions`, { scopes: permissions });
+        } catch (permErr) {
+          console.error("[callings-tab] permissions PUT failed after calling created:", permErr);
+          permissionsSet = false;
+        }
       }
-      return calling;
+      return { calling, permissionsSet };
     },
-    onSuccess: () => {
+    onSuccess: ({ permissionsSet }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
       setAddWizardOpen(false);
-      toast.success("Calling added.");
+      if (permissionsSet) {
+        toast.success("Calling added.");
+      } else {
+        toast.warning("Calling created, but permissions could not be saved. Open Edit to set them.");
+      }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to add calling."),
   });
 
+  // Fix C: editMutation — wrap permissions PUT in try/catch; warn on partial failure
   const editMutation = useMutation({
     mutationFn: async ({ id, form, permissions }: { id: number; form: CallingForm; permissions: number }) => {
       await apiRequest("PUT", `/api/callings/${id}`, form);
-      await apiRequest("PUT", `/api/callings/${id}/permissions`, { scopes: permissions });
+      let permissionsSet = true;
+      try {
+        await apiRequest("PUT", `/api/callings/${id}/permissions`, { scopes: permissions });
+      } catch (permErr) {
+        console.error("[callings-tab] permissions PUT failed after calling updated:", permErr);
+        permissionsSet = false;
+      }
+      return { id, permissionsSet };
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: ({ id, permissionsSet }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
       queryClient.invalidateQueries({ queryKey: [`/api/callings/${id}/permissions`] });
       setEditTarget(null);
-      toast.success("Calling updated.");
+      if (permissionsSet) {
+        toast.success("Calling updated.");
+      } else {
+        toast.warning("Calling updated, but permissions could not be saved. Open Edit to try again.");
+      }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to update calling."),
   });
@@ -803,8 +724,9 @@ export function CallingsTab() {
       </div>
     </div>
 
-      {/* Add calling wizard */}
+      {/* Fix A: key={String(addWizardOpen)} remounts the wizard fresh on each open */}
       <CallingWizard
+        key={String(addWizardOpen)}
         open={addWizardOpen}
         onOpenChange={(open) => {
           if (!open) setAddWizardOpen(false);
@@ -813,8 +735,8 @@ export function CallingsTab() {
         isPending={addMutation.isPending}
       />
 
-      {/* Edit calling wizard */}
-      {editTarget && (
+      {/* Fix E: only render edit wizard once permissions have loaded */}
+      {editTarget && !editPermissionsLoading && (
         <CallingWizard
           key={editTarget.id}
           open
@@ -823,7 +745,6 @@ export function CallingsTab() {
           }}
           initial={editTarget}
           initialPermissions={editPermissionsData?.scopes ?? 0}
-          permissionsLoading={editPermissionsLoading}
           onSave={(form, permissions) =>
             editMutation.mutate({ id: editTarget.id, form, permissions })
           }

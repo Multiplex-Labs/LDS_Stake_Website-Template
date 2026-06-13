@@ -10,6 +10,22 @@ interface ChipInputProps {
   hint?: string;
 }
 
+export function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+      {label}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        className="text-muted-foreground hover:text-foreground transition-colors leading-none"
+        aria-label={`Remove ${label}`}
+      >
+        <X className="size-3" />
+      </button>
+    </span>
+  );
+}
+
 export function ChipInput({
   chipInput,
   id = "chip-input",
@@ -25,23 +41,11 @@ export function ChipInput({
         onClick={() => chipInput.chipInputRef.current?.focus()}
       >
         {chipInput.chips.map((chip, idx) => (
-          <span
+          <Chip
             key={idx}
-            className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
-          >
-            {chip}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                chipInput.removeChip(idx);
-              }}
-              className="text-muted-foreground hover:text-foreground transition-colors leading-none"
-              aria-label={`Remove ${chip}`}
-            >
-              <X className="size-3" />
-            </button>
-          </span>
+            label={chip}
+            onRemove={() => chipInput.removeChip(idx)}
+          />
         ))}
         <input
           id={id}

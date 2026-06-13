@@ -58,8 +58,8 @@ def _parse_json_list(value: str, cast) -> list | None:
         parsed = json.loads(value)
         if isinstance(parsed, list):
             return [cast(s) for s in parsed]
-    except (json.JSONDecodeError, ValueError, TypeError):
-        pass
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        logger.warning("_parse_json_list: failed to parse %r: %s", value, exc)
     return None
 
 

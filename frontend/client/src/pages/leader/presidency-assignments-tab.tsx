@@ -19,13 +19,13 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ICON_BTN_HOVER } from "@/lib/constants";
 import { cn, fullName, getInitials, apiErrorStatus, apiErrorBody } from "@/lib/utils";
 import { useChipInput } from "@/hooks/useChipInput";
-import { ChipInput } from "@/components/ui/chip-input";
+import { ChipInput, Chip } from "@/components/ui/chip-input";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 interface EditState {
@@ -270,20 +270,11 @@ export function PresidencyAssignmentsTab() {
                 {editing.selectedWardIds.size > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {Array.from(editing.selectedWardIds).map((wardId) => (
-                      <span
+                      <Chip
                         key={wardId}
-                        className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
-                      >
-                        {wardMap.get(wardId) ?? `Ward ${wardId}`}
-                        <button
-                          type="button"
-                          onClick={() => removeWard(wardId)}
-                          className="text-muted-foreground hover:text-foreground transition-colors leading-none"
-                          aria-label={`Remove ${wardMap.get(wardId) ?? `Ward ${wardId}`}`}
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </span>
+                        label={wardMap.get(wardId) ?? `Ward ${wardId}`}
+                        onRemove={() => removeWard(wardId)}
+                      />
                     ))}
                   </div>
                 )}

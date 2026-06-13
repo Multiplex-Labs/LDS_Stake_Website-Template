@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon, PencilLine, ClipboardClock } from "lucide-react";
+import { X, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon, PencilLine, ClipboardClock } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,10 +192,6 @@ export function SpeakingTab() {
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Month cleared.");
     },
-    onError: (err: Error) => {
-      console.error("[speaking-tab] clear month:", err);
-      toast.error("Failed to clear month.");
-    },
   });
 
   const clearHCMutation = useMutation({
@@ -213,15 +209,11 @@ export function SpeakingTab() {
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Schedule cleared.");
     },
-    onError: (err: Error) => {
-      console.error("[speaking-tab] clear HC:", err);
-      toast.error("Failed to clear schedule.");
-    },
   });
 
   const saveAllMutation = useMutation({
     mutationFn: ({ savedYear, entries }: { savedYear: number; entries: { monthIdx: number; topic: string; ref: string }[] }) =>
-      Promise.all(
+      Promise.allSettled(
         entries.map(({ monthIdx, topic, ref }) =>
           apiRequest("PUT", `/api/speaking/topics/${savedYear}/${monthIdx + 1}`, {
             topic,
@@ -229,14 +221,23 @@ export function SpeakingTab() {
           })
         )
       ),
-    onSuccess: (_, { savedYear }) => {
+    onSuccess: (results, { savedYear, entries }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/speaking/topics/", savedYear] });
-      setEdits({});
-      toast.success("All topics saved.");
-    },
-    onError: (err: Error) => {
-      console.error("[speaking-tab] save all:", err);
-      toast.error("Failed to save some topics.");
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        setEdits({});
+        toast.success("All changes saved.");
+      } else {
+        const succeededIndices = results
+          .map((r, i) => (r.status === "fulfilled" ? entries[i].monthIdx : null))
+          .filter((idx): idx is number => idx !== null);
+        setEdits((prev) => {
+          const next = { ...prev };
+          for (const idx of succeededIndices) delete next[idx];
+          return next;
+        });
+        toast.error(`${failed} of ${results.length} topics failed to save.`);
+      }
     },
   });
 
