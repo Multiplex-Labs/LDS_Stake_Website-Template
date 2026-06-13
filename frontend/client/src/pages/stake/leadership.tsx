@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+
+const UNORDERED = 9999;
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,7 +42,7 @@ function deriveGroups(callings: ApiCalling[], users: ApiUser[]): LeadershipGroup
 
     if (!groupMap.has(groupName)) {
       // Use group_order from the calling; fall back to 9999 if null
-      const gOrder = calling.group_order ?? 9999;
+      const gOrder = calling.group_order ?? UNORDERED;
       groupMap.set(groupName, { groupOrder: gOrder, slots: [] });
     }
 
@@ -56,11 +58,11 @@ function deriveGroups(callings: ApiCalling[], users: ApiUser[]): LeadershipGroup
     }
   }
 
-  const callingOrderMap = new Map(publicGrouped.map((c) => [c.name, c.display_order ?? 9999]));
+  const callingOrderMap = new Map(publicGrouped.map((c) => [c.name, c.display_order ?? UNORDERED]));
   for (const entry of Array.from(groupMap.values())) {
     entry.slots.sort((a: LeaderSlot, b: LeaderSlot) => {
-      const orderA = callingOrderMap.get(a.callingName) ?? 9999;
-      const orderB = callingOrderMap.get(b.callingName) ?? 9999;
+      const orderA = callingOrderMap.get(a.callingName) ?? UNORDERED;
+      const orderB = callingOrderMap.get(b.callingName) ?? UNORDERED;
       if (orderA !== orderB) return orderA - orderB;
       return a.slotNumber - b.slotNumber;
     });
@@ -316,6 +318,9 @@ export default function StakeLeadership() {
   const isError = callingsError || usersError;
 
   const groups = useMemo(() => deriveGroups(callings, users), [callings, users]);
+
+  if (callingsError) console.error("[leadership] callings query:", callingsError);
+  if (usersError) console.error("[leadership] users query:", usersError);
 
   if (isError) {
     return (

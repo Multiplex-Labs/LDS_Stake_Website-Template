@@ -65,6 +65,8 @@ import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep } from "@/components/ui/wizard-shell";
 
+const UNORDERED = 9999;
+
 interface CallingForm {
   name: string;
   max_slots: number;
@@ -290,7 +292,7 @@ function PositionPicker({
           c.display_order !== null &&
           (excludeCallingId === undefined || c.id !== excludeCallingId),
       )
-      .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999));
+      .sort((a, b) => (a.display_order ?? UNORDERED) - (b.display_order ?? UNORDERED));
   }, [callings, group, excludeCallingId]);
 
   if (groupCallings.length === 0) {
@@ -729,10 +731,11 @@ async function shiftGroupSiblings(
   siblings: ApiCalling[],
   insertOrder: number | null,
   groupOrder: number | null,
-): Promise<void> {
-  if (siblings.length === 0) return;
-  await Promise.allSettled(
-    siblings.map((c) => {
+): Promise<number> {
+  const eligible = siblings.filter((c) => !c.system_defined);
+  if (eligible.length === 0) return 0;
+  const results = await Promise.allSettled(
+    eligible.map((c) => {
       const shift = insertOrder !== null && c.display_order !== null && c.display_order >= insertOrder;
       return apiRequest("PUT", `/api/callings/${c.id}`, {
         ...c,
@@ -741,6 +744,11 @@ async function shiftGroupSiblings(
       });
     }),
   );
+  const failures = results.filter((r) => r.status === "rejected");
+  for (const f of failures) {
+    console.error("[callings-tab] shiftGroupSiblings: sibling reorder failed:", (f as PromiseRejectedResult).reason);
+  }
+  return failures.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -761,13 +769,16 @@ export function CallingsTab() {
   const [sortConfig, setSortConfig] = useState<CallingsSortConfig>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const { data: callings = [], isLoading: callingsLoading } = useQuery<ApiCalling[]>({
+  const { data: callings = [], isLoading: callingsLoading, isError: callingsIsError, error: callingsErr } = useQuery<ApiCalling[]>({
     queryKey: ["/api/callings/"],
   });
 
-  const { data: users = [], isLoading: usersLoading } = useQuery<ApiUser[]>({
+  const { data: users = [], isLoading: usersLoading, isError: usersIsError, error: usersErr } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+
+  if (callingsIsError) console.error("[callings-tab] callings query:", callingsErr);
+  if (usersIsError) console.error("[callings-tab] users query:", usersErr);
 
   const { data: editPermissionsData, isLoading: editPermissionsLoading } = useQuery<ApiUserPermissions>({
     queryKey: [`/api/callings/${editTarget?.id}/permissions`],
@@ -829,16 +840,19 @@ export function CallingsTab() {
     );
   };
 
-  // Fix B: addMutation — wrap permissions PUT in try/catch; warn on partial failure
+  // wrap permissions PUT in try/catch; warn on partial failure
   const addMutation = useMutation({
     mutationFn: async ({ form, permissions, callings }: { form: CallingForm; permissions: number; callings: ApiCalling[] }) => {
       const res = await apiRequest("POST", "/api/callings/", form);
       const calling = await res.json() as ApiCalling;
 
-      if (form.display_group) {
-        const siblings = callings.filter((c) => c.display_group === form.display_group);
-        await shiftGroupSiblings(siblings, form.display_order, form.group_order);
-      }
+      const siblingFailures = form.display_group
+        ? await shiftGroupSiblings(
+            callings.filter((c) => c.display_group === form.display_group),
+            form.display_order,
+            form.group_order,
+          )
+        : 0;
 
       let permissionsSet = true;
       if (permissions > 0) {
@@ -849,9 +863,9 @@ export function CallingsTab() {
           permissionsSet = false;
         }
       }
-      return { calling, permissionsSet };
+      return { calling, permissionsSet, siblingFailures };
     },
-    onSuccess: ({ permissionsSet }) => {
+    onSuccess: ({ permissionsSet, siblingFailures }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
       setAddWizardOpen(false);
       if (permissionsSet) {
@@ -859,19 +873,25 @@ export function CallingsTab() {
       } else {
         toast.warning("Calling created, but permissions could not be saved. Open Edit to set them.");
       }
+      if (siblingFailures > 0) {
+        toast.warning(`Calling created, but ${siblingFailures} related calling(s) could not be reordered. Check display ordering manually.`);
+      }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to add calling."),
   });
 
-  // Fix C: editMutation — wrap permissions PUT in try/catch; warn on partial failure
+  // wrap permissions PUT in try/catch; warn on partial failure
   const editMutation = useMutation({
     mutationFn: async ({ id, form, permissions, callings }: { id: number; form: CallingForm; permissions: number; callings: ApiCalling[] }) => {
       await apiRequest("PUT", `/api/callings/${id}`, form);
 
-      if (form.display_group) {
-        const siblings = callings.filter((c) => c.id !== id && c.display_group === form.display_group);
-        await shiftGroupSiblings(siblings, form.display_order, form.group_order);
-      }
+      const siblingFailures = form.display_group
+        ? await shiftGroupSiblings(
+            callings.filter((c) => c.id !== id && c.display_group === form.display_group),
+            form.display_order,
+            form.group_order,
+          )
+        : 0;
 
       let permissionsSet = true;
       try {
@@ -880,9 +900,9 @@ export function CallingsTab() {
         console.error("[callings-tab] permissions PUT failed after calling updated:", permErr);
         permissionsSet = false;
       }
-      return { id, permissionsSet };
+      return { id, permissionsSet, siblingFailures };
     },
-    onSuccess: ({ id, permissionsSet }) => {
+    onSuccess: ({ id, permissionsSet, siblingFailures }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
       queryClient.invalidateQueries({ queryKey: [`/api/callings/${id}/permissions`] });
       setEditTarget(null);
@@ -890,6 +910,9 @@ export function CallingsTab() {
         toast.success("Calling updated.");
       } else {
         toast.warning("Calling updated, but permissions could not be saved. Open Edit to try again.");
+      }
+      if (siblingFailures > 0) {
+        toast.warning(`Calling updated, but ${siblingFailures} related calling(s) could not be reordered. Check display ordering manually.`);
       }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to update calling."),
@@ -972,6 +995,12 @@ export function CallingsTab() {
                 <TableCell><Skeleton className="h-4 w-7 ml-auto" /></TableCell>
               </TableRow>
             ))
+          ) : (callingsIsError || usersIsError) ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-12 text-center text-sm text-destructive">
+                Failed to load callings. Please refresh the page.
+              </TableCell>
+            </TableRow>
           ) : (
             <>
               {paginatedCallings.map((calling) => {
@@ -1078,7 +1107,7 @@ export function CallingsTab() {
       </div>
     </div>
 
-      {/* Fix A: key={String(addWizardOpen)} remounts the wizard fresh on each open */}
+      {/* key={String(addWizardOpen)} remounts the wizard fresh on each open */}
       <CallingWizard
         key={String(addWizardOpen)}
         open={addWizardOpen}
@@ -1090,7 +1119,7 @@ export function CallingsTab() {
         callings={callings}
       />
 
-      {/* Fix E: only render edit wizard once permissions have loaded */}
+      {/* only render edit wizard once permissions have loaded */}
       {editTarget && !editPermissionsLoading && (
         <CallingWizard
           key={editTarget.id}
