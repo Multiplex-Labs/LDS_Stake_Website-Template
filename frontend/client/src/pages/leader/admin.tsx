@@ -7,13 +7,14 @@ import { CallingsTab } from "./callings-tab";
 import { SpeakingTab } from "./speaking-tab";
 import { HCAssignmentsTab } from "./hc-assignments-tab";
 import { PresidencyAssignmentsTab } from "./presidency-assignments-tab";
+import { UserCog, UserKey, Speech, NotebookText, NotebookTabs } from "lucide-react"
 
 const TABS = [
-  { value: "users", label: "Users" },
-  { value: "callings", label: "Callings" },
-  { value: "speaking", label: "Speaking" },
-  { value: "hc-assignments", label: "HC Assignments" },
-  { value: "presidency", label: "Presidency" },
+  { value: "users", label: "Users", icon: UserCog },
+  { value: "callings", label: "Callings", icon: UserKey },
+  { value: "speaking", label: "Speaking Assignments", icon: Speech },
+  { value: "hc-assignments", label: "High Council Assignments", icon: NotebookText },
+  { value: "presidency", label: "Presidency Assignments", icon: NotebookTabs },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
@@ -36,14 +37,22 @@ export default function AdminHub() {
   return (
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">
-            {TABS.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
+            {TABS.map((tab) => {
+              const Icon = tab.icon
+
+              return (
+                  <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="flex items-center gap-2"
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </TabsTrigger>
+              )
+            })}
           </TabsList>
 
           <TabsContent value="users">
@@ -65,7 +74,6 @@ export default function AdminHub() {
           <TabsContent value="presidency">
             <PresidencyAssignmentsTab />
           </TabsContent>
-
         </Tabs>
       </div>
     </Layout>

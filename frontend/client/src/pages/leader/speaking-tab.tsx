@@ -1,9 +1,8 @@
-import { useState, Fragment } from "react";
-import { X } from "lucide-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2 } from "lucide-react";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTHS, SELECT_NONE } from "@/lib/constants";
@@ -29,6 +29,15 @@ import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
+
+const AVATAR_COLORS = [
+  "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  "bg-violet-500/20 text-violet-700 dark:text-violet-300",
+  "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  "bg-rose-500/20 text-rose-700 dark:text-rose-300",
+  "bg-teal-500/20 text-teal-700 dark:text-teal-300",
+  "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+] as const;
 
 interface TopicEdit {
   topic: string;
@@ -63,12 +72,14 @@ export function SpeakingTab() {
   const { data: topics = [], isLoading: topicsLoading } = useQuery<SpeakingTopic[]>({
     queryKey: ["/api/speaking/topics/", year],
     queryFn: () => apiRequest("GET", `/api/speaking/topics/${year}`).then((r) => r.json()),
+    placeholderData: keepPreviousData,
   });
 
   const { data: calendar, isLoading: calendarLoading } = useQuery<SpeakingCalendar>({
     queryKey: ["/api/speaking/calendar/", year],
     queryFn: () => apiRequest("GET", `/api/speaking/calendar/${year}`).then((r) => r.json()),
     retry: false,
+    placeholderData: keepPreviousData,
   });
 
   const { data: users = [] } = useQuery<ApiUser[]>({ queryKey: ["/api/users/"] });
@@ -175,22 +186,6 @@ export function SpeakingTab() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <Label htmlFor="speaking-year">Year</Label>
-        <Select value={String(year)} onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); }}>
-          <SelectTrigger id="speaking-year" className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {YEAR_OPTIONS.map((y) => (
-              <SelectItem key={y} value={String(y)}>
-                {y}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <section>
         <h2 className="text-base font-semibold mb-3">Monthly Topics</h2>
         <div className="rounded-md border">
@@ -258,140 +253,197 @@ export function SpeakingTab() {
       </section>
 
       <section>
-        <h2 className="text-base font-semibold mb-3">Ward Schedule</h2>
-        {!calendar ? (
-          <div className="py-10 text-center text-muted-foreground text-sm border rounded-md">
-            No speaking schedule available for {year}.
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-10 min-w-40">
-                    High Councilor
-                  </TableHead>
-                  {MONTHS.map((m, i) => (
-                    <TableHead key={i} className="text-center min-w-14 px-1">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span>{m.slice(0, 3)}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
-                          onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
-                          disabled={
-                            clearMonthMutation.isPending &&
-                            clearMonthMutation.variables?.monthIdx === i
-                          }
-                          title={`Clear all ${m} assignments`}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    </TableHead>
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {/* Card header */}
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <div className="flex items-center gap-3">
+              <CalendarIcon className="size-5 text-muted-foreground" />
+              <div>
+                <p className="font-semibold text-sm">Ward Schedule</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={year <= YEAR_OPTIONS[0]}
+                onClick={() => { setYear((y) => y - 1); setActiveCell(null); }}
+              >
+                <ChevronLeftIcon className="size-4" />
+              </Button>
+              <Select
+                value={String(year)}
+                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); }}
+              >
+                <SelectTrigger className="w-24 h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEAR_OPTIONS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                   ))}
-                  <TableHead className="w-8" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {calendar.speakers.filter((sp) => userCallingMap.has(sp.high_councilor_id)).map((sp) => {
-                  const user = userCallingMap.get(sp.high_councilor_id);
-                  const name = user
-                    ? `${user.fname} ${user.lname}`
-                    : `HC ${sp.high_councilor_id}`;
-                  return (
-                    <TableRow key={sp.high_councilor_id}>
-                      <TableCell className="sticky left-0 bg-background font-medium">
-                        {name}
-                      </TableCell>
-                      {MONTH_INDICES.map((monthIdx) => {
-                        const wardId = sp.assignments[monthIdx]?.ward_id ?? null;
-                        const wardName = wardId != null ? wardMap.get(wardId) : null;
-                        const label = wardName ? extractWardNumber(wardName) : "—";
-                        const isActive =
-                          activeCell?.ucId === sp.high_councilor_id &&
-                          activeCell?.monthIdx === monthIdx;
-                        const isPending =
-                          scheduleMutation.isPending &&
-                          scheduleMutation.variables?.ucId === sp.high_councilor_id &&
-                          scheduleMutation.variables?.monthIdx === monthIdx;
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
+                onClick={() => { setYear((y) => y + 1); setActiveCell(null); }}
+              >
+                <ChevronRightIcon className="size-4" />
+              </Button>
+            </div>
+          </div>
 
+          {!calendar ? (
+            <div className="py-10 text-center text-muted-foreground text-sm px-4">
+              No speaking schedule available for {year}.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[900px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 bg-background z-10 w-48">
+                        High Councilor
+                      </TableHead>
+                      {MONTHS.map((m, i) => (
+                        <TableHead key={i} className="text-center px-1 min-w-[64px]">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-xs">{m.slice(0, 3)}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
+                              onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
+                              disabled={clearMonthMutation.isPending}
+                              title={`Clear all ${m} assignments`}
+                              aria-label={`Clear all ${m} assignments`}
+                            >
+                              <X className="size-3" />
+                            </Button>
+                          </div>
+                        </TableHead>
+                      ))}
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {calendar.speakers
+                      .filter((sp) => userCallingMap.has(sp.high_councilor_id))
+                      .map((sp) => {
+                        const user = userCallingMap.get(sp.high_councilor_id) as ApiUser;
+                        const initials = `${user.fname[0] ?? ""}${user.lname[0] ?? ""}`.toUpperCase();
+                        const avatarColor = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
                         return (
-                          <TableCell key={monthIdx} className="text-center p-1">
-                            {isActive ? (
-                              <Select
-                                defaultOpen
-                                value={wardId != null ? String(wardId) : SELECT_NONE}
-                                onValueChange={(v) => {
-                                  setActiveCell(null);
-                                  scheduleMutation.mutate({
-                                    ucId: sp.high_councilor_id,
-                                    wardId: v === SELECT_NONE ? null : Number(v),
-                                    monthIdx,
-                                  });
-                                }}
-                                onOpenChange={(open) => {
-                                  if (!open) setActiveCell(null);
-                                }}
+                          <TableRow key={sp.high_councilor_id}>
+                            <TableCell className="sticky left-0 bg-background z-10">
+                              <div className="flex items-center gap-2 py-1">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={user.profile_image ?? undefined} />
+                                  <AvatarFallback className={cn("text-xs", avatarColor)}>
+                                    {initials}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="font-medium text-sm">{user.fname} {user.lname}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            {MONTH_INDICES.map((monthIdx) => {
+                              const wardId = sp.assignments[monthIdx]?.ward_id ?? null;
+                              const wardName = wardId != null ? wardMap.get(wardId) : null;
+                              const isActive =
+                                activeCell?.ucId === sp.high_councilor_id &&
+                                activeCell?.monthIdx === monthIdx;
+                              const isPending =
+                                scheduleMutation.isPending &&
+                                scheduleMutation.variables?.ucId === sp.high_councilor_id &&
+                                scheduleMutation.variables?.monthIdx === monthIdx;
+                              return (
+                                <TableCell key={monthIdx} className="text-center p-1">
+                                  {isActive ? (
+                                    <Select
+                                      defaultOpen
+                                      value={wardId != null ? String(wardId) : SELECT_NONE}
+                                      onValueChange={(v) => {
+                                        setActiveCell(null);
+                                        scheduleMutation.mutate({
+                                          ucId: sp.high_councilor_id,
+                                          wardId: v === SELECT_NONE ? null : Number(v),
+                                          monthIdx,
+                                        });
+                                      }}
+                                      onOpenChange={(open) => { if (!open) setActiveCell(null); }}
+                                    >
+                                      <SelectTrigger className="h-7 min-w-[56px] text-xs px-1">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value={SELECT_NONE}>— None</SelectItem>
+                                        {wards.map((w) => (
+                                          <SelectItem key={w.id} value={String(w.id)}>
+                                            {w.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "text-xs px-1.5 py-0.5 rounded w-full transition-colors hover:bg-accent",
+                                        isPending && "opacity-50 pointer-events-none",
+                                      )}
+                                      onClick={() => setActiveCell({ ucId: sp.high_councilor_id, monthIdx })}
+                                      disabled={isPending}
+                                    >
+                                      {isPending ? (
+                                        "…"
+                                      ) : wardId != null && wardName != null ? (
+                                        <span className="inline-flex items-center justify-center rounded-full size-7 bg-primary/10 text-primary text-xs font-semibold">
+                                          {extractWardNumber(wardName)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground/40">—</span>
+                                      )}
+                                    </button>
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell className="p-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground/30 hover:text-destructive"
+                                onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
+                                disabled={clearHCMutation.isPending}
+                                title="Clear all assignments for this high councilor"
+                                aria-label="Clear all assignments for this high councilor"
                               >
-                                <SelectTrigger className="h-7 min-w-14 text-xs px-1">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={SELECT_NONE}>— None</SelectItem>
-                                  {wards.map((w) => (
-                                    <SelectItem key={w.id} value={String(w.id)}>
-                                      {w.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <button
-                                className={cn(
-                                  "text-xs px-1.5 py-0.5 rounded w-full transition-colors hover:bg-accent",
-                                  wardId != null
-                                    ? "font-semibold text-primary"
-                                    : "text-muted-foreground/40",
-                                  isPending && "opacity-50 pointer-events-none",
-                                )}
-                                onClick={() =>
-                                  setActiveCell({
-                                    ucId: sp.high_councilor_id,
-                                    monthIdx,
-                                  })
-                                }
-                                disabled={isPending}
-                              >
-                                {isPending ? "…" : label}
-                              </button>
-                            )}
-                          </TableCell>
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                      <TableCell className="p-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
-                          onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
-                          disabled={
-                            clearHCMutation.isPending &&
-                            clearHCMutation.variables?.ucId === sp.high_councilor_id
-                          }
-                          title="Clear all assignments for this high councilor"
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Footer legend */}
+              <div className="flex items-center gap-4 border-t px-4 py-2.5">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground/40">—</span>
+                  Not assigned
+                </span>
+              </div>
+            </>
+          )}
+        </div>
       </section>
     </div>
   );
