@@ -19,8 +19,8 @@ export function useChipInput(): UseChipInputResult {
 
   function addChip(value: string) {
     const trimmed = value.trim();
-    if (!trimmed || chips.includes(trimmed)) return;
-    setChips((prev) => [...prev, trimmed]);
+    if (!trimmed) return;
+    setChips((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
     setChipDraft("");
   }
 
@@ -53,7 +53,10 @@ export function useChipInput(): UseChipInputResult {
   function flushDraft(): string[] {
     const trimmed = chipDraft.trim();
     if (trimmed && !chips.includes(trimmed)) {
-      return [...chips, trimmed];
+      const next = [...chips, trimmed];
+      setChips(next);
+      setChipDraft("");
+      return next;
     }
     return chips;
   }

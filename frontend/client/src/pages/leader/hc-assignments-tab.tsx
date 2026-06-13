@@ -21,12 +21,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { User, Pencil, X } from "lucide-react";
+import { User, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { HC_CALLING_NAME, ICON_BTN_HOVER } from "@/lib/constants";
 import { fullName, parseCommaList, cn } from "@/lib/utils";
 import { useChipInput } from "@/hooks/useChipInput";
+import { ChipInput } from "@/components/ui/chip-input";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 interface EditState {
@@ -343,51 +344,7 @@ export function HCAssignmentsTab() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="chip-input">Responsibilities</Label>
-                <div
-                  className="flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring cursor-text"
-                  onClick={() => chipInput.chipInputRef.current?.focus()}
-                >
-                  {chipInput.chips.map((chip, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
-                    >
-                      {chip}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          chipInput.removeChip(idx);
-                        }}
-                        className="text-muted-foreground hover:text-foreground transition-colors leading-none"
-                        aria-label={`Remove ${chip}`}
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    id="chip-input"
-                    ref={chipInput.chipInputRef}
-                    type="text"
-                    value={chipInput.chipDraft}
-                    onChange={chipInput.handleChipChange}
-                    onKeyDown={chipInput.handleChipKeyDown}
-                    onBlur={() => {
-                      if (chipInput.chipDraft.trim()) chipInput.addChip(chipInput.chipDraft);
-                    }}
-                    placeholder={
-                      chipInput.chips.length === 0 ? "Type and press Enter to add…" : ""
-                    }
-                    className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground text-sm"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Press Enter to add, Backspace to remove last.
-                </p>
-              </div>
+              <ChipInput chipInput={chipInput} />
 
               <div className="space-y-1.5">
                 <Label htmlFor="committee">Committee</Label>
