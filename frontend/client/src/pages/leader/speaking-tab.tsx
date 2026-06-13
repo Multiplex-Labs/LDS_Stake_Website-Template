@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, CheckIcon, MoreHorizontalIcon, SaveIcon } from "lucide-react";
+import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -258,10 +258,7 @@ export function SpeakingTab() {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-3">
               <CalendarIcon className="size-5 text-muted-foreground" />
-              <div className="flex items-center gap-2">
-                <p className="font-semibold text-sm">Speaking Topics</p>
-                <Badge variant="secondary">{plannedCount} of 12 planned</Badge>
-              </div>
+              <p className="font-semibold text-sm">Speaking Topics</p>
             </div>
             <YearNav year={year} onChange={handleYearChange} />
           </div>
@@ -295,9 +292,9 @@ export function SpeakingTab() {
                     <span
                       className={cn(
                         "flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                        status === "planned" && "bg-primary/20 text-primary",
-                        status === "unsaved" && "bg-accent text-accent-foreground",
-                        status === "empty" && "bg-muted text-muted-foreground",
+                        status === "planned" && "bg-emerald-500 text-white",
+                        status === "unsaved" && "bg-amber-300 text-amber-900",
+                        status === "empty" && "bg-destructive text-destructive-foreground",
                       )}
                     >
                       {MONTHS[monthIdx].slice(0, 3)}
@@ -343,20 +340,11 @@ export function SpeakingTab() {
                   {/* Status badge */}
                   <div className="flex justify-center">
                     {status === "planned" ? (
-                      <Badge className="gap-1 bg-primary/10 text-primary hover:bg-primary/10">
-                        <CheckIcon className="size-3" />
-                        Planned
-                      </Badge>
+                      <Badge className="bg-emerald-500 text-white hover:bg-emerald-500">Planned</Badge>
                     ) : status === "unsaved" ? (
-                      <Badge className="gap-1 bg-accent text-accent-foreground hover:bg-accent">
-                        <span className="size-1.5 rounded-full bg-current" />
-                        Unsaved
-                      </Badge>
+                      <Badge className="bg-amber-300 text-amber-900 hover:bg-amber-300">Unsaved</Badge>
                     ) : (
-                      <Badge variant="secondary" className="gap-1">
-                        <span className="size-1.5 rounded-full bg-muted-foreground/60" />
-                        Empty
-                      </Badge>
+                      <Badge variant="destructive">Empty</Badge>
                     )}
                   </div>
 
@@ -365,8 +353,8 @@ export function SpeakingTab() {
                     {status === "planned" ? (
                       <Button
                         variant="outline"
-                        size="icon"
-                        className="size-8"
+                        size="sm"
+                        className="h-8"
                         onClick={() =>
                           setEdits((prev) => ({
                             ...prev,
@@ -376,9 +364,8 @@ export function SpeakingTab() {
                             },
                           }))
                         }
-                        aria-label={`Edit ${MONTHS[monthIdx]} topic`}
                       >
-                        <MoreHorizontalIcon className="size-4" />
+                        Edit
                       </Button>
                     ) : (
                       <Button
@@ -400,15 +387,15 @@ export function SpeakingTab() {
           <div className="flex items-center justify-between border-t bg-muted/10 px-4 py-3">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-primary" />
+                <span className="size-2 rounded-full bg-emerald-500" />
                 {plannedCount} planned
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-accent" />
+                <span className="size-2 rounded-full bg-amber-300" />
                 {unsavedCount} unsaved
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-muted-foreground/40" />
+                <span className="size-2 rounded-full bg-destructive" />
                 {emptyCount} not planned
               </span>
             </div>
