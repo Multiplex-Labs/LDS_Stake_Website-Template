@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Users, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ICON_BTN_HOVER } from "@/lib/constants";
@@ -55,11 +55,6 @@ export function PresidencyAssignmentsTab() {
   const wardMap = useMemo(
     () => new Map(wards.map((w) => [w.id, w.name])),
     [wards],
-  );
-
-  const assignedCount = useMemo(
-    () => assignments.filter((a) => a.current_holder !== null).length,
-    [assignments],
   );
 
   const availableWards = useMemo(
@@ -160,21 +155,6 @@ export function PresidencyAssignmentsTab() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="size-5 text-muted-foreground" />
-            <div>
-              <h2 className="text-lg font-semibold">Presidency Assignments</h2>
-              <p className="text-sm text-muted-foreground">
-                Manage responsibilities and ward oversight for stake presidency members
-              </p>
-            </div>
-          </div>
-          <Badge variant="secondary">
-            {assignedCount} of {assignments.length} assigned
-          </Badge>
-        </div>
-
         <div className="grid gap-6 md:grid-cols-3">
           {assignments.map((assignment) => {
             const isAssigned = assignment.current_holder !== null;
