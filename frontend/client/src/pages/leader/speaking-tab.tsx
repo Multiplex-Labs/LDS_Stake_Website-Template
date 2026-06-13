@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2 } from "lucide-react";
+import { X, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, Trash2, CheckIcon, MoreHorizontalIcon, SaveIcon } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -168,6 +169,38 @@ export function SpeakingTab() {
     },
   });
 
+  const saveAllMutation = useMutation({
+    mutationFn: ({ savedYear, entries }: { savedYear: number; entries: { monthIdx: number; topic: string; ref: string }[] }) =>
+      Promise.all(
+        entries.map(({ monthIdx, topic, ref }) =>
+          apiRequest("PUT", `/api/speaking/topics/${savedYear}/${monthIdx + 1}`, {
+            topic,
+            reference_material: ref || null,
+          })
+        )
+      ),
+    onSuccess: (_, { savedYear }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/speaking/topics/", savedYear] });
+      setEdits({});
+      toast.success("All topics saved.");
+    },
+    onError: (err: Error) => {
+      console.error("[speaking-tab] save all:", err);
+      toast.error("Failed to save some topics.");
+    },
+  });
+
+  const getTopicStatus = (monthIdx: number): "planned" | "unsaved" | "empty" => {
+    if (monthIdx in edits) return "unsaved";
+    if (topicForMonth.get(monthIdx)?.topic) return "planned";
+    return "empty";
+  };
+
+  const plannedCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "planned").length;
+  const unsavedCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "unsaved").length;
+  const emptyCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "empty").length;
+  const savableCount = Object.values(edits).filter((e) => e.topic.trim() !== "").length;
+
   if (topicsLoading || calendarLoading) {
     return (
       <div className="py-16 text-center text-muted-foreground text-sm">
@@ -179,68 +212,219 @@ export function SpeakingTab() {
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="text-base font-semibold mb-3">Monthly Topics</h2>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28">Month</TableHead>
-                <TableHead>Topic</TableHead>
-                <TableHead className="w-56">Reference Material</TableHead>
-                <TableHead className="w-20 text-right pr-4" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MONTH_INDICES.map((monthIdx) => {
-                const row = getRow(monthIdx);
-                const isSaving =
-                  saveTopicMutation.isPending &&
-                  saveTopicMutation.variables?.monthIdx === monthIdx;
-                return (
-                  <TableRow key={monthIdx}>
-                    <TableCell className="font-medium">{MONTHS[monthIdx]}</TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.topic}
-                        onChange={(e) =>
+        <div className="rounded-xl border bg-card overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <div className="flex items-center gap-3">
+              <CalendarIcon className="size-5 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-sm">Speaking Topics</p>
+                <Badge variant="secondary">{plannedCount} of 12 planned</Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={year <= YEAR_OPTIONS[0]}
+                onClick={() => { setYear((y) => y - 1); setActiveCell(null); setEdits({}); }}
+                aria-label="Previous year"
+              >
+                <ChevronLeftIcon className="size-4" />
+              </Button>
+              <Select
+                value={String(year)}
+                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); setEdits({}); }}
+              >
+                <SelectTrigger className="w-24 h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEAR_OPTIONS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
+                onClick={() => { setYear((y) => y + 1); setActiveCell(null); setEdits({}); }}
+                aria-label="Next year"
+              >
+                <ChevronRightIcon className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Column headers */}
+          <div className="grid grid-cols-[14rem_1fr_1fr_10rem_6rem] items-center border-b bg-muted/10 px-4 py-2 text-xs text-muted-foreground">
+            <div>Month</div>
+            <div>Topic</div>
+            <div>Reference Material</div>
+            <div className="text-center">Status</div>
+            <div />
+          </div>
+
+          {/* Rows */}
+          <div className="divide-y min-w-[720px]">
+            {MONTH_INDICES.map((monthIdx) => {
+              const status = getTopicStatus(monthIdx);
+              const row = getRow(monthIdx);
+              const isSaving =
+                saveTopicMutation.isPending &&
+                saveTopicMutation.variables?.monthIdx === monthIdx;
+              const isAnyBatchSaving = saveAllMutation.isPending;
+
+              return (
+                <div
+                  key={monthIdx}
+                  className="grid grid-cols-[14rem_1fr_1fr_10rem_6rem] items-center gap-3 px-4 py-2.5 hover:bg-muted/20"
+                >
+                  {/* Month */}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                        status === "planned" && "bg-primary/20 text-primary",
+                        status === "unsaved" && "bg-accent text-accent-foreground",
+                        status === "empty" && "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {MONTHS[monthIdx].slice(0, 3)}
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium">{MONTHS[monthIdx]}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {status === "planned" ? "Planned" : status === "unsaved" ? "In progress" : "Not planned"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Topic input */}
+                  <Input
+                    value={row.topic}
+                    readOnly={status === "planned"}
+                    onChange={(e) =>
+                      setEdits((prev) => ({
+                        ...prev,
+                        [monthIdx]: { ...row, topic: e.target.value },
+                      }))
+                    }
+                    placeholder="Add topic…"
+                    aria-label={`${MONTHS[monthIdx]} topic`}
+                    className={cn("h-8 text-sm", status === "planned" && "read-only:bg-muted/30 cursor-default")}
+                  />
+
+                  {/* Reference input */}
+                  <Input
+                    value={row.ref}
+                    readOnly={status === "planned"}
+                    onChange={(e) =>
+                      setEdits((prev) => ({
+                        ...prev,
+                        [monthIdx]: { ...row, ref: e.target.value },
+                      }))
+                    }
+                    placeholder="Add reference material…"
+                    aria-label={`${MONTHS[monthIdx]} reference material`}
+                    className={cn("h-8 text-sm", status === "planned" && "read-only:bg-muted/30 cursor-default")}
+                  />
+
+                  {/* Status badge */}
+                  <div className="flex justify-center">
+                    {status === "planned" ? (
+                      <Badge className="gap-1 bg-primary/10 text-primary hover:bg-primary/10">
+                        <CheckIcon className="size-3" />
+                        Planned
+                      </Badge>
+                    ) : status === "unsaved" ? (
+                      <Badge className="gap-1 bg-accent text-accent-foreground hover:bg-accent">
+                        <span className="size-1.5 rounded-full bg-current" />
+                        Unsaved
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="gap-1">
+                        <span className="size-1.5 rounded-full bg-muted-foreground/60" />
+                        Empty
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Action */}
+                  <div className="flex justify-end">
+                    {status === "planned" ? (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-8"
+                        onClick={() =>
                           setEdits((prev) => ({
                             ...prev,
-                            [monthIdx]: { ...row, topic: e.target.value },
+                            [monthIdx]: {
+                              topic: topicForMonth.get(monthIdx)?.topic ?? "",
+                              ref: topicForMonth.get(monthIdx)?.reference_material ?? "",
+                            },
                           }))
                         }
-                        placeholder="Enter topic…"
-                        className="h-8"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.ref}
-                        onChange={(e) =>
-                          setEdits((prev) => ({
-                            ...prev,
-                            [monthIdx]: { ...row, ref: e.target.value },
-                          }))
-                        }
-                        placeholder="Optional reference…"
-                        className="h-8"
-                      />
-                    </TableCell>
-                    <TableCell className="text-right pr-2">
+                        aria-label={`Edit ${MONTHS[monthIdx]} topic`}
+                      >
+                        <MoreHorizontalIcon className="size-4" />
+                      </Button>
+                    ) : (
                       <Button
                         size="sm"
-                        disabled={!row.topic.trim() || saveTopicMutation.isPending}
-                        onClick={() =>
-                          saveTopicMutation.mutate({ monthIdx, topic: row.topic, ref: row.ref })
-                        }
+                        className="h-8"
+                        disabled={!row.topic.trim() || isSaving || isAnyBatchSaving}
+                        onClick={() => saveTopicMutation.mutate({ monthIdx, topic: row.topic, ref: row.ref })}
                       >
                         {isSaving ? "Saving…" : "Save"}
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t bg-muted/10 px-4 py-3">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-primary" />
+                {plannedCount} planned
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-accent" />
+                {unsavedCount} unsaved
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-muted-foreground/40" />
+                {emptyCount} not planned
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={savableCount === 0 || saveAllMutation.isPending}
+              onClick={() =>
+                saveAllMutation.mutate({
+                  savedYear: year,
+                  entries: Object.entries(edits)
+                    .filter(([, edit]) => edit.topic.trim() !== "")
+                    .map(([idx, edit]) => ({
+                      monthIdx: Number(idx),
+                      topic: edit.topic,
+                      ref: edit.ref,
+                    })),
+                })
+              }
+            >
+              <SaveIcon className="size-4" />
+              {saveAllMutation.isPending ? "Saving…" : "Save All Changes"}
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -259,13 +443,14 @@ export function SpeakingTab() {
                 variant="ghost"
                 size="icon"
                 disabled={year <= YEAR_OPTIONS[0]}
-                onClick={() => { setYear((y) => y - 1); setActiveCell(null); }}
+                onClick={() => { setYear((y) => y - 1); setActiveCell(null); setEdits({}); }}
+                aria-label="Previous year"
               >
                 <ChevronLeftIcon className="size-4" />
               </Button>
               <Select
                 value={String(year)}
-                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); }}
+                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); setEdits({}); }}
               >
                 <SelectTrigger className="w-24 h-8 text-sm">
                   <SelectValue />
@@ -280,7 +465,8 @@ export function SpeakingTab() {
                 variant="ghost"
                 size="icon"
                 disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
-                onClick={() => { setYear((y) => y + 1); setActiveCell(null); }}
+                onClick={() => { setYear((y) => y + 1); setActiveCell(null); setEdits({}); }}
+                aria-label="Next year"
               >
                 <ChevronRightIcon className="size-4" />
               </Button>
