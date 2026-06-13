@@ -1,10 +1,12 @@
-import { useState, useMemo, useEffect, Fragment } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { useSetToggle } from "@/lib/hooks";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -39,7 +41,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +62,8 @@ import {
   CheckCircle2,
   Circle,
   Shield,
+  FileText,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -267,168 +270,254 @@ function SlotRow({
   );
 }
 
-function CallingDialog({
+// ---------------------------------------------------------------------------
+// Calling Wizard
+// ---------------------------------------------------------------------------
+
+const CALLING_WIZARD_STEPS = [
+  { id: 1 as const, label: "Basic Info",   description: "Name, slot count, and visibility settings.", icon: <FileText className="size-3.5" /> },
+  { id: 2 as const, label: "Permissions",  description: "Grant permissions to all holders of this calling.", icon: <Shield className="size-3.5" /> },
+] as const;
+
+type CallingWizardStep = 1 | 2;
+
+function CallingWizard({
   open,
   onOpenChange,
   initial,
+  initialPermissions = 0,
+  permissionsLoading = false,
   onSave,
   isPending,
 }: {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (v: boolean) => void;
   initial?: ApiCalling;
-  onSave: (form: CallingForm) => void;
+  initialPermissions?: number;
+  permissionsLoading?: boolean;
+  onSave: (form: CallingForm, permissions: number) => void;
   isPending: boolean;
 }) {
+  const [step, setStep] = useState<CallingWizardStep>(1);
   const [form, setForm] = useState<CallingForm>(
     initial
       ? { name: initial.name, max_slots: initial.max_slots, is_public: initial.is_public }
       : EMPTY_FORM,
   );
   const [nameError, setNameError] = useState("");
+  const [permissions, setPermissions] = useState(initialPermissions);
+  const permSyncedRef = useRef(false);
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    if (!permissionsLoading && !permSyncedRef.current) {
+      permSyncedRef.current = true;
+      setPermissions(initialPermissions);
+    }
+  }, [initialPermissions, permissionsLoading]);
+
+  const stepIndex = step - 1;
+
+  function handleNext() {
     if (!form.name.trim()) {
       setNameError("Name is required.");
       return;
     }
     setNameError("");
-    onSave(form);
-  };
+    setStep(2);
+  }
+
+  function handleBack() {
+    setStep(1);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{initial ? "Edit Calling" : "Add Calling"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1">
-            <Label htmlFor="calling-name">Name</Label>
-            <Input
-              id="calling-name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Sunday School Teacher"
-            />
-            {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+      <DialogContent className="max-w-[90vw] sm:max-w-md p-0 gap-0 overflow-hidden [&>button:last-child]:hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-muted-foreground">{CALLING_WIZARD_STEPS[stepIndex].icon}</span>
+            <div>
+              <span className="font-medium text-sm">{CALLING_WIZARD_STEPS[stepIndex].label}</span>
+              <p className="text-muted-foreground text-xs">Step {step} of {CALLING_WIZARD_STEPS.length}</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="calling-slots">Max Slots</Label>
-            <Input
-              id="calling-slots"
-              type="number"
-              min={1}
-              value={form.max_slots}
-              onChange={(e) =>
-                setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
-              }
+          <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => onOpenChange(false)}>
+            <X className="size-3.5" />
+          </Button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="flex gap-1 border-b px-4 py-2.5">
+          {CALLING_WIZARD_STEPS.map((s, index) => (
+            <div
+              key={s.id}
+              className={cn(
+                "h-1 flex-1 rounded-full transition-colors duration-300",
+                index < stepIndex
+                  ? "bg-primary"
+                  : index === stepIndex
+                  ? "bg-primary/60"
+                  : "bg-muted-foreground/15",
+              )}
             />
-          </div>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="px-4 py-4">
+          <p className="mb-4 text-muted-foreground text-xs">{CALLING_WIZARD_STEPS[stepIndex].description}</p>
+
+          {step === 1 && (
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="calling-name">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="calling-name"
+                  value={form.name}
+                  onChange={(e) => {
+                    setForm({ ...form, name: e.target.value });
+                    if (nameError) setNameError("");
+                  }}
+                  placeholder="e.g. Sunday School Teacher"
+                />
+                {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="calling-slots">Max Slots</Label>
+                <Input
+                  id="calling-slots"
+                  type="number"
+                  min={1}
+                  value={form.max_slots}
+                  onChange={(e) =>
+                    setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="calling-public"
+                  checked={form.is_public}
+                  onCheckedChange={(checked) =>
+                    setForm({ ...form, is_public: checked === true })
+                  }
+                />
+                <Label htmlFor="calling-public" className="cursor-pointer">
+                  Public (visible on the website)
+                </Label>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-0.5">
+              {permissionsLoading
+                ? Array.from({ length: 7 }).map((_, i) => (
+                    <Skeleton key={i} className="h-9 rounded-md" />
+                  ))
+                : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+                    const active = (permissions & flag) !== 0;
+                    return (
+                      <button
+                        key={flag}
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
+                        onClick={() => setPermissions((p) => p ^ flag)}
+                      >
+                        {active
+                          ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                          : <Circle className="size-4 text-muted-foreground/40 shrink-0" />}
+                        <span className={active ? "text-foreground" : "text-muted-foreground"}>
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })}
+            </div>
+          )}
+        </div>
+
+        {/* Step breadcrumbs */}
+        <div className="border-t px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <Checkbox
-              id="calling-public"
-              checked={form.is_public}
-              onCheckedChange={(checked) =>
-                setForm({ ...form, is_public: checked === true })
-              }
-            />
-            <Label htmlFor="calling-public" className="cursor-pointer">
-              Public (visible on the website)
-            </Label>
+            {CALLING_WIZARD_STEPS.map((s, index) => {
+              const isCompleted = index < stepIndex;
+              const isActive = index === stepIndex;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => isCompleted && setStep(s.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
+                    isActive
+                      ? "bg-muted font-medium text-foreground"
+                      : isCompleted
+                      ? "text-muted-foreground hover:bg-muted/50"
+                      : "cursor-default text-muted-foreground/50",
+                  )}
+                >
+                  {isCompleted
+                    ? <Check className="size-3 text-primary" />
+                    : <span className="tabular-nums">{index + 1}</span>}
+                  <span className="hidden sm:inline">{s.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleBack}
+            disabled={step === 1}
+          >
+            Back
           </Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
+          <Badge variant="secondary" className="font-normal text-xs tabular-nums">
+            {step}/{CALLING_WIZARD_STEPS.length}
+          </Badge>
+          {step < 2 ? (
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleNext}>
+              Next <ChevronRight className="size-3" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onSave(form, permissions)}
+              disabled={isPending}
+            >
+              {isPending ? "Saving…" : initial ? "Save Changes" : "Add Calling"}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CallingsTab
+// ---------------------------------------------------------------------------
 
 type CallingsSortKey = "name" | "max_slots" | "is_public";
 type CallingsSortConfig = { key: CallingsSortKey; direction: "asc" | "desc" } | null;
 
 const CALLINGS_PER_PAGE = 10;
 
-function CallingPermissionsDialog({
-  open,
-  calling,
-  permissions,
-  permissionsLoading,
-  onClose,
-  onTogglePermission,
-}: {
-  open: boolean;
-  calling: ApiCalling | null;
-  permissions: ApiUserPermissions;
-  permissionsLoading: boolean;
-  onClose: () => void;
-  onTogglePermission: (newScopes: number) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md [&>button:last-child]:hidden">
-        <DialogHeader className="sr-only">
-          <DialogTitle>Permissions — {calling?.name ?? ""}</DialogTitle>
-        </DialogHeader>
-        <Command>
-          <div className="border-b px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Shield className="size-4 text-primary" />
-              <span className="font-medium text-sm">Permissions — {calling?.name ?? ""}</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              All holders of this calling inherit these permissions.
-            </p>
-          </div>
-          <CommandInput placeholder="Search permissions…" />
-          <CommandList className="max-h-[320px]">
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup heading="Inherited Permissions">
-              {permissionsLoading
-                ? Array.from({ length: 7 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 rounded-md mx-2 my-0.5" />
-                  ))
-                : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
-                    const active = (permissions.scopes & flag) !== 0;
-                    return (
-                      <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
-                        {active
-                          ? <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
-                          : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
-                        <span className="text-sm">{label}</span>
-                      </CommandItem>
-                    );
-                  })}
-            </CommandGroup>
-          </CommandList>
-          <div className="flex items-center justify-end border-t px-4 py-2">
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </Command>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function CallingsTab() {
   const [expandedIds, toggleExpand] = useSetToggle<number>();
-  const [addOpen, setAddOpen] = useState(false);
+  const [addWizardOpen, setAddWizardOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCalling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiCalling | null>(null);
-  const [permissionsTarget, setPermissionsTarget] = useState<ApiCalling | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<CallingsSortConfig>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -441,10 +530,11 @@ export function CallingsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const { data: callingPermissionsData, isLoading: callingPermissionsLoading } = useQuery<ApiUserPermissions>({
-    queryKey: [`/api/callings/${permissionsTarget?.id}/permissions`],
-    queryFn: () => apiRequest("GET", `/api/callings/${permissionsTarget!.id}/permissions`).then(r => r.json()),
-    enabled: permissionsTarget !== null,
+  const { data: editPermissionsData, isLoading: editPermissionsLoading } = useQuery<ApiUserPermissions>({
+    queryKey: [`/api/callings/${editTarget?.id}/permissions`],
+    queryFn: () =>
+      apiRequest("GET", `/api/callings/${editTarget!.id}/permissions`).then((r) => r.json()),
+    enabled: editTarget !== null,
   });
 
   const activeUsers = useMemo(() => users.filter((u) => u.active), [users]);
@@ -501,20 +591,30 @@ export function CallingsTab() {
   };
 
   const addMutation = useMutation({
-    mutationFn: (form: CallingForm) => apiRequest("POST", "/api/callings/", form),
+    mutationFn: async ({ form, permissions }: { form: CallingForm; permissions: number }) => {
+      const res = await apiRequest("POST", "/api/callings/", form);
+      const calling = await res.json() as ApiCalling;
+      if (permissions > 0) {
+        await apiRequest("PUT", `/api/callings/${calling.id}/permissions`, { scopes: permissions });
+      }
+      return calling;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
-      setAddOpen(false);
+      setAddWizardOpen(false);
       toast.success("Calling added.");
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to add calling."),
   });
 
   const editMutation = useMutation({
-    mutationFn: ({ id, form }: { id: number; form: CallingForm }) =>
-      apiRequest("PUT", `/api/callings/${id}`, form),
-    onSuccess: () => {
+    mutationFn: async ({ id, form, permissions }: { id: number; form: CallingForm; permissions: number }) => {
+      await apiRequest("PUT", `/api/callings/${id}`, form);
+      await apiRequest("PUT", `/api/callings/${id}/permissions`, { scopes: permissions });
+    },
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/callings/${id}/permissions`] });
       setEditTarget(null);
       toast.success("Calling updated.");
     },
@@ -535,18 +635,6 @@ export function CallingsTab() {
       } else {
         toast.error("Failed to delete calling.");
       }
-    },
-  });
-
-  const setCallingPermissionsMutation = useMutation({
-    mutationFn: ({ callingId, scopes }: { callingId: number; scopes: number }) =>
-      apiRequest("PUT", `/api/callings/${callingId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
-    onSuccess: (_data, { callingId }) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/callings/${callingId}/permissions`] });
-    },
-    onError: (err: unknown) => {
-      console.error("[callings-tab] setCallingPermissionsMutation error:", err);
-      toast.error("Failed to update permissions");
     },
   });
 
@@ -581,7 +669,7 @@ export function CallingsTab() {
               <DropdownMenuItem onClick={() => handleSort("is_public")}>Visibility</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm" onClick={() => setAddOpen(true)}>
+          <Button className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm" onClick={() => setAddWizardOpen(true)}>
             <Plus className="size-3.5" />
             Add Calling
           </Button>
@@ -657,12 +745,6 @@ export function CallingsTab() {
                             >
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setPermissionsTarget(calling)}
-                              disabled={calling.system_defined}
-                            >
-                              Permissions
-                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive"
@@ -721,38 +803,35 @@ export function CallingsTab() {
       </div>
     </div>
 
-      <CallingDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onSave={(form) => addMutation.mutate(form)}
+      {/* Add calling wizard */}
+      <CallingWizard
+        open={addWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) setAddWizardOpen(false);
+        }}
+        onSave={(form, permissions) => addMutation.mutate({ form, permissions })}
         isPending={addMutation.isPending}
       />
 
+      {/* Edit calling wizard */}
       {editTarget && (
-        <CallingDialog
+        <CallingWizard
           key={editTarget.id}
           open
           onOpenChange={(open) => {
             if (!open) setEditTarget(null);
           }}
           initial={editTarget}
-          onSave={(form) => editMutation.mutate({ id: editTarget.id, form })}
+          initialPermissions={editPermissionsData?.scopes ?? 0}
+          permissionsLoading={editPermissionsLoading}
+          onSave={(form, permissions) =>
+            editMutation.mutate({ id: editTarget.id, form, permissions })
+          }
           isPending={editMutation.isPending}
         />
       )}
 
-      <CallingPermissionsDialog
-        open={permissionsTarget !== null}
-        calling={permissionsTarget}
-        permissions={callingPermissionsData ?? { scopes: 0, flags: [] }}
-        permissionsLoading={callingPermissionsLoading}
-        onClose={() => setPermissionsTarget(null)}
-        onTogglePermission={(newScopes) => {
-          if (permissionsTarget === null) return;
-          setCallingPermissionsMutation.mutate({ callingId: permissionsTarget.id, scopes: newScopes });
-        }}
-      />
-
+      {/* Delete dialog */}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
