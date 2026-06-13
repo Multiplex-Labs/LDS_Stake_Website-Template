@@ -43,14 +43,17 @@ def load_wards():
         )
 
         for w in wards:
-            name,start_time = w.split(",")
+            parts = w.split(",")
+            name = parts[0]
+            start_time_val = parts[1]
+            location_val = parts[2].strip() if len(parts) > 2 else None
             bishop_slot = get_or_make_user_calling(
                 calling_id=bishop_calling.id,
                 slot_id=wards.index(w) + 1,
                 session=session
             )
             logger.info(f"Creating ward '{w}'.")
-            ward = Ward(name=name, start_time=float(start_time), bishop_calling_id=bishop_slot.id)
+            ward = Ward(name=name, start_time=float(start_time_val), bishop_calling_id=bishop_slot.id, location=location_val)
             session.add(ward)
             session.commit()
 

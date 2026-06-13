@@ -24,6 +24,8 @@ export interface Ward {
   id: number;
   name: string;
   bishop_id: number | null;
+  start_time: number;
+  location: string | null;
 }
 
 export interface ApiCalling {
