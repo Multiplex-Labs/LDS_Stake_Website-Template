@@ -52,7 +52,7 @@ def test_get_assignment_slot_creates_assignment(client: TestClient,
 
 
     # GET slot should create a usercalling and an assignment
-    r = client.get("/assignments/slot/15", headers=headers)
+    r = client.get("/assignments/slot/12", headers=headers)
     assert r.status_code == 200
     j = r.json()
     assert "high_councilor_id" in j

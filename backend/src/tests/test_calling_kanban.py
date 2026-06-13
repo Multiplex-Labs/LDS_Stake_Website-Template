@@ -5,8 +5,14 @@ from sqlmodel import Session, select
 from src.models import (
     CallingProposal, CallingComment, CallingApproval, CallingInterview,
     Calling, UserCalling, KanbanUpdate, KanbanStages, Permission, Permissions, Ward,
+    User,
 )
-from src.utils.calling_kanban import get_current_proposal_status
+from src.utils.calling_kanban import (
+    get_current_proposal_status,
+    is_stake_presidency,
+    can_approve_proposal,
+    is_high_councilor,
+)
 from src.utils import DiscordBotHandle
 from src.app import app
 
@@ -1274,3 +1280,52 @@ def test_board_current_stage_vote_persists_after_revert(
         "FC prior-interval vote must persist through a revert; "
         f"current_stage_vote must be True, got {matching_fc[0]['current_stage_vote']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# B6 — Unit tests for is_stake_presidency() and can_approve_proposal()
+# These tests do NOT need a DB session — all objects are constructed in memory.
+# ---------------------------------------------------------------------------
+
+def _make_user_with_calling(calling_name: str) -> User:
+    calling = Calling(name=calling_name, max_slots=1, is_public=True)
+    uc = UserCalling(calling_id=1, slot_number=1)
+    uc.calling = calling
+    user = User(email="x@x.com", fname="A", lname="B", password_hash="x", active=True)
+    user.callings = [uc]
+    return user
+
+
+def test_is_stake_presidency_true_for_all_presidency_callings():
+    for name in ("Stake President", "Stake First Counselor", "Stake Second Counselor"):
+        user = _make_user_with_calling(name)
+        assert is_stake_presidency(user) is True, f"Expected True for calling '{name}'"
+
+
+def test_is_stake_presidency_false_for_old_names():
+    for name in ("First Counselor", "Second Counselor", "High Councilor"):
+        user = _make_user_with_calling(name)
+        assert is_stake_presidency(user) is False, f"Expected False for calling '{name}'"
+
+
+def test_can_approve_proposal_true_for_stake_presidency_and_hc():
+    for name in (
+        "Stake President",
+        "Stake First Counselor",
+        "Stake Second Counselor",
+        "High Councilor",
+    ):
+        user = _make_user_with_calling(name)
+        assert can_approve_proposal(user) is True, f"Expected True for calling '{name}'"
+
+
+def test_can_approve_proposal_false_for_old_names():
+    for name in ("First Counselor", "Second Counselor", "Executive Secretary", "Ward Clerk"):
+        user = _make_user_with_calling(name)
+        assert can_approve_proposal(user) is False, f"Expected False for calling '{name}'"
+
+
+def test_can_approve_proposal_false_for_empty_callings():
+    user = User(email="x@x.com", fname="A", lname="B", password_hash="x", active=True)
+    user.callings = []
+    assert can_approve_proposal(user) is False
