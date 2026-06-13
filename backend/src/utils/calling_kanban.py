@@ -41,8 +41,9 @@ def can_approve_proposal(
         bool: True if the user can approve/reject proposals, False otherwise.
         
     Note:
-        The approving callings are: high councilor, stake president, first counselor,
-        and second counselor. This reflects the ecclesiastical hierarchy where stake
+        The approving callings are: High Councilor, Stake President, Stake First Counselor,
+        and Stake Second Counselor (from HC_CALLING_NAME and STAKE_PRESIDENCY_CALLING_NAMES
+        in utils/usercalling.py). This reflects the ecclesiastical hierarchy where stake
         presidency and high council have oversight over calling proposals.
     """
     approver_callings = {HC_CALLING_NAME.lower()} | {n.lower() for n in STAKE_PRESIDENCY_CALLING_NAMES}
@@ -85,8 +86,9 @@ def is_stake_presidency(user: User) -> bool:
         bool: True if the user is in the stake presidency, False otherwise.
         
     Note:
-        This function checks for the callings: "stake president", "first counselor",
-        and "second counselor". The check is case-insensitive.
+        This function checks for the callings "Stake President", "Stake First Counselor",
+        and "Stake Second Counselor" (from STAKE_PRESIDENCY_CALLING_NAMES in
+        utils/usercalling.py). The check is case-insensitive.
     """
     presidency_names = {n.lower() for n in STAKE_PRESIDENCY_CALLING_NAMES}
     callings = [uc.calling.name.lower() for uc in user.callings] if user.callings else []
@@ -107,8 +109,9 @@ def get_stake_presidency(session: Session) -> List[User]:
         List[User]: A list of User objects representing the members of the stake presidency.
         
     Note:
-        The function checks for the callings "stake president", "first counselor",
-        and "second counselor". The search is case-insensitive.
+        The function checks for the callings "Stake President", "Stake First Counselor",
+        and "Stake Second Counselor" (from STAKE_PRESIDENCY_CALLING_NAMES in
+        utils/usercalling.py). The search is case-insensitive.
     """
     from sqlalchemy import or_
     statement = select(User).where(
