@@ -156,3 +156,19 @@ export interface PresidencyAssignmentUpdate {
   responsibilities: string | null;
   ward_ids: number[];
 }
+
+export interface ApiUserPermissions {
+  scopes: number;
+  flags: string[];
+}
+
+// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) intentionally excluded.
+export const ASSIGNABLE_PERMISSIONS = [
+  { flag: 1,  label: "Manage Users" },
+  { flag: 2,  label: "Manage Callings" },
+  { flag: 4,  label: "Manage Assignments" },
+  { flag: 8,  label: "Manage Speaking Schedule" },
+  { flag: 16, label: "Submit Calling Proposals" },
+  { flag: 32, label: "Manage Calling Proposals" },
+  { flag: 64, label: "View Calling Proposals" },
+] as const;

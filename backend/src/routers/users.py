@@ -18,6 +18,8 @@ from ..models import (
     User,
     Permission,
     Permissions,
+    PermissionsResponse,
+    PermissionsUpdateRequest,
     UserSession,
     Calling,
     UserCalling
@@ -26,6 +28,8 @@ from ..db import get_session
 from ..utils import (
     CallingUser,
     user_has_permission,
+    get_user_effective_permissions,
+    build_permissions_response,
     hash_password,
     validate_unique_field,
     verify_password
@@ -225,6 +229,68 @@ def delete_user(
     session.delete(db_user)
     session.commit()
     return None
+
+
+@router.get("/{user_id}/permissions")
+def get_user_permissions(
+    user_id: int,
+    session: Session = Depends(get_session),
+    calling_user: User = Depends(CallingUser())
+) -> PermissionsResponse:
+    can_manage_user_or_throw(user_id, calling_user, session)
+
+    row = session.exec(
+        select(Permissions).where(
+            Permissions.foreign_id == str(user_id),
+            Permissions.is_calling == False
+        )
+    ).first()
+
+    if row is None:
+        return PermissionsResponse(scopes=0, flags=[])
+
+    return build_permissions_response(row.scopes)
+
+
+@router.put("/{user_id}/permissions")
+def update_user_permissions(
+    user_id: int,
+    data: PermissionsUpdateRequest,
+    session: Session = Depends(get_session),
+    calling_user: User = Depends(CallingUser())
+) -> PermissionsResponse:
+    if not user_has_permission(calling_user, Permission.MANAGE_USERS, session):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to manage users.")
+
+    db_user = session.get(User, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    clean_scopes = data.scopes & get_user_effective_permissions(calling_user, session)
+
+    row = session.exec(
+        select(Permissions).where(
+            Permissions.foreign_id == str(user_id),
+            Permissions.is_calling == False
+        )
+    ).first()
+
+    if row is None:
+        row = Permissions(
+            foreign_id=str(user_id),
+            is_calling=False,
+            scopes=clean_scopes
+        )
+    else:
+        row.scopes = clean_scopes
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    return build_permissions_response(row.scopes)
+
+
 class DiscordUserEmailResponse(SQLModel):
     email: str
     callings: List[str]

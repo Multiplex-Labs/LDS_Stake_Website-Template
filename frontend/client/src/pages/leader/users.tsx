@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, memo, useEffect, Fragment } from "react";
 import Cropper from "react-easy-crop";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Area } from "react-easy-crop";
@@ -41,17 +41,47 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Plus, ArrowUpDown, X, Camera } from "lucide-react";
+import {
+  Search,
+  Plus,
+  ArrowUpDown,
+  X,
+  Camera,
+  Check as CheckIcon,
+  User as UserIcon,
+  AlignLeft as AlignLeftIcon,
+  Lock as LockIcon,
+  Briefcase as BriefcaseIcon,
+  ChevronRight as ChevronRightIcon,
+  CheckCircle2,
+  Circle,
+  Shield,
+  ChevronLeft,
+  MoreHorizontal,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
-import { getInitials, fullName, apiErrorStatus, apiErrorBody, meetsPasswordComplexity } from "@/lib/utils";
+import { getInitials, fullName, apiErrorStatus, apiErrorBody, meetsPasswordComplexity, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import type { ApiUser, ApiCalling } from "@/types";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { ASSIGNABLE_PERMISSIONS } from "@/types";
+import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
 
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
+
+const USERS_PER_PAGE = 10;
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface EditForm {
@@ -97,14 +127,627 @@ const INITIAL_WIZARD_STATE: AddWizardState = {
   photo: null,
 };
 
-const STEP_TITLES: Record<WizardStep, string> = {
-  1: "Basic Info",
-  2: "Bio",
-  3: "Password",
-  4: "Assign Calling",
-  5: "Profile Photo",
-  6: "Review",
-};
+const WIZARD_STEPS = [
+  { id: 1 as WizardStep, label: "Basic Info",    description: "Name, email, and contact details.", icon: <UserIcon className="size-3.5" />,     skippable: false },
+  { id: 2 as WizardStep, label: "Bio",            description: "Optional biography or notes.",      icon: <AlignLeftIcon className="size-3.5" />, skippable: true  },
+  { id: 3 as WizardStep, label: "Password",       description: "Set an initial login password.",    icon: <LockIcon className="size-3.5" />,      skippable: false },
+  { id: 4 as WizardStep, label: "Assign Calling", description: "Optionally assign a calling.",      icon: <BriefcaseIcon className="size-3.5" />, skippable: true  },
+  { id: 5 as WizardStep, label: "Profile Photo",  description: "Optionally add a profile photo.",   icon: <Camera className="size-3.5" />,        skippable: true  },
+  { id: 6 as WizardStep, label: "Review",         description: "Confirm details and create user.",  icon: <CheckIcon className="size-3.5" />,     skippable: false },
+] as const;
+
+interface AddUserWizardProps {
+  open: boolean;
+  wizard: AddWizardState;
+  callings: ApiCalling[];
+  addSelectedCalling: ApiCalling | undefined;
+  addFreeSlots: number[];
+  addPhotoCropView: boolean;
+  addImgSrc: string | null;
+  addCrop: { x: number; y: number };
+  addZoom: number;
+  addFileInputRef: React.RefObject<HTMLInputElement | null>;
+  onClose: (open: boolean) => void;
+  onAdvance: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+  onSkipWithClear: () => void;
+  onSkipWithPhoto: () => void;
+  onSetWizard: React.Dispatch<React.SetStateAction<AddWizardState>>;
+  onSetAddCrop: (crop: { x: number; y: number }) => void;
+  onSetAddZoom: (zoom: number) => void;
+  onSetAddCroppedAreaPixels: (area: Area | null) => void;
+  onCropComplete: (_: Area, pixels: Area) => void;
+  onReleaseAddCropState: () => void;
+  onOpenCrop: (url: string) => void;
+  onConfirmCrop: () => Promise<void>;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+}
+
+const AddUserWizard = memo(function AddUserWizard({
+  open,
+  wizard,
+  callings,
+  addSelectedCalling,
+  addFreeSlots,
+  addPhotoCropView,
+  addImgSrc,
+  addCrop,
+  addZoom,
+  addFileInputRef,
+  onClose,
+  onAdvance,
+  onBack,
+  onSkip,
+  onSkipWithClear,
+  onSkipWithPhoto,
+  onSetWizard,
+  onSetAddCrop,
+  onSetAddZoom,
+  onSetAddCroppedAreaPixels,
+  onCropComplete,
+  onReleaseAddCropState,
+  onOpenCrop,
+  onConfirmCrop,
+  onSubmit,
+  isSubmitting,
+}: AddUserWizardProps) {
+  const stepIndex = wizard.step - 1;
+  const currentStep = WIZARD_STEPS[stepIndex];
+
+  function getSkipHandler() {
+    if (wizard.step === 2) return onSkip;
+    if (wizard.step === 4) return onSkipWithClear;
+    if (wizard.step === 5) return onSkipWithPhoto;
+    return onSkip;
+  }
+
+  const reviewRows = [
+    { label: "Name",    value: `${wizard.form.fname} ${wizard.form.lname}`.trim() },
+    { label: "Email",   value: wizard.form.email },
+    { label: "Phone",   value: wizard.form.phone || "—" },
+    { label: "Bio",     value: wizard.form.bio   || "—" },
+    { label: "Calling", value: addSelectedCalling
+        ? addSelectedCalling.max_slots > 1
+          ? `${addSelectedCalling.name} · Slot ${wizard.slotNumber}`
+          : addSelectedCalling.name
+        : "—" },
+    { label: "Photo",   value: wizard.photo ? "Added" : "—" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-[90vw] sm:max-w-lg p-0 gap-0 overflow-hidden [&>button:last-child]:hidden">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-muted-foreground">{currentStep.icon}</span>
+            <div>
+              <span className="font-medium text-sm">{currentStep.label}</span>
+              <p className="text-muted-foreground text-xs">Step {stepIndex + 1} of {WIZARD_STEPS.length}</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => onClose(false)}>
+            <X className="size-3.5" />
+          </Button>
+        </div>
+
+        <div className="flex gap-1 border-b px-4 py-2.5">
+          {WIZARD_STEPS.map((step, index) => (
+            <div
+              key={step.id}
+              className={cn(
+                "h-1 flex-1 rounded-full transition-colors duration-300",
+                index < stepIndex
+                  ? "bg-primary"
+                  : index === stepIndex
+                  ? "bg-primary/60"
+                  : "bg-muted-foreground/15"
+              )}
+            />
+          ))}
+        </div>
+
+        {!addPhotoCropView && (
+          <div className="px-4 py-4">
+            <p className="mb-4 text-muted-foreground text-xs">{currentStep.description}</p>
+
+            {wizard.step === 1 && (
+              <div className="grid gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>First Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={wizard.form.fname}
+                      onChange={(e) => onSetWizard((w) => ({
+                        ...w,
+                        form: { ...w.form, fname: e.target.value },
+                        errors: { ...w.errors, fname: undefined },
+                      }))}
+                      placeholder="John"
+                    />
+                    {wizard.errors.fname && (
+                      <p className="text-xs text-destructive">{wizard.errors.fname}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Last Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={wizard.form.lname}
+                      onChange={(e) => onSetWizard((w) => ({
+                        ...w,
+                        form: { ...w.form, lname: e.target.value },
+                        errors: { ...w.errors, lname: undefined },
+                      }))}
+                      placeholder="Doe"
+                    />
+                    {wizard.errors.lname && (
+                      <p className="text-xs text-destructive">{wizard.errors.lname}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="email"
+                    value={wizard.form.email}
+                    onChange={(e) => onSetWizard((w) => ({
+                      ...w,
+                      form: { ...w.form, email: e.target.value },
+                      errors: { ...w.errors, email: undefined },
+                    }))}
+                    placeholder="john@example.com"
+                  />
+                  {wizard.errors.email && (
+                    <p className="text-xs text-destructive">{wizard.errors.email}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone</Label>
+                  <Input
+                    value={wizard.form.phone}
+                    onChange={(e) => onSetWizard((w) => ({ ...w, form: { ...w.form, phone: e.target.value } }))}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            )}
+
+            {wizard.step === 2 && (
+              <div className="space-y-1.5">
+                <Label>Bio</Label>
+                <Textarea
+                  value={wizard.form.bio}
+                  onChange={(e) => onSetWizard((w) => ({ ...w, form: { ...w.form, bio: e.target.value } }))}
+                  placeholder="Brief description or notes..."
+                  className="min-h-[120px]"
+                />
+              </div>
+            )}
+
+            {wizard.step === 3 && (
+              <div className="grid gap-4">
+                <div className="space-y-1.5">
+                  <Label>Password <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="password"
+                    value={wizard.form.password}
+                    onChange={(e) => onSetWizard((w) => ({
+                      ...w,
+                      form: { ...w.form, password: e.target.value },
+                      errors: { ...w.errors, password: undefined },
+                    }))}
+                    placeholder="••••••••"
+                  />
+                  {wizard.errors.password && (
+                    <p className="text-xs text-destructive">{wizard.errors.password}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Confirm Password <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="password"
+                    value={wizard.form.confirmPassword}
+                    onChange={(e) => onSetWizard((w) => ({
+                      ...w,
+                      form: { ...w.form, confirmPassword: e.target.value },
+                      errors: { ...w.errors, confirmPassword: undefined },
+                    }))}
+                    placeholder="••••••••"
+                  />
+                  {wizard.errors.confirmPassword && (
+                    <p className="text-xs text-destructive">{wizard.errors.confirmPassword}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {wizard.step === 4 && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Select
+                    value={wizard.callingId === "" ? "" : String(wizard.callingId)}
+                    onValueChange={(v) => onSetWizard((w) => ({ ...w, callingId: Number(v), slotNumber: "" }))}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select calling…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {callings.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {addSelectedCalling && addSelectedCalling.max_slots > 1 && (
+                    <Select
+                      value={wizard.slotNumber === "" ? "" : String(wizard.slotNumber)}
+                      onValueChange={(v) => onSetWizard((w) => ({ ...w, slotNumber: Number(v) }))}
+                      disabled={addFreeSlots.length === 0}
+                    >
+                      <SelectTrigger className="w-[110px]">
+                        <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : "Slot…"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {addFreeSlots.map((s) => (
+                          <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {addSelectedCalling && addFreeSlots.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {addSelectedCalling.max_slots === 1
+                      ? "This calling is already filled."
+                      : "All slots for this calling are occupied."}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {wizard.step === 5 && (
+              <div className="flex flex-col items-center gap-4">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={wizard.photo?.previewUrl} />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-medium">
+                    {getInitials(`${wizard.form.fname} ${wizard.form.lname}`)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center space-y-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => addFileInputRef.current?.click()}
+                  >
+                    <Camera className="size-4" />
+                    {wizard.photo ? "Change Photo" : "Choose Photo"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
+                </div>
+                <input
+                  ref={addFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    onOpenCrop(URL.createObjectURL(file));
+                  }}
+                />
+              </div>
+            )}
+
+            {wizard.step === 6 && (
+              <div>
+                {reviewRows.map((row, index) => (
+                  <div
+                    key={row.label}
+                    className={cn(
+                      "flex items-center justify-between py-2.5",
+                      index < reviewRows.length - 1 && "border-b"
+                    )}
+                  >
+                    <span className="font-mono text-muted-foreground text-xs">{row.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{row.value}</span>
+                      {row.value !== "—" && <span className="size-1.5 rounded-full bg-primary inline-block" />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {addPhotoCropView && (
+          <div className="px-4 pb-4 space-y-4 pt-4">
+            <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
+              <Cropper
+                image={addImgSrc!}
+                crop={addCrop}
+                zoom={addZoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={onSetAddCrop}
+                onZoomChange={onSetAddZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+            <div className="flex items-center gap-3 px-1">
+              <Label className="text-xs text-muted-foreground shrink-0">Zoom</Label>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={addZoom}
+                onChange={(e) => onSetAddZoom(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+            </div>
+            <div className="flex justify-between pt-2 border-t">
+              <Button variant="outline" onClick={onReleaseAddCropState}>Cancel</Button>
+              <Button onClick={onConfirmCrop}>Crop &amp; Save</Button>
+            </div>
+          </div>
+        )}
+
+        {!addPhotoCropView && (
+          <div className="border-t px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              {WIZARD_STEPS.map((step, index) => {
+                const isCompleted = index < stepIndex;
+                const isActive = index === stepIndex;
+                return (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => isCompleted && onSetWizard((w) => ({ ...w, step: step.id, errors: {} }))}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
+                      isActive
+                        ? "bg-muted font-medium text-foreground"
+                        : isCompleted
+                        ? "text-muted-foreground hover:bg-muted/50"
+                        : "cursor-default text-muted-foreground/50"
+                    )}
+                  >
+                    {isCompleted
+                      ? <CheckIcon className="size-3 text-primary" />
+                      : <span className="tabular-nums">{index + 1}</span>}
+                    <span className="hidden sm:inline">{step.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {!addPhotoCropView && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onBack} disabled={stepIndex === 0}>
+              Back
+            </Button>
+            <Badge variant="secondary" className="font-normal text-xs tabular-nums">
+              {stepIndex + 1}/{WIZARD_STEPS.length}
+            </Badge>
+            <div className="flex gap-2">
+              {currentStep.skippable && (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={getSkipHandler()}>
+                  Skip
+                </Button>
+              )}
+              {wizard.step < 6 ? (
+                <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onAdvance}>
+                  Next <ChevronRightIcon className="size-3" />
+                </Button>
+              ) : (
+                <Button size="sm" className="h-7 text-xs" onClick={onSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? "Creating…" : "Create User"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+});
+
+// --- Permissions helpers ---
+
+function popcount(n: number): number {
+  let count = 0;
+  let v = n;
+  while (v) { count += v & 1; v >>>= 1; }
+  return count;
+}
+
+interface PermissionsDialogProps {
+  open: boolean;
+  user: ApiUser | null;
+  permissions: ApiUserPermissions;
+  permissionsLoading: boolean;
+  callings: ApiCalling[];
+  occupiedSlotsMap: Map<number, Set<number>>;
+  onClose: () => void;
+  onTogglePermission: (newScopes: number) => void;
+  onRemoveCalling: (args: { callingId: number; slotNumber: number }) => void;
+  onAssignCalling: (args: { callingId: number; slotNumber: number; userId: number; onSuccess?: () => void }) => void;
+}
+
+const PermissionsDialog = memo(function PermissionsDialog({
+  open,
+  user,
+  permissions,
+  permissionsLoading,
+  callings,
+  occupiedSlotsMap,
+  onClose,
+  onTogglePermission,
+  onRemoveCalling,
+  onAssignCalling,
+}: PermissionsDialogProps) {
+  const [permMode, setPermMode] = useState<"default" | "assign-calling">("default");
+  const [expandedCallingId, setExpandedCallingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPermMode("default");
+      setExpandedCallingId(null);
+    }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl [&>button:last-child]:hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Permissions — {user ? fullName(user) : ""}</DialogTitle>
+        </DialogHeader>
+
+        <Command>
+          <div className="border-b px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Shield className="size-4 text-primary" />
+              <span className="font-medium text-sm">
+                {permMode === "assign-calling" ? "Assign Calling" : `Permissions — ${user ? fullName(user) : ""}`}
+              </span>
+            </div>
+            {permMode === "default" && (
+              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{user?.callings?.length ?? 0} callings</span>
+                <span>·</span>
+                <span>{popcount(permissions.scopes)} permissions</span>
+              </div>
+            )}
+          </div>
+
+          <CommandInput placeholder={permMode === "assign-calling" ? "Search callings…" : "Search permissions…"} />
+
+          <CommandList className="max-h-[380px]">
+            <CommandEmpty>No results found.</CommandEmpty>
+
+            {permMode === "default" && (
+              <>
+                <CommandGroup heading="Callings">
+                  {(user?.callings ?? []).map((uc) => {
+                    const calling = callings.find((c) => c.id === uc.calling_id);
+                    if (!calling) return null;
+                    return (
+                      <CommandItem key={uc.id} className="flex items-center justify-between" onSelect={() => {}}>
+                        <div className="flex items-center gap-2">
+                          <BriefcaseIcon className="size-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {calling.name}
+                            {calling.max_slots > 1 && <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); onRemoveCalling({ callingId: uc.calling_id, slotNumber: uc.slot_number }); }}
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </CommandItem>
+                    );
+                  })}
+                  <CommandItem onSelect={() => { setPermMode("assign-calling"); setExpandedCallingId(null); }}>
+                    <Plus className="mr-2 size-4 text-muted-foreground" />
+                    <span>Assign calling…</span>
+                  </CommandItem>
+                </CommandGroup>
+
+                <CommandSeparator />
+
+                <CommandGroup heading="Direct Permissions">
+                  {permissionsLoading
+                    ? Array.from({ length: 7 }).map((_, i) => (
+                        <Skeleton key={i} className="h-8 rounded-md mx-2 my-0.5" />
+                      ))
+                    : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+                        const active = (permissions.scopes & flag) !== 0;
+                        return (
+                          <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
+                            {active
+                              ? <CheckCircle2 className="mr-2 size-4 text-primary" />
+                              : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
+                            <span className="text-sm">{label}</span>
+                          </CommandItem>
+                        );
+                      })}
+                </CommandGroup>
+              </>
+            )}
+
+            {permMode === "assign-calling" && (
+              <CommandGroup heading="Available Callings">
+                <CommandItem onSelect={() => { setPermMode("default"); setExpandedCallingId(null); }}>
+                  <ChevronLeft className="mr-2 size-4 text-muted-foreground" />
+                  <span>Back</span>
+                </CommandItem>
+                {callings.map((calling) => {
+                  const freeSlots = Array.from({ length: calling.max_slots }, (_, i) => i + 1)
+                    .filter((s) => !(occupiedSlotsMap.get(calling.id)?.has(s) ?? false));
+                  if (freeSlots.length === 0) return null;
+
+                  if (calling.max_slots === 1) {
+                    return (
+                      <CommandItem key={calling.id} onSelect={() => {
+                        if (user) onAssignCalling({ callingId: calling.id, slotNumber: 1, userId: user.id, onSuccess: () => setPermMode("default") });
+                      }}>
+                        <BriefcaseIcon className="mr-2 size-4 text-muted-foreground" />
+                        <span>{calling.name}</span>
+                      </CommandItem>
+                    );
+                  }
+
+                  const isExpanded = expandedCallingId === calling.id;
+                  return (
+                    <Fragment key={calling.id}>
+                      <CommandItem onSelect={() => setExpandedCallingId(isExpanded ? null : calling.id)}>
+                        <BriefcaseIcon className="mr-2 size-4 text-muted-foreground" />
+                        <span className="flex-1">{calling.name}</span>
+                        <ChevronRightIcon className={cn("size-3 text-muted-foreground transition-transform", isExpanded && "rotate-90")} />
+                      </CommandItem>
+                      {isExpanded && freeSlots.map((slot) => (
+                        <CommandItem
+                          key={slot}
+                          className="pl-8"
+                          onSelect={() => {
+                            if (user) onAssignCalling({ callingId: calling.id, slotNumber: slot, userId: user.id, onSuccess: () => setPermMode("default") });
+                          }}
+                        >
+                          <span className="text-muted-foreground text-xs">Slot {slot}</span>
+                        </CommandItem>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </CommandGroup>
+            )}
+          </CommandList>
+
+          <div className="flex items-center justify-end border-t px-4 py-2">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  );
+});
 
 export function UserAdminContent() {
   // --- Queries ---
@@ -120,6 +763,7 @@ export function UserAdminContent() {
 
   // --- Table state ---
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [confirmTarget, setConfirmTarget] = useState<ApiUser | null>(null);
@@ -132,8 +776,10 @@ export function UserAdminContent() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const editingUser = useMemo(() => users.find((u) => u.id === editingUserId) ?? null, [users, editingUserId]);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
-  const [editCallingId, setEditCallingId] = useState<number | "">("");
-  const [editSlotNumber, setEditSlotNumber] = useState<number | "">("");
+
+  // --- Permissions dialog state ---
+  const [permissionsUserId, setPermissionsUserId] = useState<number | null>(null);
+  const permissionsUser = useMemo(() => users.find((u) => u.id === permissionsUserId) ?? null, [users, permissionsUserId]);
 
   // --- Edit crop state ---
   const [cropMode, setCropMode] = useState(false);
@@ -168,10 +814,11 @@ export function UserAdminContent() {
     return map;
   }, [users]);
 
-  const editingUserCallings = useMemo(
-    () => editingUser?.callings ?? [],
-    [editingUser],
-  );
+  const { data: permissionsData, isLoading: permissionsLoading } = useQuery<ApiUserPermissions>({
+    queryKey: [`/api/users/${permissionsUserId}/permissions`],
+    queryFn: () => apiRequest("GET", `/api/users/${permissionsUserId}/permissions`).then(r => r.json()),
+    enabled: permissionsUserId !== null,
+  });
 
   const filteredUsers = useMemo(() => {
     return users
@@ -192,19 +839,19 @@ export function UserAdminContent() {
       });
   }, [users, searchTerm, sortConfig]);
 
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, sortConfig]);
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE,
+  );
+
   // --- Helpers ---
 
   function getFreeSlots(callingId: number, maxSlots: number): number[] {
     const occupied = occupiedSlotsMap.get(callingId) ?? new Set<number>();
     return Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !occupied.has(s));
   }
-
-  const editSelectedCalling = callings.find((c) => c.id === editCallingId);
-  const editFreeSlots = editSelectedCalling ? getFreeSlots(editSelectedCalling.id, editSelectedCalling.max_slots) : [];
-  const editCanAdd =
-    !!editSelectedCalling &&
-    editFreeSlots.length > 0 &&
-    (editSelectedCalling.max_slots === 1 || editSlotNumber !== "");
 
   const addSelectedCalling = callings.find((c) => c.id === addWizard.callingId);
   const addFreeSlots = addSelectedCalling ? getFreeSlots(addSelectedCalling.id, addSelectedCalling.max_slots) : [];
@@ -364,8 +1011,6 @@ export function UserAdminContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/"] });
       toast.success("Calling assigned");
-      setEditCallingId("");
-      setEditSlotNumber("");
     },
     onError: (err: unknown) => {
       const status = apiErrorStatus(err);
@@ -378,6 +1023,18 @@ export function UserAdminContent() {
       } else {
         toast.error("Failed to assign calling");
       }
+    },
+  });
+
+  const setPermissionsMutation = useMutation({
+    mutationFn: ({ userId, scopes }: { userId: number; scopes: number }) =>
+      apiRequest("PUT", `/api/users/${userId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
+    onSuccess: (_data, { userId }) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${userId}/permissions`] });
+    },
+    onError: (err: unknown) => {
+      console.error("[users] setPermissionsMutation error:", err);
+      toast.error("Failed to update permissions");
     },
   });
 
@@ -439,7 +1096,19 @@ export function UserAdminContent() {
       setIsAddingUser(false);
       setAddWizard(INITIAL_WIZARD_STATE);
     },
-    onError: () => toast.error("Create Failed", { description: "Could not create user. Email may already be in use." }),
+    onError: (err: unknown) => {
+      console.error("[users] createUserMutation error:", err);
+      const status = apiErrorStatus(err);
+      if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Create Failed", { description: "Insufficient permissions to create users." });
+      } else if (status === 409) {
+        toast.error("Create Failed", { description: "A user with that email or phone already exists." });
+      } else {
+        toast.error("Create Failed", { description: "Could not create user." });
+      }
+    },
   });
 
   const resetPasswordMutation = useMutation({
@@ -523,16 +1192,12 @@ export function UserAdminContent() {
       bio: user.bio ?? "",
       active: user.active,
     });
-    setEditCallingId("");
-    setEditSlotNumber("");
   };
 
   const handleCloseEdit = () => {
     releaseCropState();
     setEditingUserId(null);
     setEditForm(null);
-    setEditCallingId("");
-    setEditSlotNumber("");
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -582,22 +1247,25 @@ export function UserAdminContent() {
 
   return (
     <TooltipProvider>
-        <div className="flex justify-between items-center mb-6 gap-4">
-          <div className="relative flex-1 max-w-2xl">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="overflow-hidden rounded-lg border bg-card">
+
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name or email"
-              className="pl-10 h-10 bg-background border-input"
+              className="border-0 bg-transparent pl-10 shadow-none focus-visible:ring-0"
+              placeholder="Search by name or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 gap-2 border-input text-foreground bg-background hover:bg-accent hover:text-accent-foreground">
+                <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs" size="sm">
                   Sort by
-                  <ArrowUpDown className="h-3 w-3" />
+                  <ArrowUpDown className="size-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -608,146 +1276,153 @@ export function UserAdminContent() {
                 <DropdownMenuItem onClick={() => handleSort("email")}>Email</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <Button className="h-10 gap-2 shadow-sm" onClick={() => setIsAddingUser(true)}>
+            <Button className="h-8 gap-1.5 px-3 text-xs" size="sm" onClick={() => setIsAddingUser(true)}>
+              <Plus className="size-3.5" />
               Add User
-              <Plus className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50 border-border">
-                <TableHead className="w-[50px] pl-4">
-                  <Checkbox
-                    checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort("name")}>
-                  <div className="flex items-center gap-1">
-                    User
-                    {sortConfig?.key === "name" && <ArrowUpDown className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort("active")}>
-                  <div className="flex items-center gap-1">
-                    Status
-                    {sortConfig?.key === "active" && <ArrowUpDown className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Callings
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right pr-6">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell />
-                  </TableRow>
-                ))
-              ) : filteredUsers.map((user) => (
-                <TableRow key={user.id} className="hover:bg-muted/50 group border-border">
-                  <TableCell className="pl-4">
-                    <Checkbox
-                      checked={selectedIds.includes(user.id)}
-                      onCheckedChange={() =>
-                        setSelectedIds((prev) =>
-                          prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3 py-1">
-                      <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
-                        <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                          {getInitials(`${user.fname} ${user.lname}`)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-sm text-foreground">{user.fname} {user.lname}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {user.active ? (
-                      <span className="text-xs font-medium text-success">Active</span>
-                    ) : (
-                      <span className="text-xs font-medium text-muted-foreground">Disabled</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-foreground">
-                    {user.callings?.map((c) => callings.find((cal) => cal.id === c.calling_id)?.name).filter(Boolean).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-right pr-4">
-                    <div className="flex items-center justify-end gap-2">
-                      {user.active && (user.id === currentUserId || activeCount <= 1) ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
-                              <Button variant="outline" size="sm" className="h-8 text-xs font-medium" disabled>
-                                Deactivate
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {user.id === currentUserId
-                              ? "Cannot deactivate your own account"
-                              : "Cannot deactivate the last active user"}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs font-medium"
-                          disabled={toggleStatusMutation.isPending}
-                          onClick={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
-                        >
-                          {user.active ? "Deactivate" : "Activate"}
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs font-medium"
-                        onClick={() => handleOpenEdit(user)}
-                      >
-                        Edit
-                      </Button>
-                    </div>
-                  </TableCell>
+        {/* Bulk actions bar */}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center justify-between border-b bg-muted/50 px-4 py-2.5">
+            <span className="text-xs font-medium">{selectedIds.length} user{selectedIds.length !== 1 ? "s" : ""} selected</span>
+            <Button
+              className="h-7 px-2 text-xs"
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds([])}
+            >
+              Clear selection
+            </Button>
+          </div>
+        )}
+
+        {/* Table */}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px] pl-4">
+                <Checkbox
+                  checked={selectedIds.length === filteredUsers.length && filteredUsers.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
+              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort("name")}>
+                <div className="flex items-center gap-1">
+                  User
+                  {sortConfig?.key === "name" && <ArrowUpDown className="size-3" />}
+                </div>
+              </TableHead>
+              <TableHead className="text-xs cursor-pointer hover:text-foreground" onClick={() => handleSort("active")}>
+                <div className="flex items-center gap-1">
+                  Status
+                  {sortConfig?.key === "active" && <ArrowUpDown className="size-3" />}
+                </div>
+              </TableHead>
+              <TableHead className="text-xs">Callings</TableHead>
+              <TableHead className="text-xs text-right pr-6">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              ))
+            ) : paginatedUsers.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="pl-4">
+                  <Checkbox
+                    checked={selectedIds.includes(user.id)}
+                    onCheckedChange={() =>
+                      setSelectedIds((prev) =>
+                        prev.includes(user.id) ? prev.filter((id) => id !== user.id) : [...prev, user.id]
+                      )
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-3 py-1">
+                    <Avatar className="h-9 w-9 bg-primary text-primary-foreground">
+                      <AvatarImage src={user.profile_image ?? undefined} alt={`${user.fname} ${user.lname}`} />
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                        {getInitials(`${user.fname} ${user.lname}`)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="font-medium text-sm text-foreground">{user.fname} {user.lname}</div>
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`size-1.5 rounded-full ${user.active ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                    <span className="text-xs text-muted-foreground">{user.active ? "Active" : "Inactive"}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm text-foreground">
+                  {user.callings?.map((c) => callings.find((cal) => cal.id === c.calling_id)?.name).filter(Boolean).join(", ") || "—"}
+                </TableCell>
+                <TableCell className="text-right pr-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button className="size-7" size="sm" variant="ghost">
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem onSelect={() => handleOpenEdit(user)}>Edit</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setPermissionsUserId(user.id)}>Permissions</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => user.active ? setConfirmTarget(user) : toggleStatusMutation.mutate(user)}
+                        disabled={user.active && (user.id === currentUserId || activeCount <= 1)}
+                        className={user.active ? "text-destructive" : ""}
+                      >
+                        {user.active ? "Deactivate" : "Activate"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            {filteredUsers.length === 0
+              ? "No users found"
+              : `Showing ${(currentPage - 1) * USERS_PER_PAGE + 1}–${Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of ${filteredUsers.length} user${filteredUsers.length !== 1 ? "s" : ""}`}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+              <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+            </div>
+          )}
         </div>
+      </div>
 
         {/* Edit Dialog */}
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
-          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                {cropMode ? "Crop Photo" : "Edit User Profile"}
-              </DialogTitle>
-            </DialogHeader>
-
+          <DialogContent className="max-w-[90vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             {editingUser && editForm && (
               <>
                 {cropMode ? (
-                  <div className="py-4 space-y-4">
+                  <div className="p-6 space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>Crop Photo</DialogTitle>
+                    </DialogHeader>
                     <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
                       <Cropper
                         image={imgSrc}
@@ -784,38 +1459,30 @@ export function UserAdminContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid gap-6 py-4">
-                      {/* Photo upload */}
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-16 w-16 bg-primary text-primary-foreground shrink-0">
-                          <AvatarImage src={editingUser.profile_image ?? undefined} alt={`${editingUser.fname} ${editingUser.lname}`} />
-                          <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                            {getInitials(`${editingUser.fname} ${editingUser.lname}`)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="space-y-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
+                    {/* Hero header */}
+                    <div className="relative">
+                      <div className="h-40 bg-gradient-to-r from-primary/70 via-primary/50 to-primary/20 rounded-t-lg" />
+                      <div className="absolute left-6 -bottom-12">
+                        <div className="relative">
+                          <Avatar className="h-24 w-24 border-4 border-background">
+                            <AvatarImage src={editingUser.profile_image ?? undefined} />
+                            <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-medium">
+                              {getInitials(`${editingUser.fname} ${editingUser.lname}`)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <button
+                            type="button"
+                            className="absolute right-0 bottom-0 flex h-8 w-8 items-center justify-center rounded-full bg-background border border-border shadow-sm hover:bg-muted transition-colors"
                             onClick={() => fileInputRef.current?.click()}
                           >
                             <Camera className="size-4" />
-                            Upload Photo
-                          </Button>
-                          <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
+                          </button>
                         </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFileChange}
-                        />
                       </div>
+                    </div>
 
-                      <Separator />
-
+                    {/* Form fields */}
+                    <div className="px-6 pt-16 pb-2 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>First Name</Label>
@@ -840,101 +1507,24 @@ export function UserAdminContent() {
                           value={editForm.bio}
                           onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                           placeholder="Brief description or notes..."
-                          className="min-h-[100px]"
+                          className="min-h-[100px] resize-none"
+                          maxLength={200}
                         />
+                        <p className="text-right text-xs text-muted-foreground">{200 - editForm.bio.length} characters remaining</p>
                       </div>
-
-                      <Separator />
-
-                      {/* Callings Section */}
-                      <div className="space-y-3">
-                        <Label className="text-sm font-semibold">Callings</Label>
-
-                        {editingUserCallings.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {editingUserCallings.map((uc) => (
-                              <div key={uc.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/30">
-                                <span className="text-foreground">
-                                  {callings.find((c) => c.id === uc.calling_id)?.name ?? "Unknown"}
-                                  {(callings.find((c) => c.id === uc.calling_id)?.max_slots ?? 1) > 1 && (
-                                    <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>
-                                  )}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                  disabled={removeCallingMutation.isPending}
-                                  onClick={() => removeCallingMutation.mutate({ callingId: uc.calling_id, slotNumber: uc.slot_number })}
-                                >
-                                  <X className="size-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No callings assigned.</p>
-                        )}
-
-                        <div className="flex gap-2 pt-1">
-                          <Select
-                            value={editCallingId === "" ? "" : String(editCallingId)}
-                            onValueChange={(v) => { setEditCallingId(Number(v)); setEditSlotNumber(""); }}
-                          >
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="Add a calling…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {callings.map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          {editSelectedCalling && editSelectedCalling.max_slots > 1 && (
-                            <Select
-                              value={editSlotNumber === "" ? "" : String(editSlotNumber)}
-                              onValueChange={(v) => setEditSlotNumber(Number(v))}
-                              disabled={editFreeSlots.length === 0}
-                            >
-                              <SelectTrigger className="w-[110px]">
-                                <SelectValue placeholder={editFreeSlots.length === 0 ? "No slots" : "Slot…"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {editFreeSlots.map((s) => (
-                                  <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!editCanAdd || assignCallingMutation.isPending || removeCallingMutation.isPending}
-                            onClick={() => {
-                              if (!editSelectedCalling || !editingUser) return;
-                              const slot = editSelectedCalling.max_slots === 1 ? 1 : Number(editSlotNumber);
-                              assignCallingMutation.mutate({ callingId: editSelectedCalling.id, slotNumber: slot, userId: editingUser.id });
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </div>
-
-                        {editSelectedCalling && editFreeSlots.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            {editSelectedCalling.max_slots === 1
-                              ? "This calling is already filled."
-                              : "All slots for this calling are occupied."}
-                          </p>
-                        )}
-                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
                     </div>
 
                     <Separator />
 
-                    <div className="flex items-center justify-between pt-2">
+                    {/* Footer */}
+                    <div className="flex items-center justify-between px-6 py-4">
                       <div className="flex gap-2">
                         {editingUser && (editingUser.id === currentUserId || activeCount <= 1) ? (
                           <Tooltip>
@@ -989,393 +1579,62 @@ export function UserAdminContent() {
           </DialogContent>
         </Dialog>
 
-        {/* Add User Wizard Dialog */}
-        <Dialog open={isAddingUser} onOpenChange={handleCloseAddUser}>
-          <DialogContent className="max-w-[90vw] sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-base font-semibold">
-                Step {addWizard.step} of 6 — {STEP_TITLES[addWizard.step]}
-              </DialogTitle>
-              <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${(addWizard.step / 6) * 100}%` }}
-                />
-              </div>
-            </DialogHeader>
-
-            {/* Step 1: Basic Info */}
-            {addWizard.step === 1 && (
-              <>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label>First Name <span className="text-destructive">*</span></Label>
-                      <Input
-                        value={addWizard.form.fname}
-                        onChange={(e) => setAddWizard((w) => ({
-                          ...w,
-                          form: { ...w.form, fname: e.target.value },
-                          errors: { ...w.errors, fname: undefined },
-                        }))}
-                        placeholder="John"
-                      />
-                      {addWizard.errors.fname && (
-                        <p className="text-xs text-destructive">{addWizard.errors.fname}</p>
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Last Name <span className="text-destructive">*</span></Label>
-                      <Input
-                        value={addWizard.form.lname}
-                        onChange={(e) => setAddWizard((w) => ({
-                          ...w,
-                          form: { ...w.form, lname: e.target.value },
-                          errors: { ...w.errors, lname: undefined },
-                        }))}
-                        placeholder="Doe"
-                      />
-                      {addWizard.errors.lname && (
-                        <p className="text-xs text-destructive">{addWizard.errors.lname}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Email <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="email"
-                      value={addWizard.form.email}
-                      onChange={(e) => setAddWizard((w) => ({
-                        ...w,
-                        form: { ...w.form, email: e.target.value },
-                        errors: { ...w.errors, email: undefined },
-                      }))}
-                      placeholder="john@example.com"
-                    />
-                    {addWizard.errors.email && (
-                      <p className="text-xs text-destructive">{addWizard.errors.email}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Phone</Label>
-                    <Input
-                      value={addWizard.form.phone}
-                      onChange={(e) => setAddWizard((w) => ({ ...w, form: { ...w.form, phone: e.target.value } }))}
-                      placeholder="Optional"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end pt-2 border-t">
-                  <Button onClick={advanceStep}>Next</Button>
-                </div>
-              </>
-            )}
-
-            {/* Step 2: Bio */}
-            {addWizard.step === 2 && (
-              <>
-                <div className="py-4">
-                  <div className="space-y-1.5">
-                    <Label>Bio</Label>
-                    <Textarea
-                      value={addWizard.form.bio}
-                      onChange={(e) => setAddWizard((w) => ({ ...w, form: { ...w.form, bio: e.target.value } }))}
-                      placeholder="Brief description or notes..."
-                      className="min-h-[120px]"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <Button variant="outline" onClick={backStep}>Back</Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={skipStep}>Skip</Button>
-                    <Button onClick={advanceStep}>Next</Button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Step 3: Password */}
-            {addWizard.step === 3 && (
-              <>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-1.5">
-                    <Label>Password <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="password"
-                      value={addWizard.form.password}
-                      onChange={(e) => setAddWizard((w) => ({
-                        ...w,
-                        form: { ...w.form, password: e.target.value },
-                        errors: { ...w.errors, password: undefined },
-                      }))}
-                      placeholder="••••••••"
-                    />
-                    {addWizard.errors.password && (
-                      <p className="text-xs text-destructive">{addWizard.errors.password}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Confirm Password <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="password"
-                      value={addWizard.form.confirmPassword}
-                      onChange={(e) => setAddWizard((w) => ({
-                        ...w,
-                        form: { ...w.form, confirmPassword: e.target.value },
-                        errors: { ...w.errors, confirmPassword: undefined },
-                      }))}
-                      placeholder="••••••••"
-                    />
-                    {addWizard.errors.confirmPassword && (
-                      <p className="text-xs text-destructive">{addWizard.errors.confirmPassword}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <Button variant="outline" onClick={backStep}>Back</Button>
-                  <Button onClick={advanceStep}>Next</Button>
-                </div>
-              </>
-            )}
-
-            {/* Step 4: Assign Calling */}
-            {addWizard.step === 4 && (
-              <>
-                <div className="py-4 space-y-3">
-                  <div className="flex gap-2">
-                    <Select
-                      value={addWizard.callingId === "" ? "" : String(addWizard.callingId)}
-                      onValueChange={(v) => setAddWizard((w) => ({ ...w, callingId: Number(v), slotNumber: "" }))}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select calling…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {callings.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {addSelectedCalling && addSelectedCalling.max_slots > 1 && (
-                      <Select
-                        value={addWizard.slotNumber === "" ? "" : String(addWizard.slotNumber)}
-                        onValueChange={(v) => setAddWizard((w) => ({ ...w, slotNumber: Number(v) }))}
-                        disabled={addFreeSlots.length === 0}
-                      >
-                        <SelectTrigger className="w-[110px]">
-                          <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : "Slot…"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {addFreeSlots.map((s) => (
-                            <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-
-                  {addSelectedCalling && addFreeSlots.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {addSelectedCalling.max_slots === 1
-                        ? "This calling is already filled."
-                        : "All slots for this calling are occupied."}
-                    </p>
-                  )}
-                </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <Button variant="outline" onClick={backStep}>Back</Button>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, callingId: "", slotNumber: "" }))}
-                    >
-                      Skip
-                    </Button>
-                    <Button onClick={advanceStep}>Next</Button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Step 5: Profile Photo */}
-            {addWizard.step === 5 && (
-              <>
-                {addPhotoCropView ? (
-                  <div className="py-4 space-y-4">
-                    <div className="relative h-72 w-full rounded-lg overflow-hidden bg-muted">
-                      <Cropper
-                        image={addImgSrc!}
-                        crop={addCrop}
-                        zoom={addZoom}
-                        aspect={1}
-                        cropShape="round"
-                        showGrid={false}
-                        onCropChange={setAddCrop}
-                        onZoomChange={setAddZoom}
-                        onCropComplete={onAddCropComplete}
-                      />
-                    </div>
-                    <div className="flex items-center gap-3 px-1">
-                      <Label className="text-xs text-muted-foreground shrink-0">Zoom</Label>
-                      <input
-                        type="range"
-                        min={1}
-                        max={3}
-                        step={0.01}
-                        value={addZoom}
-                        onChange={(e) => setAddZoom(Number(e.target.value))}
-                        className="w-full accent-primary"
-                      />
-                    </div>
-                    <div className="flex justify-between pt-2 border-t">
-                      <Button variant="outline" onClick={releaseAddCropState}>Cancel</Button>
-                      <Button
-                        onClick={async () => {
-                          if (!addImgSrc || !addCroppedAreaPixels) return;
-                          let blob: Blob;
-                          try {
-                            blob = await getCroppedImageBlob(addImgSrc, addCroppedAreaPixels);
-                          } catch {
-                            toast.error("Could not process image", { description: "Please try a different photo." });
-                            return;
-                          }
-                          const previewUrl = URL.createObjectURL(blob);
-                          if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
-                          setAddWizard((w) => ({ ...w, photo: { blob, previewUrl } }));
-                          releaseAddCropState();
-                        }}
-                      >
-                        Crop &amp; Save
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="py-6 flex flex-col items-center gap-4">
-                      <Avatar className="h-24 w-24">
-                        <AvatarImage src={addWizard.photo?.previewUrl} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-medium">
-                          {getInitials(`${addWizard.form.fname} ${addWizard.form.lname}`)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="text-center space-y-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() => addFileInputRef.current?.click()}
-                        >
-                          <Camera className="size-4" />
-                          {addWizard.photo ? "Change Photo" : "Choose Photo"}
-                        </Button>
-                        <p className="text-xs text-muted-foreground">JPG, PNG, WebP · max 5 MB</p>
-                      </div>
-                      <input
-                        ref={addFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          if (addImgSrc) URL.revokeObjectURL(addImgSrc);
-                          setAddImgSrc(URL.createObjectURL(file));
-                          setAddCrop({ x: 0, y: 0 });
-                          setAddZoom(1);
-                          setAddCroppedAreaPixels(null);
-                          setAddPhotoCropView(true);
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between pt-2 border-t">
-                      <Button variant="outline" onClick={backStep}>Back</Button>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
-                            setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, photo: null }));
-                          }}
-                        >
-                          Skip
-                        </Button>
-                        {addWizard.photo && (
-                          <Button onClick={advanceStep}>Next</Button>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* Step 6: Review */}
-            {addWizard.step === 6 && (
-              <>
-                <div className="py-4 space-y-4">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16 shrink-0">
-                      <AvatarImage src={addWizard.photo?.previewUrl} />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
-                        {getInitials(`${addWizard.form.fname} ${addWizard.form.lname}`)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {addWizard.form.fname} {addWizard.form.lname}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{addWizard.form.email}</p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex gap-2">
-                      <span className="text-muted-foreground w-24 shrink-0">Phone</span>
-                      <span className="text-foreground">{addWizard.form.phone || "—"}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-muted-foreground w-24 shrink-0">Bio</span>
-                      <span className="text-foreground">{addWizard.form.bio || "—"}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-muted-foreground w-24 shrink-0">Calling</span>
-                      <span className="text-foreground">
-                        {addSelectedCalling
-                          ? addSelectedCalling.max_slots > 1
-                            ? `${addSelectedCalling.name} · Slot ${addWizard.slotNumber}`
-                            : addSelectedCalling.name
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-muted-foreground w-24 shrink-0">Photo</span>
-                      <span className="text-foreground">{addWizard.photo ? "✓ Added" : "—"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-between pt-2 border-t">
-                  <Button variant="outline" onClick={backStep}>Back</Button>
-                  <Button
-                    onClick={() => createUserMutation.mutate({
-                      ...addWizard.form,
-                      callingId: addWizard.callingId,
-                      slotNumber: addWizard.slotNumber,
-                      photo: addWizard.photo,
-                    })}
-                    disabled={createUserMutation.isPending}
-                  >
-                    {createUserMutation.isPending ? "Creating…" : "Create User"}
-                  </Button>
-                </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        <AddUserWizard
+          open={isAddingUser}
+          wizard={addWizard}
+          callings={callings}
+          addSelectedCalling={addSelectedCalling}
+          addFreeSlots={addFreeSlots}
+          addPhotoCropView={addPhotoCropView}
+          addImgSrc={addImgSrc}
+          addCrop={addCrop}
+          addZoom={addZoom}
+          addFileInputRef={addFileInputRef}
+          onClose={handleCloseAddUser}
+          onAdvance={advanceStep}
+          onBack={backStep}
+          onSkip={skipStep}
+          onSkipWithClear={() => setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, callingId: "", slotNumber: "" }))}
+          onSkipWithPhoto={() => {
+            if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
+            setAddWizard((w) => ({ ...w, step: (w.step + 1) as WizardStep, photo: null }));
+          }}
+          onSetWizard={setAddWizard}
+          onSetAddCrop={setAddCrop}
+          onSetAddZoom={setAddZoom}
+          onSetAddCroppedAreaPixels={setAddCroppedAreaPixels}
+          onCropComplete={onAddCropComplete}
+          onReleaseAddCropState={releaseAddCropState}
+          onOpenCrop={(url) => {
+            if (addImgSrc) URL.revokeObjectURL(addImgSrc);
+            setAddImgSrc(url);
+            setAddCrop({ x: 0, y: 0 });
+            setAddZoom(1);
+            setAddCroppedAreaPixels(null);
+            setAddPhotoCropView(true);
+          }}
+          onConfirmCrop={async () => {
+            if (!addImgSrc || !addCroppedAreaPixels) return;
+            let blob: Blob;
+            try {
+              blob = await getCroppedImageBlob(addImgSrc, addCroppedAreaPixels);
+            } catch {
+              toast.error("Could not process image", { description: "Please try a different photo." });
+              return;
+            }
+            const previewUrl = URL.createObjectURL(blob);
+            if (addWizard.photo) URL.revokeObjectURL(addWizard.photo.previewUrl);
+            setAddWizard((w) => ({ ...w, photo: { blob, previewUrl } }));
+            releaseAddCropState();
+          }}
+          onSubmit={() => createUserMutation.mutate({
+            ...addWizard.form,
+            callingId: addWizard.callingId,
+            slotNumber: addWizard.slotNumber,
+            photo: addWizard.photo,
+          })}
+          isSubmitting={createUserMutation.isPending}
+        />
 
         {/* Confirm Delete Dialog */}
         <Dialog open={deleteConfirmUser != null} onOpenChange={(open) => { if (!open) setDeleteConfirmUser(null); }}>
@@ -1480,6 +1739,27 @@ export function UserAdminContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Permissions Dialog */}
+        <PermissionsDialog
+          open={permissionsUserId !== null}
+          user={permissionsUser}
+          permissions={permissionsData ?? { scopes: 0, flags: [] }}
+          permissionsLoading={permissionsLoading}
+          callings={callings}
+          occupiedSlotsMap={occupiedSlotsMap}
+          onClose={() => setPermissionsUserId(null)}
+          onTogglePermission={(newScopes) => {
+            if (permissionsUserId === null) return;
+            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes });
+          }}
+          onRemoveCalling={({ callingId, slotNumber }) => removeCallingMutation.mutate({ callingId, slotNumber })}
+          onAssignCalling={({ callingId, slotNumber, userId, onSuccess }) => {
+            assignCallingMutation.mutate({ callingId, slotNumber, userId }, {
+              onSuccess,
+            });
+          }}
+        />
 
         {/* Confirm Deactivate Dialog */}
         <Dialog open={confirmTarget != null} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>

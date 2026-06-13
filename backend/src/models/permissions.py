@@ -1,20 +1,26 @@
-from enum import IntFlag, auto
-from sqlmodel import Field, UniqueConstraint
+import functools
+import operator
+from enum import IntFlag
+from sqlmodel import Field, SQLModel, UniqueConstraint
 from typing import Optional
+from pydantic import field_validator
 
 from .base import BaseModel
 
 
 class Permission(IntFlag):
     NONE = 0
-    MANAGE_USERS = auto()
-    MANAGE_CALLINGS = auto()
-    MANAGE_ASSIGNMENTS = auto()
-    MANAGE_SPEAKING_SCHEDULE = auto()
-    SUBMIT_CALLING_PROPOSALS = auto()
-    MANAGE_CALLING_PROPOSALS = auto()
-    VIEW_CALLING_PROPOSALS = auto()
-    DISCORD_BOT = auto()  # Special permission for the Discord bot to identify itself
+    MANAGE_USERS = 1
+    MANAGE_CALLINGS = 2
+    MANAGE_ASSIGNMENTS = 4
+    MANAGE_SPEAKING_SCHEDULE = 8
+    SUBMIT_CALLING_PROPOSALS = 16
+    MANAGE_CALLING_PROPOSALS = 32
+    VIEW_CALLING_PROPOSALS = 64
+    DISCORD_BOT = 128  # Special permission for the Discord bot to identify itself
+
+# All assignable flags; DISCORD_BOT excluded so the validator rejects it explicitly.
+MAX_VALID_SCOPES = int(functools.reduce(operator.or_, Permission)) & ~int(Permission.DISCORD_BOT)
 
 class Permissions(BaseModel, table=True):
     # Composite unique constraint: Prevents User #1 and Calling #1 
@@ -42,5 +48,23 @@ class Permissions(BaseModel, table=True):
     def revoke_permission(self, perm: Permission) -> None:
         """Revoke a specific permission from the Permissions."""
         self.scopes &= ~perm
+
+
+class PermissionsResponse(SQLModel):
+    scopes: int
+    flags: list[str]
+
+
+class PermissionsUpdateRequest(SQLModel):
+    scopes: int
+
+    @field_validator("scopes")
+    @classmethod
+    def validate_scopes(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("scopes must be a non-negative integer")
+        if v & ~MAX_VALID_SCOPES:
+            raise ValueError("scopes contains unknown or reserved permission bits")
+        return v
 
 
