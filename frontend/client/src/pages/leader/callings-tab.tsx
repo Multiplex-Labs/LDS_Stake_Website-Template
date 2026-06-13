@@ -53,8 +53,6 @@ import {
   X,
   Lock,
   ChevronsUpDown,
-  CheckCircle2,
-  Circle,
   Shield,
   FileText,
   Users,
@@ -170,24 +168,20 @@ function GroupCombobox({
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value ?? "");
 
-  const systemGroupNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const c of callings) {
-      if (c.system_defined && c.display_group) names.add(c.display_group.toLowerCase());
-    }
-    return names;
-  }, [callings]);
-
-  const existingGroups = useMemo(() => {
+  const { systemGroupNames, existingGroups } = useMemo(() => {
+    const sysNames = new Set<string>();
     const seen = new Set<string>();
     const groups: string[] = [];
     for (const c of callings) {
-      if (c.display_group && !c.system_defined && !seen.has(c.display_group)) {
+      if (!c.display_group) continue;
+      if (c.system_defined) {
+        sysNames.add(c.display_group.toLowerCase());
+      } else if (!seen.has(c.display_group)) {
         seen.add(c.display_group);
         groups.push(c.display_group);
       }
     }
-    return groups.sort();
+    return { systemGroupNames: sysNames, existingGroups: groups.sort() };
   }, [callings]);
 
   const filteredGroups = useMemo(() => {
@@ -547,31 +541,19 @@ function CallingWizard({
   }
 
   const existingGroupCallings = useMemo(
-    () => callings.filter((c) => c.display_group === form.display_group && c.display_group !== null),
+    () => callings.filter((c) => c.display_group === form.display_group),
     [callings, form.display_group],
   );
   const isExistingGroup = form.display_group !== null && existingGroupCallings.length > 0;
 
   function handleGroupChange(group: string | null) {
-    let autoGroupOrder = form.group_order;
-    let autoDisplayOrder: number | null = null;
-
-    if (group !== null) {
-      const existing = callings.filter((c) => c.display_group === group);
-      if (existing.length > 0) {
-        autoGroupOrder = existing[0].group_order;
-        const maxOrder = Math.max(0, ...existing.map((c) => c.display_order ?? 0));
-        autoDisplayOrder = maxOrder + 1;
-      } else {
-        autoDisplayOrder = 1;
-      }
-    }
-
+    const existing = group ? callings.filter((c) => c.display_group === group) : [];
+    const maxOrder = existing.length ? Math.max(0, ...existing.map((c) => c.display_order ?? 0)) : 0;
     setForm({
       ...form,
       display_group: group,
-      display_order: autoDisplayOrder,
-      group_order: autoGroupOrder,
+      display_order: group ? (existing.length ? maxOrder + 1 : 1) : null,
+      group_order: existing[0]?.group_order ?? form.group_order,
     });
   }
 
@@ -740,6 +722,28 @@ function CallingWizard({
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function shiftGroupSiblings(
+  siblings: ApiCalling[],
+  insertOrder: number | null,
+  groupOrder: number | null,
+): Promise<void> {
+  if (siblings.length === 0) return;
+  await Promise.allSettled(
+    siblings.map((c) => {
+      const shift = insertOrder !== null && c.display_order !== null && c.display_order >= insertOrder;
+      return apiRequest("PUT", `/api/callings/${c.id}`, {
+        ...c,
+        display_order: shift ? c.display_order! + 1 : c.display_order,
+        group_order: groupOrder,
+      });
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CallingsTab
 // ---------------------------------------------------------------------------
 
@@ -831,26 +835,9 @@ export function CallingsTab() {
       const res = await apiRequest("POST", "/api/callings/", form);
       const calling = await res.json() as ApiCalling;
 
-      // Sync all siblings in the group: shift display_order for those at or after the
-      // insert position, and propagate group_order to all of them so the group-level
-      // value stays consistent across every calling in the group.
       if (form.display_group) {
-        const groupSiblings = callings.filter((c) => c.display_group === form.display_group);
-        if (groupSiblings.length > 0) {
-          await Promise.allSettled(
-            groupSiblings.map((c) => {
-              const needsShift =
-                form.display_order !== null &&
-                c.display_order !== null &&
-                (c.display_order as number) >= form.display_order!;
-              return apiRequest("PUT", `/api/callings/${c.id}`, {
-                ...c,
-                display_order: needsShift ? (c.display_order as number) + 1 : c.display_order,
-                group_order: form.group_order,
-              });
-            }),
-          );
-        }
+        const siblings = callings.filter((c) => c.display_group === form.display_group);
+        await shiftGroupSiblings(siblings, form.display_order, form.group_order);
       }
 
       let permissionsSet = true;
@@ -881,28 +868,9 @@ export function CallingsTab() {
     mutationFn: async ({ id, form, permissions, callings }: { id: number; form: CallingForm; permissions: number; callings: ApiCalling[] }) => {
       await apiRequest("PUT", `/api/callings/${id}`, form);
 
-      // Sync all siblings in the group (excluding the calling just saved): shift
-      // display_order for those at or after the insert position, and propagate
-      // group_order to all of them so the group-level value stays consistent.
       if (form.display_group) {
-        const groupSiblings = callings.filter(
-          (c) => c.id !== id && c.display_group === form.display_group,
-        );
-        if (groupSiblings.length > 0) {
-          await Promise.allSettled(
-            groupSiblings.map((c) => {
-              const needsShift =
-                form.display_order !== null &&
-                c.display_order !== null &&
-                (c.display_order as number) >= form.display_order!;
-              return apiRequest("PUT", `/api/callings/${c.id}`, {
-                ...c,
-                display_order: needsShift ? (c.display_order as number) + 1 : c.display_order,
-                group_order: form.group_order,
-              });
-            }),
-          );
-        }
+        const siblings = callings.filter((c) => c.id !== id && c.display_group === form.display_group);
+        await shiftGroupSiblings(siblings, form.display_order, form.group_order);
       }
 
       let permissionsSet = true;

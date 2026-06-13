@@ -7,6 +7,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from sqlmodel import Session, select
 
 from ..utils import CallingUser
+from ..utils.usercalling import STAKE_PRESIDENCY_CALLING_NAMES
 from ..db import get_session
 from ..models import (
     BaseModel,
@@ -25,9 +26,6 @@ router = APIRouter(prefix="/presidency-assignments", tags=["presidency"])
 # ---------------------------------------------------------------------------
 # Response / request models
 # ---------------------------------------------------------------------------
-
-PRESIDENCY_CALLING_NAMES = ["Stake President", "Stake First Counselor", "Stake Second Counselor"]
-
 
 class CurrentHolder(PydanticBaseModel):
     id: int
@@ -148,7 +146,7 @@ def get_presidency_assignments(
     """Return the three presidency assignment rows (one per calling)."""
     results: list[PresidencyAssignmentResponse] = []
 
-    for calling_name in PRESIDENCY_CALLING_NAMES:
+    for calling_name in STAKE_PRESIDENCY_CALLING_NAMES:
         calling = session.exec(
             select(Calling).where(Calling.name == calling_name)
         ).first()

@@ -6,6 +6,11 @@ from typing import Optional
 HC_CALLING_NAME = "High Councilor"
 BISHOP_CALLING_NAME = "Bishop"
 SUPERADMIN_CALLING_NAME = "SuperAdmin"
+STAKE_PRESIDENCY_CALLING_NAMES = [
+    "Stake President",
+    "Stake First Counselor",
+    "Stake Second Counselor",
+]
 
 def get_or_make_user_calling(
     calling_id: int,

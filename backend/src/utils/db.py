@@ -11,7 +11,7 @@ from ..models import (
     Calling, PresidencyAssignment, UserCalling
 )
 from .security import hash_password
-from .usercalling import HC_CALLING_NAME, SUPERADMIN_CALLING_NAME
+from .usercalling import HC_CALLING_NAME, SUPERADMIN_CALLING_NAME, STAKE_PRESIDENCY_CALLING_NAMES
 from logging import getLogger
 
 import asyncio
@@ -192,27 +192,17 @@ def _create_calling_if_not_exists(
         session.commit()
         session.refresh(calling)
     else:
-        # Let's update any existing fields if need-be
-        updated = False
-        if calling.max_slots != max_slots:
-            calling.max_slots = max_slots
-            updated = True
-        if calling.is_public != is_public:
-            calling.is_public = is_public
-            updated = True
-        if calling.display_group != display_group:
-            calling.display_group = display_group
-            updated = True
-        if calling.display_order != display_order:
-            calling.display_order = display_order
-            updated = True
-        if calling.lock_slots != lock_slots:
-            calling.lock_slots = lock_slots
-            updated = True
-        if calling.group_order != group_order:
-            calling.group_order = group_order
-            updated = True
-        if updated:
+        updates = {
+            "max_slots": max_slots,
+            "is_public": is_public,
+            "display_group": display_group,
+            "display_order": display_order,
+            "lock_slots": lock_slots,
+            "group_order": group_order,
+        }
+        if any(getattr(calling, k) != v for k, v in updates.items()):
+            for k, v in updates.items():
+                setattr(calling, k, v)
             session.add(calling)
             session.commit()
             session.refresh(calling)
@@ -309,11 +299,9 @@ def create_presidency_assignments(session: Optional[Session] = None):
     Can be called with an existing session (e.g. from create_system_callings_and_assignments)
     or standalone (opens its own session when session=None).
     """
-    PRESIDENCY_CALLINGS = ["Stake President", "Stake First Counselor", "Stake Second Counselor"]
-
     def _ensure_rows(s: Session):
         try:
-            for name in PRESIDENCY_CALLINGS:
+            for name in STAKE_PRESIDENCY_CALLING_NAMES:
                 calling = s.exec(select(Calling).where(Calling.name == name)).first()
                 if calling is None:
                     logger.warning(f"create_presidency_assignments: calling '{name}' not found, skipping.")

@@ -37,7 +37,6 @@ function deriveGroups(callings: ApiCalling[], users: ApiUser[]): LeadershipGroup
 
   for (const calling of publicGrouped) {
     const groupName = calling.display_group!;
-    const callingOrder = calling.display_order ?? 9999;
 
     if (!groupMap.has(groupName)) {
       // Use group_order from the calling; fall back to 9999 if null

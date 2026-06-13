@@ -21,6 +21,7 @@ from ..models import (
 )
 
 from .discord_bot import DiscordBotHandle
+from .usercalling import HC_CALLING_NAME, STAKE_PRESIDENCY_CALLING_NAMES
 
 
 def can_approve_proposal(
@@ -44,11 +45,9 @@ def can_approve_proposal(
         and second counselor. This reflects the ecclesiastical hierarchy where stake
         presidency and high council have oversight over calling proposals.
     """
-    approver_callings = ["high councilor", "stake president", "stake first counselor", "stake second counselor"]
-    callings = [calling.calling.name.lower() for calling in user.callings]
-    if not callings:
-        callings = []
-    return any(calling in approver_callings for calling in callings)
+    approver_callings = {HC_CALLING_NAME.lower()} | {n.lower() for n in STAKE_PRESIDENCY_CALLING_NAMES}
+    callings = [uc.calling.name.lower() for uc in user.callings] if user.callings else []
+    return any(c in approver_callings for c in callings)
 
 def is_high_councilor(user: User) -> bool:
     """
@@ -68,10 +67,8 @@ def is_high_councilor(user: User) -> bool:
         This function performs a case-insensitive check against the user's callings.
         The calling name must exactly match "high councilor" (case insensitive).
     """
-    callings = [calling.calling.name.lower() for calling in user.callings]
-    if not callings:
-        callings = []
-    return "high councilor" in callings
+    callings = [uc.calling.name.lower() for uc in user.callings] if user.callings else []
+    return HC_CALLING_NAME.lower() in callings
 
 def is_stake_presidency(user: User) -> bool:
     """
@@ -91,10 +88,9 @@ def is_stake_presidency(user: User) -> bool:
         This function checks for the callings: "stake president", "first counselor",
         and "second counselor". The check is case-insensitive.
     """
-    callings = [calling.calling.name.lower() for calling in user.callings]
-    if not callings:
-        callings = []
-    return any(calling in ["stake president", "stake first counselor", "stake second counselor"] for calling in callings)
+    presidency_names = {n.lower() for n in STAKE_PRESIDENCY_CALLING_NAMES}
+    callings = [uc.calling.name.lower() for uc in user.callings] if user.callings else []
+    return any(c in presidency_names for c in callings)
 
 def get_stake_presidency(session: Session) -> List[User]:
     """
@@ -114,12 +110,11 @@ def get_stake_presidency(session: Session) -> List[User]:
         The function checks for the callings "stake president", "first counselor",
         and "second counselor". The search is case-insensitive.
     """
+    from sqlalchemy import or_
     statement = select(User).where(
         User.callings.any(
             UserCalling.calling.has(
-                Calling.name.ilike("stake president") |
-                Calling.name.ilike("stake first counselor") |
-                Calling.name.ilike("stake second counselor")
+                or_(*[Calling.name.ilike(n) for n in STAKE_PRESIDENCY_CALLING_NAMES])
             )
         )
     )
@@ -144,7 +139,7 @@ def get_high_councilors(session: Session) -> List[User]:
     """
     statement = select(User).where(
         User.callings.any(
-            UserCalling.calling.has(Calling.name.ilike("high councilor"))
+            UserCalling.calling.has(Calling.name.ilike(HC_CALLING_NAME))
         )
     )
     return session.exec(statement).all()
