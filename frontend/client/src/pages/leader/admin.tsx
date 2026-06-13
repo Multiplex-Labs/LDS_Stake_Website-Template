@@ -14,18 +14,10 @@ const TABS = [
   { value: "speaking", label: "Speaking" },
   { value: "hc-assignments", label: "HC Assignments" },
   { value: "presidency", label: "Presidency" },
-  { value: "site-content", label: "Site Content" },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
 
-function TabPlaceholder({ name }: { name: string }) {
-  return (
-    <div className="py-16 text-center text-muted-foreground">
-      <p className="text-sm">{name} management — coming soon.</p>
-    </div>
-  );
-}
 
 export default function AdminHub() {
   const search = useSearch();
@@ -74,11 +66,6 @@ export default function AdminHub() {
             <PresidencyAssignmentsTab />
           </TabsContent>
 
-          {TABS.filter((t) => !["users", "callings", "speaking", "hc-assignments", "presidency"].includes(t.value)).map((tab) => (
-            <TabsContent key={tab.value} value={tab.value}>
-              <TabPlaceholder name={tab.label} />
-            </TabsContent>
-          ))}
         </Tabs>
       </div>
     </Layout>
