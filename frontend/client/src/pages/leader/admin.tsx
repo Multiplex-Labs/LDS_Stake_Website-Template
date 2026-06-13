@@ -19,7 +19,6 @@ const TABS = [
 
 type TabValue = (typeof TABS)[number]["value"];
 
-
 export default function AdminHub() {
   const search = useSearch();
   const [, setLocation] = useLocation();
@@ -39,20 +38,12 @@ export default function AdminHub() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">
-            {TABS.map((tab) => {
-              const Icon = tab.icon
-
-              return (
-                  <TabsTrigger
-                      key={tab.value}
-                      value={tab.value}
-                      className="flex items-center gap-2"
-                  >
-                    <Icon className="h-4 w-4" />
-                    {tab.label}
-                  </TabsTrigger>
-              )
-            })}
+            {TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                {label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value="users">

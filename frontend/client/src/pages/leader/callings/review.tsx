@@ -179,7 +179,7 @@ export default function ReviewCallings() {
             <h1 className="text-3xl font-bold">Review Callings</h1>
             <Button
             variant="secondary"
-            className={cn("gap-2", BUTTON_HOVER)}
+            className={BUTTON_HOVER}
             size="icon"
             asChild
         >

@@ -32,10 +32,10 @@ const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
 
 const TOPIC_GRID = "grid-cols-[14rem_1fr_1fr_10rem_6rem]";
-const STATUS_CIRCLE_CLS = {
-  planned: "bg-emerald-500 text-white",
-  unsaved: "bg-amber-300 text-amber-900",
-  empty: "bg-destructive text-destructive-foreground",
+const STATUS_META = {
+  planned: { circle: "bg-emerald-500 text-white",                  badge: "bg-emerald-500 text-white hover:bg-emerald-500",   dot: "bg-emerald-500", label: "Planned",     subtext: "Planned"     },
+  unsaved: { circle: "bg-amber-300 text-amber-900",                badge: "bg-amber-300 text-amber-900 hover:bg-amber-300",   dot: "bg-amber-300",   label: "Unsaved",     subtext: "In progress" },
+  empty:   { circle: "bg-destructive text-destructive-foreground", badge: null,                                               dot: "bg-destructive", label: "Empty",       subtext: "Not planned" },
 } as const;
 
 
@@ -246,10 +246,18 @@ export function SpeakingTab() {
     return "empty";
   };
 
-  const plannedCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "planned").length;
-  const unsavedCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "unsaved").length;
-  const emptyCount = MONTH_INDICES.filter((i) => getTopicStatus(i) === "empty").length;
+  const { plannedCount, unsavedCount, emptyCount } = MONTH_INDICES.reduce(
+    (acc, i) => {
+      const s = getTopicStatus(i);
+      if (s === "planned") acc.plannedCount++;
+      else if (s === "unsaved") acc.unsavedCount++;
+      else acc.emptyCount++;
+      return acc;
+    },
+    { plannedCount: 0, unsavedCount: 0, emptyCount: 0 },
+  );
   const savableCount = Object.values(edits).filter((e) => e.topic.trim() !== "").length;
+  const isBatchSaving = saveAllMutation.isPending;
 
   if (topicsLoading || calendarLoading) {
     return (
@@ -291,7 +299,6 @@ export function SpeakingTab() {
               const isSaving =
                 saveTopicMutation.isPending &&
                 saveTopicMutation.variables?.monthIdx === monthIdx;
-              const isAnyBatchSaving = saveAllMutation.isPending;
 
               return (
                 <div
@@ -303,16 +310,14 @@ export function SpeakingTab() {
                     <span
                       className={cn(
                         "flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                        STATUS_CIRCLE_CLS[status],
+                        STATUS_META[status].circle,
                       )}
                     >
                       {SHORT_MONTHS[monthIdx]}
                     </span>
                     <div>
                       <div className="text-sm font-medium">{MONTHS[monthIdx]}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {status === "planned" ? "Planned" : status === "unsaved" ? "In progress" : "Not planned"}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{STATUS_META[status].subtext}</div>
                     </div>
                   </div>
 
@@ -348,13 +353,9 @@ export function SpeakingTab() {
 
                   {/* Status badge */}
                   <div className="flex justify-center">
-                    {status === "planned" ? (
-                      <Badge className="bg-emerald-500 text-white hover:bg-emerald-500">Planned</Badge>
-                    ) : status === "unsaved" ? (
-                      <Badge className="bg-amber-300 text-amber-900 hover:bg-amber-300">Unsaved</Badge>
-                    ) : (
-                      <Badge variant="destructive">Empty</Badge>
-                    )}
+                    {STATUS_META[status].badge
+                      ? <Badge className={STATUS_META[status].badge!}>{STATUS_META[status].label}</Badge>
+                      : <Badge variant="destructive">{STATUS_META[status].label}</Badge>}
                   </div>
 
                   {/* Action */}
@@ -380,7 +381,7 @@ export function SpeakingTab() {
                       <Button
                         size="sm"
                         className={cn("h-8", BUTTON_HOVER)}
-                        disabled={!row.topic.trim() || isSaving || isAnyBatchSaving}
+                        disabled={!row.topic.trim() || isSaving || isBatchSaving}
                         onClick={() => saveTopicMutation.mutate({ monthIdx, topic: row.topic, ref: row.ref })}
                       >
                         {isSaving ? "Saving…" : "Save"}
@@ -397,18 +398,16 @@ export function SpeakingTab() {
           {/* Footer */}
           <div className="flex items-center justify-between border-t bg-muted/10 px-4 py-3">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-emerald-500" />
-                {plannedCount} planned
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-amber-300" />
-                {unsavedCount} unsaved
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-destructive" />
-                {emptyCount} not planned
-              </span>
+              {([
+                { key: "planned", count: plannedCount, text: "planned" },
+                { key: "unsaved", count: unsavedCount, text: "unsaved" },
+                { key: "empty",   count: emptyCount,   text: "not planned" },
+              ] as const).map(({ key, count, text }) => (
+                <span key={key} className="flex items-center gap-1.5">
+                  <span className={cn("size-2 rounded-full", STATUS_META[key].dot)} />
+                  {count} {text}
+                </span>
+              ))}
             </div>
             <Button
               variant="outline"
@@ -470,7 +469,7 @@ export function SpeakingTab() {
                               size="icon"
                               className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
                               onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
-                              disabled={clearMonthMutation.isPending}
+                              disabled={clearMonthMutation.isPending && clearMonthMutation.variables?.monthIdx === i}
                               title={`Clear all ${m} assignments`}
                               aria-label={`Clear all ${m} assignments`}
                             >
@@ -570,7 +569,7 @@ export function SpeakingTab() {
                                 size="icon"
                                 className="h-7 w-7 text-muted-foreground/30 hover:text-destructive"
                                 onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
-                                disabled={clearHCMutation.isPending}
+                                disabled={clearHCMutation.isPending && clearHCMutation.variables?.ucId === sp.high_councilor_id}
                                 title="Clear all assignments for this high councilor"
                                 aria-label="Clear all assignments for this high councilor"
                               >

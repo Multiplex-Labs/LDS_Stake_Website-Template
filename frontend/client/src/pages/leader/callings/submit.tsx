@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { cn } from "@/lib/utils";
 import { BUTTON_HOVER } from "@/lib/constants";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -309,7 +308,7 @@ export default function SubmitCalling() {
             <div className="flex justify-end gap-4">
               <Button
                 variant="destructive"
-                className={cn("gap-2", BUTTON_HOVER)}
+                className="gap-2"
                 size="default"
                 asChild
               >
