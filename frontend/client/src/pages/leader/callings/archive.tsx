@@ -35,7 +35,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Separator } from "@/components/ui/separator";
 import { useWardMap } from "@/lib/hooks";
 import { apiRequest } from "@/lib/queryClient";
-import { apiErrorStatus, fullName } from "@/lib/utils";
+import { apiErrorStatus, fullName, cn } from "@/lib/utils";
+import { BUTTON_HOVER } from "@/lib/constants";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
 
 const LOAD_BATCH = 50;
@@ -194,7 +195,7 @@ export default function ArchiveCallings() {
         <div className="mb-6">
           <Button
             variant="outline"
-            className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+            className={cn("gap-2", BUTTON_HOVER)}
             size="default"
             asChild
           >
@@ -329,7 +330,7 @@ export default function ArchiveCallings() {
             <div className="px-4 py-3 border-t">
               <Button
                 variant="secondary"
-                className="w-full gap-2 border-dashed hover:scale-105 hover:shadow-lg transition-all duration-200"
+                className={cn("w-full gap-2 border-dashed", BUTTON_HOVER)}
                 size="sm"
                 onClick={clearFilters}
               >

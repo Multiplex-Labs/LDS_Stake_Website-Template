@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn, apiErrorStatus } from "@/lib/utils";
+import { BUTTON_HOVER } from "@/lib/constants";
 import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -178,7 +179,7 @@ export default function ReviewCallings() {
             <h1 className="text-3xl font-bold">Review Callings</h1>
             <Button
             variant="secondary"
-            className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+            className={cn("gap-2", BUTTON_HOVER)}
             size="icon"
             asChild
         >

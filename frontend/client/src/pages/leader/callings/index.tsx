@@ -22,8 +22,8 @@ import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { apiErrorStatus } from "@/lib/utils";
-import { KANBAN_STAGES, Permission, hasPermission } from "@/lib/constants";
+import { apiErrorStatus, cn } from "@/lib/utils";
+import { KANBAN_STAGES, Permission, hasPermission, BUTTON_HOVER } from "@/lib/constants";
 import { CallingModal, type ProposalWithStage } from "./CallingModal";
 import type { KanbanBoard, CallingProposal, Ward, ApiUser } from "@/types";
 
@@ -298,7 +298,7 @@ export default function CallingSystem() {
           <div className="flex gap-4">
             <Button
                   variant="default"
-                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  className={cn("gap-2", BUTTON_HOVER)}
                   size="default"
                   asChild
               >
@@ -309,7 +309,7 @@ export default function CallingSystem() {
               </Button>
             <Button
                   variant="secondary"
-                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  className={cn("gap-2", BUTTON_HOVER)}
                   size="default"
                   asChild
               >
@@ -322,7 +322,7 @@ export default function CallingSystem() {
           {canViewSustainings && (
             <Button
                 variant="secondary"
-                className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                className={cn("gap-2", BUTTON_HOVER)}
                 size="default"
                 asChild
             >

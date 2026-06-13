@@ -7,10 +7,10 @@ import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { loadSustainingPrep } from "@/lib/sustainingPrep";
 import { useWardMap } from "@/lib/hooks";
-import { fullName, apiErrorStatus } from "@/lib/utils";
+import { fullName, apiErrorStatus, cn } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAuthStore } from "@/stores/auth";
-import { hasPermission, Permission } from "@/lib/constants";
+import { hasPermission, Permission, BUTTON_HOVER } from "@/lib/constants";
 import type { Ward, KanbanBoard } from "@/types";
 
 interface Release {
@@ -315,7 +315,7 @@ export default function ReleasesAndSustainings() {
         <div className="flex justify-between items-center mb-8 print:hidden">
           <Button
                   variant="outline"
-                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  className={cn("gap-2", BUTTON_HOVER)}
                   size="default"
                   asChild
               >
@@ -327,13 +327,13 @@ export default function ReleasesAndSustainings() {
           <div className="flex items-center gap-2">
             {canManageCallings && (
               <Link href="/leader/callings/sustainings-prep">
-                <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200">
+                <Button variant="outline" className={cn("gap-2", BUTTON_HOVER)}>
                   <ClipboardList className="h-4 w-4" />
                   Prepare Form
                 </Button>
               </Link>
             )}
-            <Button variant="outline" className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200" onClick={() => window.print()}>
+            <Button variant="outline" className={cn("gap-2", BUTTON_HOVER)} onClick={() => window.print()}>
               <Printer className="h-4 w-4" />
               Print
             </Button>

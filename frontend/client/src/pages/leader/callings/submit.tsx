@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
+import { BUTTON_HOVER } from "@/lib/constants";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import {Save, X} from "lucide-react";
@@ -218,7 +220,7 @@ export default function SubmitCalling() {
                           </FormControl>
                           <Button
                             type="button"
-                            className="hover:scale-105 hover:shadow-lg transition-all duration-200"
+                            className={BUTTON_HOVER}
                             variant="secondary"
                             size="icon"
                             onClick={() => {
@@ -307,7 +309,7 @@ export default function SubmitCalling() {
             <div className="flex justify-end gap-4">
               <Button
                 variant="destructive"
-                className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                className={cn("gap-2", BUTTON_HOVER)}
                 size="default"
                 asChild
               >

@@ -44,7 +44,7 @@ import type { Ward, KanbanBoard, SustainingPrepState, SustainingItem, Ordination
 import { loadSustainingPrep, saveSustainingPrep, clearSustainingPrep } from "@/lib/sustainingPrep";
 import { cn, fullName, extractWardNumber, apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { hasPermission, Permission } from "@/lib/constants";
+import { hasPermission, Permission, BUTTON_HOVER } from "@/lib/constants";
 
 // ---------- helpers ----------
 
@@ -589,7 +589,7 @@ export default function SustainingPrep() {
           <div>
               <Button
                   variant="outline"
-                  className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                  className={cn("gap-2", BUTTON_HOVER)}
                   size="default"
                   asChild
               >
@@ -656,7 +656,7 @@ export default function SustainingPrep() {
 
             <Button
               variant="outline"
-              className="gap-2 hover:scale-105 hover:shadow-lg transition-all duration-200"
+              className={cn("gap-2", BUTTON_HOVER)}
               onClick={() => setOrdinationOpen(true)}
             >
               <Plus className="size-4" />
