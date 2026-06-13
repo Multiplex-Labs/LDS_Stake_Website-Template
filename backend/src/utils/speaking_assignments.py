@@ -76,8 +76,11 @@ def load_speaking_schedule() -> list[list[str]]:
                 f"Padding {slots - len(schedule)} missing rows with empty assignments."
             )
             cols = len(schedule[0]) if schedule else 12
-            schedule += [[""] * cols] * (slots - len(schedule))
-    logger.info(f"Loaded speaking schedule with {len(schedule)} rows and {len(schedule[0])} columns")
+            schedule += [[""] * cols for _ in range(slots - len(schedule))]
+    if schedule:
+        logger.info(f"Loaded speaking schedule with {len(schedule)} rows and {len(schedule[0])} columns")
+    else:
+        logger.warning("Speaking schedule is empty after truncation/padding.")
     return schedule
 
 
