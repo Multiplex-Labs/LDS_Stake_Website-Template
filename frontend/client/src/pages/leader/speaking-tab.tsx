@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MONTHS, SHORT_MONTHS, SELECT_NONE } from "@/lib/constants";
+import { MONTHS, SHORT_MONTHS, SELECT_NONE, BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import { cn, extractWardNumber, getInitials, fullName } from "@/lib/utils";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
@@ -32,7 +32,6 @@ const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
 
 const TOPIC_GRID = "grid-cols-[14rem_1fr_1fr_10rem_6rem]";
-const BUTTON_HOVER = "hover:scale-105 hover:shadow-lg transition-all duration-200";
 const STATUS_CIRCLE_CLS = {
   planned: "bg-emerald-500 text-white",
   unsaved: "bg-amber-300 text-amber-900",
@@ -74,7 +73,7 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
         disabled={year <= YEAR_OPTIONS[0]}
         onClick={() => onChange(year - 1)}
         aria-label="Previous year"
-        className="text-muted-foreground/50 hover:text-foreground transition-colors"
+        className={ICON_BTN_HOVER}
       >
         <ChevronLeftIcon className="size-4" />
       </Button>
@@ -94,7 +93,7 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
         disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
         onClick={() => onChange(year + 1)}
         aria-label="Next year"
-        className="text-muted-foreground/50 hover:text-foreground transition-colors"
+        className={ICON_BTN_HOVER}
       >
         <ChevronRightIcon className="size-4" />
       </Button>

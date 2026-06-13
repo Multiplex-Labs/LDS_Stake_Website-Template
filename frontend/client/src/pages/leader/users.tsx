@@ -75,6 +75,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
 
@@ -1263,7 +1264,7 @@ export function UserAdminContent() {
           <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm">
+                <Button variant="outline" className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm">
                   Sort by
                   <ArrowUpDown className="size-3" />
                 </Button>
@@ -1276,7 +1277,7 @@ export function UserAdminContent() {
                 <DropdownMenuItem onClick={() => handleSort("email")}>Email</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button className="h-8 gap-1.5 px-3 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" onClick={() => setIsAddingUser(true)}>
+            <Button className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm" onClick={() => setIsAddingUser(true)}>
               <Plus className="size-3.5" />
               Add User
             </Button>
@@ -1373,7 +1374,7 @@ export function UserAdminContent() {
                 <TableCell className="text-right pr-4">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button className="size-7 text-muted-foreground/50 hover:text-foreground transition-colors" size="sm" variant="ghost">
+                      <Button className={cn("size-7", ICON_BTN_HOVER)} size="sm" variant="ghost">
                         <MoreHorizontal className="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1406,8 +1407,8 @@ export function UserAdminContent() {
           </p>
           {totalPages > 1 && (
             <div className="flex gap-2">
-              <Button className="h-7 px-2 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
-              <Button className="h-7 px-2 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+              <Button className={cn("h-7 px-2 text-xs", BUTTON_HOVER)} size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+              <Button className={cn("h-7 px-2 text-xs", BUTTON_HOVER)} size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
             </div>
           )}
         </div>
