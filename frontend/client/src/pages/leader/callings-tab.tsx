@@ -634,7 +634,7 @@ export function CallingsTab() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <span className={`size-1.5 rounded-full ${calling.is_public ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                          <span className={`size-1.5 rounded-full ${calling.is_public ? "bg-emerald-500" : "bg-destructive"}`} />
                           <span className="text-xs text-muted-foreground">{calling.is_public ? "Public" : "Private"}</span>
                         </div>
                       </TableCell>

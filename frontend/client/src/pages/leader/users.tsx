@@ -1363,7 +1363,7 @@ export function UserAdminContent() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <span className={`size-1.5 rounded-full ${user.active ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                    <span className={`size-1.5 rounded-full ${user.active ? "bg-emerald-500" : "bg-destructive"}`} />
                     <span className="text-xs text-muted-foreground">{user.active ? "Active" : "Inactive"}</span>
                   </div>
                 </TableCell>
