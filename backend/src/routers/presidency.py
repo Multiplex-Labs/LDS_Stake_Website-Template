@@ -26,7 +26,7 @@ router = APIRouter(prefix="/presidency-assignments", tags=["presidency"])
 # Response / request models
 # ---------------------------------------------------------------------------
 
-PRESIDENCY_CALLING_NAMES = ["Stake President", "First Counselor", "Second Counselor"]
+PRESIDENCY_CALLING_NAMES = ["Stake President", "Stake First Counselor", "Stake Second Counselor"]
 
 
 class CurrentHolder(PydanticBaseModel):

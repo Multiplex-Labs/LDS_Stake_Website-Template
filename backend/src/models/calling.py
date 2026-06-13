@@ -9,6 +9,10 @@ class Calling(BaseModel, table=True):
     max_slots: int = Field(default=1)
     is_public: bool = Field(default=False)
     system_defined: bool = Field(default=False)
+    display_group: Optional[str] = Field(default=None, nullable=True)
+    display_order: Optional[int] = Field(default=None, nullable=True)
+    group_order: Optional[int] = Field(default=None, nullable=True)
+    lock_slots: bool = Field(default=False)
 
     # Relationship to assignments
     assignments: List["UserCalling"] = Relationship(

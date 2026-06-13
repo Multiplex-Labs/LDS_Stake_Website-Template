@@ -194,8 +194,8 @@ def test_kanban_flow_call(
     db_session.refresh(first_councilor)
 
     # Assign first councilor calling
-    fc_calling = db_session.exec(select(Calling).where(Calling.name == "First Counselor")).first()
-    assert fc_calling is not None, "First Counselor calling must exist in the database for this test"
+    fc_calling = db_session.exec(select(Calling).where(Calling.name == "Stake First Counselor")).first()
+    assert fc_calling is not None, "Stake First Counselor calling must exist in the database for this test"
     
     fc_usercalling = UserCalling(user_id=first_councilor.id, calling_id=fc_calling.id, slot_number=1)
     db_session.add(fc_usercalling)
@@ -421,7 +421,7 @@ def test_revert_re_advances_when_interval_votes_meet_threshold(
         db_session.refresh(u)
 
     sp_calling = db_session.exec(select(Calling).where(Calling.name == "Stake President")).first()
-    fc_calling = db_session.exec(select(Calling).where(Calling.name == "First Counselor")).first()
+    fc_calling = db_session.exec(select(Calling).where(Calling.name == "Stake First Counselor")).first()
     db_session.add(UserCalling(user_id=sp.id, calling_id=sp_calling.id, slot_number=1))
     db_session.add(UserCalling(user_id=fc.id, calling_id=fc_calling.id, slot_number=1))
     db_session.commit()
@@ -600,7 +600,7 @@ def _setup_sp_users(db_session, create_user):
         db_session.refresh(u)
 
     sp_calling = db_session.exec(select(Calling).where(Calling.name == "Stake President")).first()
-    fc_calling = db_session.exec(select(Calling).where(Calling.name == "First Counselor")).first()
+    fc_calling = db_session.exec(select(Calling).where(Calling.name == "Stake First Counselor")).first()
     db_session.add(UserCalling(user_id=sp.id, calling_id=sp_calling.id, slot_number=1))
     db_session.add(UserCalling(user_id=fc.id, calling_id=fc_calling.id, slot_number=1))
     db_session.commit()

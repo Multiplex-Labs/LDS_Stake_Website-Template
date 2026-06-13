@@ -44,7 +44,7 @@ def can_approve_proposal(
         and second counselor. This reflects the ecclesiastical hierarchy where stake
         presidency and high council have oversight over calling proposals.
     """
-    approver_callings = ["high councilor", "stake president", "first counselor", "second counselor"]
+    approver_callings = ["high councilor", "stake president", "stake first counselor", "stake second counselor"]
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
         callings = []
@@ -94,7 +94,7 @@ def is_stake_presidency(user: User) -> bool:
     callings = [calling.calling.name.lower() for calling in user.callings]
     if not callings:
         callings = []
-    return any(calling in ["stake president", "first counselor", "second counselor"] for calling in callings)
+    return any(calling in ["stake president", "stake first counselor", "stake second counselor"] for calling in callings)
 
 def get_stake_presidency(session: Session) -> List[User]:
     """
@@ -118,8 +118,8 @@ def get_stake_presidency(session: Session) -> List[User]:
         User.callings.any(
             UserCalling.calling.has(
                 Calling.name.ilike("stake president") |
-                Calling.name.ilike("first counselor") |
-                Calling.name.ilike("second counselor")
+                Calling.name.ilike("stake first counselor") |
+                Calling.name.ilike("stake second counselor")
             )
         )
     )

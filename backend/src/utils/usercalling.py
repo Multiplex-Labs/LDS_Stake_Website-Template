@@ -5,6 +5,7 @@ from typing import Optional
 
 HC_CALLING_NAME = "High Councilor"
 BISHOP_CALLING_NAME = "Bishop"
+SUPERADMIN_CALLING_NAME = "SuperAdmin"
 
 def get_or_make_user_calling(
     calling_id: int,
@@ -77,7 +78,6 @@ def get_or_make_hc_assignment(
         )
         session.add(assignment)
         session.commit()
-        session.refresh(assignment)
         session.refresh(assignment)
     return assignment
 

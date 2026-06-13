@@ -8,10 +8,10 @@ from ..models import (
     UserSession, Assignment,
     SpeakingTopic, SpeakingAssignment,
     User, Permissions, Permission,
-    Calling, PresidencyAssignment
+    Calling, PresidencyAssignment, UserCalling
 )
 from .security import hash_password
-from .usercalling import HC_CALLING_NAME
+from .usercalling import HC_CALLING_NAME, SUPERADMIN_CALLING_NAME
 from logging import getLogger
 
 import asyncio
@@ -169,7 +169,11 @@ def _create_calling_if_not_exists(
         name: str,
         max_slots: int,
         is_public: bool,
-        permissions: List[Permission] = []
+        permissions: List[Permission] = [],
+        display_group: Optional[str] = None,
+        display_order: Optional[int] = None,
+        lock_slots: bool = False,
+        group_order: Optional[int] = None,
 ) -> Calling:
     """
     Helper function to create a calling if it doesn't already exist.
@@ -178,8 +182,12 @@ def _create_calling_if_not_exists(
     calling = session.exec(statement).first()
     if calling is None:
         logger.info(f"Creating '{name}' calling.")
-        calling = Calling(name=name, max_slots=max_slots,
-                          is_public=is_public, system_defined=True)
+        calling = Calling(
+            name=name, max_slots=max_slots, is_public=is_public,
+            system_defined=True, display_group=display_group,
+            display_order=display_order, lock_slots=lock_slots,
+            group_order=group_order,
+        )
         session.add(calling)
         session.commit()
         session.refresh(calling)
@@ -191,6 +199,18 @@ def _create_calling_if_not_exists(
             updated = True
         if calling.is_public != is_public:
             calling.is_public = is_public
+            updated = True
+        if calling.display_group != display_group:
+            calling.display_group = display_group
+            updated = True
+        if calling.display_order != display_order:
+            calling.display_order = display_order
+            updated = True
+        if calling.lock_slots != lock_slots:
+            calling.lock_slots = lock_slots
+            updated = True
+        if calling.group_order != group_order:
+            calling.group_order = group_order
             updated = True
         if updated:
             session.add(calling)
@@ -223,37 +243,63 @@ def create_system_callings_and_assignments():
     orm = ORM()
     with Session(orm.engine) as session:
         _create_calling_if_not_exists(
-            session, HC_CALLING_NAME, max_slots=15, is_public=True,
-            permissions=[
-                Permission.SUBMIT_CALLING_PROPOSALS, Permission.VIEW_CALLING_PROPOSALS
-            ]
+            session, HC_CALLING_NAME, max_slots=12, is_public=True,
+            permissions=[Permission.SUBMIT_CALLING_PROPOSALS, Permission.VIEW_CALLING_PROPOSALS],
+            display_group="High Council", display_order=1, group_order=2,
         )
 
-        # Check if the "Stake President" calling existst
         _create_calling_if_not_exists(
             session, "Stake President", max_slots=1, is_public=True,
-            permissions=[~Permission.NONE]  # All permissions
+            permissions=[~Permission.NONE],
+            display_group="Stake Presidency", display_order=1, group_order=1,
         )
 
-        # Check if the "First Counselor" calling exists
         _create_calling_if_not_exists(
-            session, "First Counselor", max_slots=1, is_public=True,
-            permissions=[~Permission.NONE]  # All permissions
+            session, "Stake First Counselor", max_slots=1, is_public=True,
+            permissions=[~Permission.NONE],
+            display_group="Stake Presidency", display_order=2, group_order=1,
         )
 
-        # Check if the "Second Counselor" calling exists
         _create_calling_if_not_exists(
-            session, "Second Counselor", max_slots=1, is_public=True,
-            permissions=[~Permission.NONE]  # All permissions
+            session, "Stake Second Counselor", max_slots=1, is_public=True,
+            permissions=[~Permission.NONE],
+            display_group="Stake Presidency", display_order=3, group_order=1,
         )
 
-        # Check if the "Executive Secretary" calling exists
         _create_calling_if_not_exists(
-            session, "Executive Secretary", max_slots=1, is_public=True,
-            permissions=[~Permission.NONE]  # All permissions
+            session, "Stake Executive Secretary", max_slots=1, is_public=True,
+            permissions=[~Permission.NONE],
+            display_group="Stake Presidency", display_order=4, group_order=1,
         )
 
-        # Create presidency assignment rows for the three presidency callings
+        _create_calling_if_not_exists(
+            session, "Stake Clerk", max_slots=1, is_public=True,
+            permissions=[~Permission.NONE],
+            display_group="Stake Presidency", display_order=5, group_order=1,
+        )
+
+        superadmin_calling = _create_calling_if_not_exists(
+            session, SUPERADMIN_CALLING_NAME, max_slots=1, is_public=False,
+            permissions=[~Permission.NONE],
+            lock_slots=True,
+        )
+
+        admin_user = session.exec(select(User).where(User.email == "admin@admin.com")).first()
+        if admin_user is not None:
+            existing_slot = session.exec(
+                select(UserCalling).where(
+                    UserCalling.calling_id == superadmin_calling.id,
+                    UserCalling.slot_number == 1,
+                )
+            ).first()
+            if existing_slot is None:
+                session.add(UserCalling(calling_id=superadmin_calling.id, slot_number=1, user_id=admin_user.id))
+                session.commit()
+            elif existing_slot.user_id is None:
+                existing_slot.user_id = admin_user.id
+                session.add(existing_slot)
+                session.commit()
+
         create_presidency_assignments(session)
 
 
@@ -263,7 +309,7 @@ def create_presidency_assignments(session: Optional[Session] = None):
     Can be called with an existing session (e.g. from create_system_callings_and_assignments)
     or standalone (opens its own session when session=None).
     """
-    PRESIDENCY_CALLINGS = ["Stake President", "First Counselor", "Second Counselor"]
+    PRESIDENCY_CALLINGS = ["Stake President", "Stake First Counselor", "Stake Second Counselor"]
 
     def _ensure_rows(s: Session):
         try:
@@ -311,7 +357,7 @@ def validate_unique_field(
 
     statement = select(model).where(getattr(model, field_name) == value)
 
-    # If updating, don't flag the record as a duplicate of itself
+
     if exclude_id is not None:
         statement = statement.where(model.id != exclude_id)
 

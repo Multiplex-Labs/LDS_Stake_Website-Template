@@ -32,6 +32,10 @@ export interface ApiCalling {
   max_slots: number;
   is_public: boolean;
   system_defined: boolean;
+  display_group: string | null;
+  display_order: number | null;
+  group_order: number | null;
+  lock_slots: boolean;
 }
 
 export interface ApiUserCalling {
