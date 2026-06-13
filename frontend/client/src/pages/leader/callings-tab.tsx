@@ -41,6 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import {
   ChevronRight,
   ChevronDown,
@@ -50,17 +51,18 @@ import {
   ArrowUpDown,
   UserPlus,
   X,
+  Lock,
   ChevronsUpDown,
   CheckCircle2,
   Circle,
   Shield,
   FileText,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus, cn } from "@/lib/utils";
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
-import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep } from "@/components/ui/wizard-shell";
@@ -69,9 +71,12 @@ interface CallingForm {
   name: string;
   max_slots: number;
   is_public: boolean;
+  display_group: string | null;
+  display_order: number | null;
+  group_order: number | null;
 }
 
-const EMPTY_FORM: CallingForm = { name: "", max_slots: 1, is_public: false };
+const EMPTY_FORM: CallingForm = { name: "", max_slots: 1, is_public: false, display_group: null, display_order: null, group_order: null };
 
 function invalidateCallingData() {
   queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
@@ -149,16 +154,206 @@ function UserPicker({
   );
 }
 
+// ---------------------------------------------------------------------------
+// GroupCombobox — searchable combobox for display_group with create-new support
+// ---------------------------------------------------------------------------
+
+function GroupCombobox({
+  value,
+  onChange,
+  callings,
+}: {
+  value: string | null;
+  onChange: (group: string | null) => void;
+  callings: ApiCalling[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value ?? "");
+
+  const systemGroupNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of callings) {
+      if (c.system_defined && c.display_group) names.add(c.display_group.toLowerCase());
+    }
+    return names;
+  }, [callings]);
+
+  const existingGroups = useMemo(() => {
+    const seen = new Set<string>();
+    const groups: string[] = [];
+    for (const c of callings) {
+      if (c.display_group && !c.system_defined && !seen.has(c.display_group)) {
+        seen.add(c.display_group);
+        groups.push(c.display_group);
+      }
+    }
+    return groups.sort();
+  }, [callings]);
+
+  const filteredGroups = useMemo(() => {
+    const q = inputValue.toLowerCase();
+    return existingGroups.filter((g) => g.toLowerCase().includes(q));
+  }, [existingGroups, inputValue]);
+
+  const trimmed = inputValue.trim();
+  const isSystemGroup = trimmed.length > 0 && systemGroupNames.has(trimmed.toLowerCase());
+  const isNewGroup = trimmed.length > 0 && !existingGroups.includes(trimmed) && !isSystemGroup;
+
+  function handleSelect(group: string) {
+    setInputValue(group);
+    onChange(group);
+    setOpen(false);
+  }
+
+  function handleInputChange(val: string) {
+    setInputValue(val);
+    const t = val.trim();
+    onChange(t && !systemGroupNames.has(t.toLowerCase()) ? t : null);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || "Select or create a group…"}
+          </span>
+          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search or create group…"
+            value={inputValue}
+            onValueChange={handleInputChange}
+          />
+          <CommandList>
+            {filteredGroups.length === 0 && !isNewGroup && !isSystemGroup && (
+              <CommandEmpty>No groups found.</CommandEmpty>
+            )}
+            {filteredGroups.length > 0 && (
+              <CommandGroup heading="Existing Groups">
+                {filteredGroups.map((g) => (
+                  <CommandItem key={g} value={g} onSelect={() => handleSelect(g)}>
+                    {g}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {isNewGroup && (
+              <CommandGroup heading="Create New">
+                <CommandItem
+                  value={trimmed}
+                  onSelect={() => handleSelect(trimmed)}
+                >
+                  <Plus className="size-4 mr-2 text-muted-foreground" />
+                  Create "{trimmed}"
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {isSystemGroup && (
+              <CommandGroup>
+                <CommandItem disabled className="text-destructive/80 text-xs cursor-default">
+                  "{trimmed}" is a system-managed group and cannot be used.
+                </CommandItem>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PositionPicker — ordered insert-point selector within an existing group
+// ---------------------------------------------------------------------------
+
+function PositionPicker({
+  group,
+  callings,
+  excludeCallingId,
+  value,
+  onChange,
+}: {
+  group: string;
+  callings: ApiCalling[];
+  excludeCallingId?: number;
+  value: number | null;
+  onChange: (position: number) => void;
+}) {
+  const groupCallings = useMemo(() => {
+    return callings
+      .filter(
+        (c) =>
+          c.display_group === group &&
+          c.display_order !== null &&
+          (excludeCallingId === undefined || c.id !== excludeCallingId),
+      )
+      .sort((a, b) => (a.display_order ?? 9999) - (b.display_order ?? 9999));
+  }, [callings, group, excludeCallingId]);
+
+  if (groupCallings.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        First calling in this group — will be placed at position 1.
+      </p>
+    );
+  }
+
+  const positions = [
+    { label: `Before "${groupCallings[0].name}"`, position: 1 },
+    ...groupCallings.map((c, i) => ({
+      label: `After "${c.name}"`,
+      position: i + 2,
+    })),
+  ];
+
+  return (
+    <div className="space-y-1.5">
+      {positions.map(({ label, position }) => (
+        <button
+          key={position}
+          type="button"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+            value === position
+              ? "bg-primary/10 text-primary"
+              : "hover:bg-muted text-muted-foreground",
+          )}
+          onClick={() => onChange(position)}
+        >
+          <span
+            className={cn(
+              "size-2 rounded-full shrink-0",
+              value === position ? "bg-primary" : "bg-muted-foreground/30",
+            )}
+          />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SlotRow({
   callingId,
   slot,
   occupant,
   activeUsers,
+  lockSlots,
 }: {
   callingId: number;
   slot: number;
   occupant: ApiUser | undefined;
   activeUsers: ApiUser[];
+  lockSlots: boolean;
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -216,16 +411,20 @@ function SlotRow({
         </TableCell>
         <TableCell className="text-right pr-2">
           {occupant ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setConfirmClear(true)}
-              disabled={clear.isPending}
-            >
-              <X className="size-4 mr-1" />
-              Clear
-            </Button>
+            lockSlots ? (
+              <Lock className="size-4 text-muted-foreground ml-auto mr-2" aria-label="Slot is locked" />
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmClear(true)}
+                disabled={clear.isPending}
+              >
+                <X className="size-4 mr-1" />
+                Clear
+              </Button>
+            )
           ) : (
             <UserPicker
               users={activeUsers}
@@ -267,6 +466,34 @@ function SlotRow({
 // Calling Wizard
 // ---------------------------------------------------------------------------
 
+const PERMISSION_CATEGORIES = [
+  {
+    label: "Administration",
+    icon: Shield,
+    items: [
+      { flag: 1,  label: "Manage Users",    description: "Create, edit, and deactivate member accounts." },
+      { flag: 2,  label: "Manage Callings", description: "Create and update callings and slot assignments." },
+    ],
+  },
+  {
+    label: "Assignments",
+    icon: Users,
+    items: [
+      { flag: 4,  label: "Manage Assignments",       description: "Manage high councilor ward assignments." },
+      { flag: 8,  label: "Manage Speaking Schedule", description: "Create and edit the speaking schedule." },
+    ],
+  },
+  {
+    label: "Calling Proposals",
+    icon: FileText,
+    items: [
+      { flag: 16, label: "Submit Calling Proposals",  description: "Submit proposals for new callings." },
+      { flag: 32, label: "Manage Calling Proposals",  description: "Review, approve, and advance proposals." },
+      { flag: 64, label: "View Calling Proposals",    description: "View proposals and their current status." },
+    ],
+  },
+] as const;
+
 const CALLING_WIZARD_STEPS = [
   { id: 1, label: "Basic Info",   description: "Name, slot count, and visibility settings.", icon: <FileText className="size-3.5" /> },
   { id: 2, label: "Permissions",  description: "Grant permissions to all holders of this calling.", icon: <Shield className="size-3.5" /> },
@@ -281,6 +508,7 @@ function CallingWizard({
   initialPermissions = 0,
   onSave,
   isPending,
+  callings,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -288,11 +516,12 @@ function CallingWizard({
   initialPermissions?: number;
   onSave: (form: CallingForm, permissions: number) => void;
   isPending: boolean;
+  callings: ApiCalling[];
 }) {
   const [step, setStep] = useState<CallingWizardStep>(1);
   const [form, setForm] = useState<CallingForm>(
     initial
-      ? { name: initial.name, max_slots: initial.max_slots, is_public: initial.is_public }
+      ? { name: initial.name, max_slots: initial.max_slots, is_public: initial.is_public, display_group: initial.display_group, display_order: initial.display_order, group_order: initial.group_order }
       : EMPTY_FORM,
   );
   const [nameError, setNameError] = useState("");
@@ -317,6 +546,35 @@ function CallingWizard({
     setStep(id as CallingWizardStep);
   }
 
+  const existingGroupCallings = useMemo(
+    () => callings.filter((c) => c.display_group === form.display_group && c.display_group !== null),
+    [callings, form.display_group],
+  );
+  const isExistingGroup = form.display_group !== null && existingGroupCallings.length > 0;
+
+  function handleGroupChange(group: string | null) {
+    let autoGroupOrder = form.group_order;
+    let autoDisplayOrder: number | null = null;
+
+    if (group !== null) {
+      const existing = callings.filter((c) => c.display_group === group);
+      if (existing.length > 0) {
+        autoGroupOrder = existing[0].group_order;
+        const maxOrder = Math.max(0, ...existing.map((c) => c.display_order ?? 0));
+        autoDisplayOrder = maxOrder + 1;
+      } else {
+        autoDisplayOrder = 1;
+      }
+    }
+
+    setForm({
+      ...form,
+      display_group: group,
+      display_order: autoDisplayOrder,
+      group_order: autoGroupOrder,
+    });
+  }
+
   const submitLabel = initial ? "Save Changes" : "Add Calling";
 
   return (
@@ -331,69 +589,148 @@ function CallingWizard({
       onSubmit={() => onSave(form, permissions)}
       submitLabel={isPending ? "Saving…" : submitLabel}
       isPending={isPending}
+      dialogClassName="sm:max-w-xl"
     >
       {step === 1 && (
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="calling-name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="calling-name"
-              value={form.name}
-              onChange={(e) => {
-                setForm({ ...form, name: e.target.value });
-                if (nameError) setNameError("");
-              }}
-              placeholder="e.g. Sunday School Teacher"
-            />
-            {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+        <div className="space-y-6">
+          {/* ── Two-column row ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+            {/* Left — Calling Details */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Calling Details</h3>
+              <div className="space-y-1">
+                <Label htmlFor="calling-name">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="calling-name"
+                  value={form.name}
+                  onChange={(e) => {
+                    setForm({ ...form, name: e.target.value });
+                    if (nameError) setNameError("");
+                  }}
+                  placeholder="e.g. Sunday School Teacher"
+                />
+                {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="calling-slots">Max Slots</Label>
+                <Input
+                  id="calling-slots"
+                  type="number"
+                  min={1}
+                  value={form.max_slots}
+                  onChange={(e) =>
+                    setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Right — Visibility */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground">Visibility</h3>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="calling-public"
+                  checked={form.is_public}
+                  onCheckedChange={(checked) =>
+                    setForm({ ...form, is_public: checked === true })
+                  }
+                />
+                <Label htmlFor="calling-public" className="cursor-pointer">
+                  Public (visible on the website)
+                </Label>
+              </div>
+              {form.is_public && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Display Group</Label>
+                    <GroupCombobox
+                      value={form.display_group}
+                      onChange={handleGroupChange}
+                      callings={callings}
+                    />
+                  </div>
+                  {form.display_group && isExistingGroup && (
+                    <div className="space-y-1.5">
+                      <Label>Position in Group</Label>
+                      <PositionPicker
+                        group={form.display_group}
+                        callings={callings}
+                        excludeCallingId={initial?.id}
+                        value={form.display_order}
+                        onChange={(pos) => setForm({ ...form, display_order: pos })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="calling-slots">Max Slots</Label>
-            <Input
-              id="calling-slots"
-              type="number"
-              min={1}
-              value={form.max_slots}
-              onChange={(e) =>
-                setForm({ ...form, max_slots: Math.max(1, Number(e.target.value)) })
-              }
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="calling-public"
-              checked={form.is_public}
-              onCheckedChange={(checked) =>
-                setForm({ ...form, is_public: checked === true })
-              }
-            />
-            <Label htmlFor="calling-public" className="cursor-pointer">
-              Public (visible on the website)
-            </Label>
-          </div>
+
+          {/* ── Group Page Order — full-width below the grid ── */}
+          {form.is_public && (
+            <>
+              <Separator />
+              <div className="space-y-1.5">
+                <Label htmlFor="calling-group-order">
+                  Group Page Order{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="calling-group-order"
+                  type="number"
+                  min={1}
+                  value={form.group_order ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, group_order: e.target.value ? Number(e.target.value) : null })
+                  }
+                  placeholder="e.g. 1 (lower = appears first)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Controls which group appears first on the leadership page. All callings in a group share this value.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {step === 2 && (
-        <div className="space-y-0.5">
-          {ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
-            const active = (permissions & flag) !== 0;
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {PERMISSION_CATEGORIES.map((category) => {
+            const CategoryIcon = category.icon;
             return (
-              <button
-                key={flag}
-                type="button"
-                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
-                onClick={() => setPermissions((p) => p ^ flag)}
+              <div
+                key={category.label}
+                className="rounded-lg border bg-card p-4 space-y-3"
               >
-                {active
-                  ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                  : <Circle className="size-4 text-muted-foreground/40 shrink-0" />}
-                <span className={active ? "text-foreground" : "text-muted-foreground"}>
-                  {label}
-                </span>
-              </button>
+                <div className="flex items-center gap-2">
+                  <CategoryIcon className="size-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm font-medium text-foreground">{category.label}</span>
+                </div>
+                <div className="space-y-3">
+                  {category.items.map(({ flag, label, description }) => {
+                    const checked = (permissions & flag) !== 0;
+                    const itemId = `perm-${flag}`;
+                    return (
+                      <div key={flag} className="flex items-start gap-3">
+                        <Checkbox
+                          id={itemId}
+                          checked={checked}
+                          onCheckedChange={() => setPermissions((p) => p ^ flag)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <label htmlFor={itemId} className="cursor-pointer space-y-0.5">
+                          <p className="text-sm font-medium leading-none text-foreground">{label}</p>
+                          <p className="text-xs text-muted-foreground leading-snug">{description}</p>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -490,9 +827,32 @@ export function CallingsTab() {
 
   // Fix B: addMutation — wrap permissions PUT in try/catch; warn on partial failure
   const addMutation = useMutation({
-    mutationFn: async ({ form, permissions }: { form: CallingForm; permissions: number }) => {
+    mutationFn: async ({ form, permissions, callings }: { form: CallingForm; permissions: number; callings: ApiCalling[] }) => {
       const res = await apiRequest("POST", "/api/callings/", form);
       const calling = await res.json() as ApiCalling;
+
+      // Sync all siblings in the group: shift display_order for those at or after the
+      // insert position, and propagate group_order to all of them so the group-level
+      // value stays consistent across every calling in the group.
+      if (form.display_group) {
+        const groupSiblings = callings.filter((c) => c.display_group === form.display_group);
+        if (groupSiblings.length > 0) {
+          await Promise.allSettled(
+            groupSiblings.map((c) => {
+              const needsShift =
+                form.display_order !== null &&
+                c.display_order !== null &&
+                (c.display_order as number) >= form.display_order!;
+              return apiRequest("PUT", `/api/callings/${c.id}`, {
+                ...c,
+                display_order: needsShift ? (c.display_order as number) + 1 : c.display_order,
+                group_order: form.group_order,
+              });
+            }),
+          );
+        }
+      }
+
       let permissionsSet = true;
       if (permissions > 0) {
         try {
@@ -518,8 +878,33 @@ export function CallingsTab() {
 
   // Fix C: editMutation — wrap permissions PUT in try/catch; warn on partial failure
   const editMutation = useMutation({
-    mutationFn: async ({ id, form, permissions }: { id: number; form: CallingForm; permissions: number }) => {
+    mutationFn: async ({ id, form, permissions, callings }: { id: number; form: CallingForm; permissions: number; callings: ApiCalling[] }) => {
       await apiRequest("PUT", `/api/callings/${id}`, form);
+
+      // Sync all siblings in the group (excluding the calling just saved): shift
+      // display_order for those at or after the insert position, and propagate
+      // group_order to all of them so the group-level value stays consistent.
+      if (form.display_group) {
+        const groupSiblings = callings.filter(
+          (c) => c.id !== id && c.display_group === form.display_group,
+        );
+        if (groupSiblings.length > 0) {
+          await Promise.allSettled(
+            groupSiblings.map((c) => {
+              const needsShift =
+                form.display_order !== null &&
+                c.display_order !== null &&
+                (c.display_order as number) >= form.display_order!;
+              return apiRequest("PUT", `/api/callings/${c.id}`, {
+                ...c,
+                display_order: needsShift ? (c.display_order as number) + 1 : c.display_order,
+                group_order: form.group_order,
+              });
+            }),
+          );
+        }
+      }
+
       let permissionsSet = true;
       try {
         await apiRequest("PUT", `/api/callings/${id}/permissions`, { scopes: permissions });
@@ -687,6 +1072,7 @@ export function CallingsTab() {
                           slot={slot}
                           occupant={occupantMap.get(`${calling.id}:${slot}`)}
                           activeUsers={unassignedActiveUsers}
+                          lockSlots={calling.lock_slots}
                         />
                       ))}
                   </Fragment>
@@ -731,8 +1117,9 @@ export function CallingsTab() {
         onOpenChange={(open) => {
           if (!open) setAddWizardOpen(false);
         }}
-        onSave={(form, permissions) => addMutation.mutate({ form, permissions })}
+        onSave={(form, permissions) => addMutation.mutate({ form, permissions, callings })}
         isPending={addMutation.isPending}
+        callings={callings}
       />
 
       {/* Fix E: only render edit wizard once permissions have loaded */}
@@ -746,9 +1133,10 @@ export function CallingsTab() {
           initial={editTarget}
           initialPermissions={editPermissionsData?.scopes ?? 0}
           onSave={(form, permissions) =>
-            editMutation.mutate({ id: editTarget.id, form, permissions })
+            editMutation.mutate({ id: editTarget.id, form, permissions, callings })
           }
           isPending={editMutation.isPending}
+          callings={callings}
         />
       )}
 
