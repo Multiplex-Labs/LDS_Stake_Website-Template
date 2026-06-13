@@ -23,21 +23,13 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTHS, SELECT_NONE } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
-import { cn, extractWardNumber } from "@/lib/utils";
+import { cn, extractWardNumber, getInitials, fullName } from "@/lib/utils";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
 
-const AVATAR_COLORS = [
-  "bg-blue-500/20 text-blue-700 dark:text-blue-300",
-  "bg-violet-500/20 text-violet-700 dark:text-violet-300",
-  "bg-amber-500/20 text-amber-700 dark:text-amber-300",
-  "bg-rose-500/20 text-rose-700 dark:text-rose-300",
-  "bg-teal-500/20 text-teal-700 dark:text-teal-300",
-  "bg-orange-500/20 text-orange-700 dark:text-orange-300",
-] as const;
 
 interface TopicEdit {
   topic: string;
@@ -75,7 +67,7 @@ export function SpeakingTab() {
     placeholderData: keepPreviousData,
   });
 
-  const { data: calendar, isLoading: calendarLoading } = useQuery<SpeakingCalendar>({
+  const { data: calendar, isLoading: calendarLoading, isFetching: calendarFetching } = useQuery<SpeakingCalendar>({
     queryKey: ["/api/speaking/calendar/", year],
     queryFn: () => apiRequest("GET", `/api/speaking/calendar/${year}`).then((r) => r.json()),
     retry: false,
@@ -301,7 +293,7 @@ export function SpeakingTab() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className={cn("overflow-x-auto transition-opacity", calendarFetching && "opacity-50")}>
                 <Table className="min-w-[900px]">
                   <TableHeader>
                     <TableRow>
@@ -334,16 +326,14 @@ export function SpeakingTab() {
                       .filter((sp) => userCallingMap.has(sp.high_councilor_id))
                       .map((sp) => {
                         const user = userCallingMap.get(sp.high_councilor_id) as ApiUser;
-                        const initials = `${user.fname[0] ?? ""}${user.lname[0] ?? ""}`.toUpperCase();
-                        const avatarColor = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
                         return (
                           <TableRow key={sp.high_councilor_id}>
                             <TableCell className="sticky left-0 bg-background z-10">
                               <div className="flex items-center gap-2 py-1">
                                 <Avatar className="h-8 w-8">
                                   <AvatarImage src={user.profile_image ?? undefined} />
-                                  <AvatarFallback className={cn("text-xs", avatarColor)}>
-                                    {initials}
+                                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                                    {getInitials(fullName(user))}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
