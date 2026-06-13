@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,26 +23,18 @@ import { Pencil, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ICON_BTN_HOVER } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { cn, fullName, getInitials, apiErrorStatus, apiErrorBody } from "@/lib/utils";
+import { useChipInput } from "@/hooks/useChipInput";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 interface EditState {
   assignment: PresidencyAssignment;
-  chips: string[];
   selectedWardIds: Set<number>;
-}
-
-function getInitials(assignment: PresidencyAssignment): string {
-  if (!assignment.current_holder) return "?";
-  const { fname, lname } = assignment.current_holder;
-  return `${fname.charAt(0)}${lname.charAt(0)}`.toUpperCase();
 }
 
 export function PresidencyAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
-  const [chipDraft, setChipDraft] = useState<string>("");
-  const [wardSelectKey, setWardSelectKey] = useState(0);
-  const chipInputRef = useRef<HTMLInputElement>(null);
+  const chipInput = useChipInput();
 
   const {
     data: assignments = [],
@@ -70,6 +62,11 @@ export function PresidencyAssignmentsTab() {
     [assignments],
   );
 
+  const availableWards = useMemo(
+    () => (editing ? wards.filter((w) => !editing.selectedWardIds.has(w.id)) : []),
+    [wards, editing],
+  );
+
   const saveMutation = useMutation({
     mutationFn: ({
       calling_id,
@@ -87,16 +84,15 @@ export function PresidencyAssignmentsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/presidency-assignments/"] });
       setEditing(null);
-      setChipDraft("");
       toast.success("Saved.");
     },
     onError: (err: Error) => {
       console.error("[presidency-assignments-tab] save:", err);
-      const status = parseInt(err.message.split(":")[0], 10);
+      const status = apiErrorStatus(err);
       if (status === 403) {
         toast.error("You don't have permission to edit presidency assignments.");
       } else if (status === 400) {
-        toast.error(`Invalid data: ${err.message.split(": ").slice(1).join(": ")}`);
+        toast.error(`Invalid data: ${apiErrorBody(err)}`);
       } else if (status === 404) {
         toast.error("Assignment not found. Please refresh the page.");
       } else {
@@ -106,74 +102,33 @@ export function PresidencyAssignmentsTab() {
   });
 
   function openEdit(assignment: PresidencyAssignment) {
-    setChipDraft("");
-    setWardSelectKey((k) => k + 1);
+    chipInput.reset(assignment.responsibilities);
     setEditing({
       assignment,
-      chips: assignment.responsibilities,
       selectedWardIds: new Set(assignment.wards_overseen),
     });
   }
 
-  function addChip(value: string) {
-    const trimmed = value.trim();
-    if (!trimmed || editing?.chips.includes(trimmed)) return;
-    setEditing((prev) => prev && { ...prev, chips: [...prev.chips, trimmed] });
-    setChipDraft("");
-  }
-
-  function removeChip(idx: number) {
-    setEditing((prev) => prev && { ...prev, chips: prev.chips.filter((_, i) => i !== idx) });
-  }
-
-  function handleChipChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    if (!value.includes(",")) {
-      setChipDraft(value);
-      return;
-    }
-    const parts = value.split(",");
-    parts.slice(0, -1).forEach((part) => addChip(part));
-    setChipDraft(parts[parts.length - 1]);
-  }
-
-  function handleChipKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addChip(chipDraft);
-    }
-    if (e.key === "Backspace" && chipDraft === "" && editing && editing.chips.length > 0) {
-      e.preventDefault();
-      removeChip(editing.chips.length - 1);
-    }
+  function updateWardIds(fn: (s: Set<number>) => void) {
+    setEditing((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.selectedWardIds);
+      fn(next);
+      return { ...prev, selectedWardIds: next };
+    });
   }
 
   function addWard(wardId: number) {
-    setEditing((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.selectedWardIds);
-      next.add(wardId);
-      return { ...prev, selectedWardIds: next };
-    });
-    setWardSelectKey((k) => k + 1);
+    updateWardIds((s) => s.add(wardId));
   }
 
   function removeWard(wardId: number) {
-    setEditing((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.selectedWardIds);
-      next.delete(wardId);
-      return { ...prev, selectedWardIds: next };
-    });
+    updateWardIds((s) => s.delete(wardId));
   }
 
   function handleSave() {
     if (!editing) return;
-    const draftTrimmed = chipDraft.trim();
-    const allChips =
-      draftTrimmed && !editing.chips.includes(draftTrimmed)
-        ? [...editing.chips, draftTrimmed]
-        : editing.chips;
+    const allChips = chipInput.flushDraft();
     saveMutation.mutate({
       calling_id: editing.assignment.calling_id,
       responsibilities: allChips.length > 0 ? allChips : null,
@@ -245,12 +200,12 @@ export function PresidencyAssignmentsTab() {
                 <CardContent className="flex-1 space-y-4">
                   <div className="flex items-center gap-2.5">
                     <div className="flex items-center justify-center size-9 rounded-full bg-muted text-sm font-semibold text-muted-foreground shrink-0">
-                      {getInitials(assignment)}
+                      {assignment.current_holder ? getInitials(fullName(assignment.current_holder)) : "?"}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
                         {isAssigned
-                          ? `${assignment.current_holder?.fname} ${assignment.current_holder?.lname}`
+                          ? fullName(assignment.current_holder!)
                           : "Unassigned"}
                       </p>
                     </div>
@@ -310,10 +265,7 @@ export function PresidencyAssignmentsTab() {
       <Dialog
         open={editing != null}
         onOpenChange={(open) => {
-          if (!open) {
-            setEditing(null);
-            setChipDraft("");
-          }
+          if (!open) setEditing(null);
         }}
       >
         <DialogContent className="max-w-md">
@@ -323,7 +275,7 @@ export function PresidencyAssignmentsTab() {
             </DialogTitle>
             <DialogDescription>
               {editing?.assignment.current_holder
-                ? `${editing.assignment.current_holder.fname} ${editing.assignment.current_holder.lname}`
+                ? fullName(editing.assignment.current_holder)
                 : "No member currently assigned"}
             </DialogDescription>
           </DialogHeader>
@@ -334,9 +286,9 @@ export function PresidencyAssignmentsTab() {
                 <Label htmlFor="chip-input">Responsibilities</Label>
                 <div
                   className="flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring cursor-text"
-                  onClick={() => chipInputRef.current?.focus()}
+                  onClick={() => chipInput.chipInputRef.current?.focus()}
                 >
-                  {editing.chips.map((chip, idx) => (
+                  {chipInput.chips.map((chip, idx) => (
                     <span
                       key={idx}
                       className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
@@ -346,7 +298,7 @@ export function PresidencyAssignmentsTab() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          removeChip(idx);
+                          chipInput.removeChip(idx);
                         }}
                         className="text-muted-foreground hover:text-foreground transition-colors leading-none"
                         aria-label={`Remove ${chip}`}
@@ -356,17 +308,17 @@ export function PresidencyAssignmentsTab() {
                     </span>
                   ))}
                   <input
-                    ref={chipInputRef}
+                    ref={chipInput.chipInputRef}
                     id="chip-input"
                     type="text"
-                    value={chipDraft}
-                    onChange={handleChipChange}
-                    onKeyDown={handleChipKeyDown}
+                    value={chipInput.chipDraft}
+                    onChange={chipInput.handleChipChange}
+                    onKeyDown={chipInput.handleChipKeyDown}
                     onBlur={() => {
-                      if (chipDraft.trim()) addChip(chipDraft);
+                      if (chipInput.chipDraft.trim()) chipInput.addChip(chipInput.chipDraft);
                     }}
                     placeholder={
-                      editing.chips.length === 0 ? "Type and press Enter to add…" : ""
+                      chipInput.chips.length === 0 ? "Type and press Enter to add…" : ""
                     }
                     className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground text-sm"
                   />
@@ -402,20 +354,18 @@ export function PresidencyAssignmentsTab() {
                   <p className="text-xs text-muted-foreground">Ward data unavailable.</p>
                 ) : (
                   <Select
-                    key={wardSelectKey}
+                    value=""
                     onValueChange={(val) => addWard(Number(val))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select wards to add…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {wards
-                        .filter((w) => !editing.selectedWardIds.has(w.id))
-                        .map((w) => (
-                          <SelectItem key={w.id} value={String(w.id)}>
-                            {w.name}
-                          </SelectItem>
-                        ))}
+                      {availableWards.map((w) => (
+                        <SelectItem key={w.id} value={String(w.id)}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 )}
@@ -424,13 +374,7 @@ export function PresidencyAssignmentsTab() {
           )}
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditing(null);
-                setChipDraft("");
-              }}
-            >
+            <Button variant="outline" onClick={() => setEditing(null)}>
               Cancel
             </Button>
             <Button

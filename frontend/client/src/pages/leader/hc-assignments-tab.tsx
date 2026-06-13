@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +26,12 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { HC_CALLING_NAME, ICON_BTN_HOVER } from "@/lib/constants";
 import { fullName, parseCommaList, cn } from "@/lib/utils";
+import { useChipInput } from "@/hooks/useChipInput";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 interface EditState {
   slotNum: number;
   hcName: string;
-  chips: string[];
   committee: string;
 }
 
@@ -63,8 +63,7 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4];
 
 export function HCAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
-  const [chipDraft, setChipDraft] = useState<string>("");
-  const chipInputRef = useRef<HTMLInputElement>(null);
+  const chipInput = useChipInput();
 
   const {
     data: assignments = [],
@@ -140,56 +139,18 @@ export function HCAssignmentsTab() {
   });
 
   function openEdit(slotNum: number) {
-    setChipDraft("");
     const assignment = assignmentBySlot.get(slotNum);
+    chipInput.reset(parseCommaList(assignment?.responsibility ?? null));
     setEditing({
       slotNum,
       hcName: hcBySlot.get(slotNum) ?? "Unassigned",
-      chips: parseCommaList(assignment?.responsibility ?? null),
       committee: assignment?.committee ?? "",
     });
   }
 
-  function addChip(value: string) {
-    const trimmed = value.trim();
-    if (!trimmed || editing?.chips.includes(trimmed)) return;
-    setEditing((prev) => prev && { ...prev, chips: [...prev.chips, trimmed] });
-    setChipDraft("");
-  }
-
-  function removeChip(idx: number) {
-    setEditing((prev) => prev && { ...prev, chips: prev.chips.filter((_, i) => i !== idx) });
-  }
-
-  function handleChipChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    if (!value.includes(",")) {
-      setChipDraft(value);
-      return;
-    }
-    const parts = value.split(",");
-    parts.slice(0, -1).forEach((part) => addChip(part));
-    setChipDraft(parts[parts.length - 1]);
-  }
-
-  function handleChipKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addChip(chipDraft);
-    }
-    if (e.key === "Backspace" && chipDraft === "" && editing && editing.chips.length > 0) {
-      e.preventDefault();
-      removeChip(editing.chips.length - 1);
-    }
-  }
-
   function handleSave() {
     if (!editing) return;
-    const draftTrimmed = chipDraft.trim();
-    const allChips =
-      draftTrimmed && !editing.chips.includes(draftTrimmed)
-        ? [...editing.chips, draftTrimmed]
-        : editing.chips;
+    const allChips = chipInput.flushDraft();
     saveMutation.mutate({
       slotNum: editing.slotNum,
       responsibility: allChips.length > 0 ? allChips.join(", ") : null,
@@ -361,10 +322,7 @@ export function HCAssignmentsTab() {
       <Dialog
         open={editing != null}
         onOpenChange={(open) => {
-          if (!open) {
-            setEditing(null);
-            setChipDraft("");
-          }
+          if (!open) setEditing(null);
         }}
       >
         <DialogContent className="max-w-md">
@@ -389,9 +347,9 @@ export function HCAssignmentsTab() {
                 <Label htmlFor="chip-input">Responsibilities</Label>
                 <div
                   className="flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring cursor-text"
-                  onClick={() => chipInputRef.current?.focus()}
+                  onClick={() => chipInput.chipInputRef.current?.focus()}
                 >
-                  {editing.chips.map((chip, idx) => (
+                  {chipInput.chips.map((chip, idx) => (
                     <span
                       key={idx}
                       className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
@@ -401,7 +359,7 @@ export function HCAssignmentsTab() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          removeChip(idx);
+                          chipInput.removeChip(idx);
                         }}
                         className="text-muted-foreground hover:text-foreground transition-colors leading-none"
                         aria-label={`Remove ${chip}`}
@@ -412,16 +370,16 @@ export function HCAssignmentsTab() {
                   ))}
                   <input
                     id="chip-input"
-                    ref={chipInputRef}
+                    ref={chipInput.chipInputRef}
                     type="text"
-                    value={chipDraft}
-                    onChange={handleChipChange}
-                    onKeyDown={handleChipKeyDown}
+                    value={chipInput.chipDraft}
+                    onChange={chipInput.handleChipChange}
+                    onKeyDown={chipInput.handleChipKeyDown}
                     onBlur={() => {
-                      if (chipDraft.trim()) addChip(chipDraft);
+                      if (chipInput.chipDraft.trim()) chipInput.addChip(chipInput.chipDraft);
                     }}
                     placeholder={
-                      editing.chips.length === 0 ? "Type and press Enter to add…" : ""
+                      chipInput.chips.length === 0 ? "Type and press Enter to add…" : ""
                     }
                     className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground text-sm"
                   />
