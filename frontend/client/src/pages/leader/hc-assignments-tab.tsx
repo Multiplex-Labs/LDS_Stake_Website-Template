@@ -59,17 +59,18 @@ function formatUpdatedAt(ms: number): string {
   );
 }
 
+const SKELETON_ROWS = [0, 1, 2, 3, 4];
+
 export function HCAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
   const [chipDraft, setChipDraft] = useState<string>("");
   const chipInputRef = useRef<HTMLInputElement>(null);
 
-  const assignmentsQuery = useQuery<HcAssignment[]>({
-    queryKey: ["/api/assignments/"],
-  });
-  const assignments = assignmentsQuery.data ?? [];
-  const assignmentsLoading = assignmentsQuery.isLoading;
-
+  const {
+    data: assignments = [],
+    isLoading: assignmentsLoading,
+    dataUpdatedAt: assignmentsUpdatedAt,
+  } = useQuery<HcAssignment[]>({ queryKey: ["/api/assignments/"] });
   const { data: users = [], isLoading: usersLoading } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
@@ -106,9 +107,11 @@ export function HCAssignmentsTab() {
     return map;
   }, [assignments]);
 
-  const assignedCount = useMemo(
-    () => hcSlots.filter((s) => hcBySlot.has(s)).length,
-    [hcSlots, hcBySlot],
+  const assignedCount = hcBySlot.size;
+
+  const updatedLabel = useMemo(
+    () => formatUpdatedAt(assignmentsUpdatedAt),
+    [assignmentsUpdatedAt],
   );
 
   const saveMutation = useMutation({
@@ -148,7 +151,7 @@ export function HCAssignmentsTab() {
   }
 
   function addChip(value: string) {
-    const trimmed = value.replace(/,/g, "").trim();
+    const trimmed = value.trim();
     if (!trimmed || editing?.chips.includes(trimmed)) return;
     setEditing((prev) => prev && { ...prev, chips: [...prev.chips, trimmed] });
     setChipDraft("");
@@ -156,6 +159,17 @@ export function HCAssignmentsTab() {
 
   function removeChip(idx: number) {
     setEditing((prev) => prev && { ...prev, chips: prev.chips.filter((_, i) => i !== idx) });
+  }
+
+  function handleChipChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    if (!value.includes(",")) {
+      setChipDraft(value);
+      return;
+    }
+    const parts = value.split(",");
+    parts.slice(0, -1).forEach((part) => addChip(part));
+    setChipDraft(parts[parts.length - 1]);
   }
 
   function handleChipKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -171,9 +185,11 @@ export function HCAssignmentsTab() {
 
   function handleSave() {
     if (!editing) return;
-    const allChips = chipDraft.trim()
-      ? [...editing.chips, chipDraft.replace(/,/g, "").trim()].filter(Boolean)
-      : editing.chips;
+    const draftTrimmed = chipDraft.trim();
+    const allChips =
+      draftTrimmed && !editing.chips.includes(draftTrimmed)
+        ? [...editing.chips, draftTrimmed]
+        : editing.chips;
     saveMutation.mutate({
       slotNum: editing.slotNum,
       responsibility: allChips.length > 0 ? allChips.join(", ") : null,
@@ -181,45 +197,49 @@ export function HCAssignmentsTab() {
     });
   }
 
+  const tableHeader = (
+    <TableHeader>
+      <TableRow>
+        <TableHead className="w-16 pl-4">Slot</TableHead>
+        <TableHead className="w-52">HC Member</TableHead>
+        <TableHead>Responsibilities</TableHead>
+        <TableHead className="w-40">Committee</TableHead>
+        <TableHead className="w-28">Status</TableHead>
+        <TableHead className="w-16" />
+      </TableRow>
+    </TableHeader>
+  );
+
   if (assignmentsLoading || usersLoading || callingsLoading) {
     return (
       <div className="rounded-xl border bg-card overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16 pl-4">Slot</TableHead>
-                <TableHead className="w-52">HC Member</TableHead>
-                <TableHead>Responsibilities</TableHead>
-                <TableHead className="w-40">Committee</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-16" />
+        <Table>
+          {tableHeader}
+          <TableBody>
+            {SKELETON_ROWS.map((i) => (
+              <TableRow key={i}>
+                <TableCell className="pl-4">
+                  <Skeleton className="h-9 w-9 rounded-md" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-36" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-8" />
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell className="pl-4">
-                    <Skeleton className="h-9 w-9 rounded-md" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-36" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-48" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-24" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-16" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-8 w-8" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     );
   }
@@ -228,21 +248,12 @@ export function HCAssignmentsTab() {
     <div className="space-y-4">
       <div className="rounded-xl border bg-card overflow-hidden">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16 pl-4">Slot</TableHead>
-              <TableHead className="w-52">HC Member</TableHead>
-              <TableHead>Responsibilities</TableHead>
-              <TableHead className="w-40">Committee</TableHead>
-              <TableHead className="w-28">Status</TableHead>
-              <TableHead className="w-16" />
-            </TableRow>
-          </TableHeader>
+          {tableHeader}
           <TableBody>
             {hcSlots.map((slotNum) => {
               const hcEntry = hcBySlot.get(slotNum);
               const assignment = assignmentBySlot.get(slotNum);
-              const isAssigned = hcBySlot.has(slotNum);
+              const isAssigned = hcEntry != null;
               const chips = parseCommaList(assignment?.responsibility ?? null);
               return (
                 <TableRow key={slotNum}>
@@ -251,7 +262,7 @@ export function HCAssignmentsTab() {
                       className={cn(
                         "inline-flex items-center justify-center w-9 h-9 rounded-md border-2 text-sm font-bold tabular-nums",
                         isAssigned
-                          ? "border-success bg-success text-success-foreground"
+                          ? "border-emerald-500 text-emerald-500"
                           : "border-border text-muted-foreground",
                       )}
                     >
@@ -299,13 +310,13 @@ export function HCAssignmentsTab() {
                       <span
                         className={cn(
                           "size-2 rounded-full shrink-0",
-                          isAssigned ? "bg-success" : "bg-destructive",
+                          isAssigned ? "bg-emerald-500" : "bg-destructive",
                         )}
                       />
                       <span
                         className={cn(
                           "text-xs font-medium",
-                          isAssigned ? "text-success" : "text-destructive",
+                          isAssigned ? "text-emerald-500" : "text-destructive",
                         )}
                       >
                         {isAssigned ? "Assigned" : "Empty"}
@@ -333,7 +344,7 @@ export function HCAssignmentsTab() {
         <div className="border-t bg-muted/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-success shrink-0" />
+              <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
               <span>{assignedCount} assigned</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -341,10 +352,8 @@ export function HCAssignmentsTab() {
               <span>{hcSlots.length - assignedCount} unassigned</span>
             </div>
           </div>
-          {assignmentsQuery.dataUpdatedAt > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Last updated {formatUpdatedAt(assignmentsQuery.dataUpdatedAt)}
-            </p>
+          {assignmentsUpdatedAt > 0 && (
+            <p className="text-xs text-muted-foreground">Last updated {updatedLabel}</p>
           )}
         </div>
       </div>
@@ -406,7 +415,7 @@ export function HCAssignmentsTab() {
                     ref={chipInputRef}
                     type="text"
                     value={chipDraft}
-                    onChange={(e) => setChipDraft(e.target.value)}
+                    onChange={handleChipChange}
                     onKeyDown={handleChipKeyDown}
                     onBlur={() => {
                       if (chipDraft.trim()) addChip(chipDraft);
