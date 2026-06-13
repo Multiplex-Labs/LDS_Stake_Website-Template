@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -13,13 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +33,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,12 +54,16 @@ import {
   CheckCircle2,
   Circle,
   Shield,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { apiErrorStatus } from "@/lib/utils";
+import { apiErrorStatus, cn } from "@/lib/utils";
+import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
+import { WizardShell } from "@/components/ui/wizard-shell";
+import type { WizardStep } from "@/components/ui/wizard-shell";
 
 interface CallingForm {
   name: string;
@@ -266,48 +263,88 @@ function SlotRow({
   );
 }
 
-function CallingDialog({
+// ---------------------------------------------------------------------------
+// Calling Wizard
+// ---------------------------------------------------------------------------
+
+const CALLING_WIZARD_STEPS = [
+  { id: 1, label: "Basic Info",   description: "Name, slot count, and visibility settings.", icon: <FileText className="size-3.5" /> },
+  { id: 2, label: "Permissions",  description: "Grant permissions to all holders of this calling.", icon: <Shield className="size-3.5" /> },
+] as const satisfies readonly WizardStep[];
+
+type CallingWizardStep = 1 | 2;
+
+function CallingWizard({
   open,
   onOpenChange,
   initial,
+  initialPermissions = 0,
   onSave,
   isPending,
 }: {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (v: boolean) => void;
   initial?: ApiCalling;
-  onSave: (form: CallingForm) => void;
+  initialPermissions?: number;
+  onSave: (form: CallingForm, permissions: number) => void;
   isPending: boolean;
 }) {
+  const [step, setStep] = useState<CallingWizardStep>(1);
   const [form, setForm] = useState<CallingForm>(
     initial
       ? { name: initial.name, max_slots: initial.max_slots, is_public: initial.is_public }
       : EMPTY_FORM,
   );
   const [nameError, setNameError] = useState("");
+  const [permissions, setPermissions] = useState(initialPermissions);
 
-  const handleSubmit = () => {
+  const stepIndex = step - 1;
+
+  function handleNext() {
     if (!form.name.trim()) {
       setNameError("Name is required.");
       return;
     }
     setNameError("");
-    onSave(form);
-  };
+    setStep(2);
+  }
+
+  function handleBack() {
+    setStep(1);
+  }
+
+  function handleStepSelect(id: number) {
+    setStep(id as CallingWizardStep);
+  }
+
+  const submitLabel = initial ? "Save Changes" : "Add Calling";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{initial ? "Edit Calling" : "Add Calling"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
+    <WizardShell
+      open={open}
+      onOpenChange={onOpenChange}
+      steps={CALLING_WIZARD_STEPS}
+      stepIndex={stepIndex}
+      onBack={handleBack}
+      onNext={handleNext}
+      onStepSelect={handleStepSelect}
+      onSubmit={() => onSave(form, permissions)}
+      submitLabel={isPending ? "Saving…" : submitLabel}
+      isPending={isPending}
+    >
+      {step === 1 && (
+        <div className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="calling-name">Name</Label>
+            <Label htmlFor="calling-name">
+              Name <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="calling-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                if (nameError) setNameError("");
+              }}
               placeholder="e.g. Sunday School Teacher"
             />
             {nameError && <p className="text-xs text-destructive">{nameError}</p>}
@@ -337,97 +374,48 @@ function CallingDialog({
             </Label>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-0.5">
+          {ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
+            const active = (permissions & flag) !== 0;
+            return (
+              <button
+                key={flag}
+                type="button"
+                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
+                onClick={() => setPermissions((p) => p ^ flag)}
+              >
+                {active
+                  ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                  : <Circle className="size-4 text-muted-foreground/40 shrink-0" />}
+                <span className={active ? "text-foreground" : "text-muted-foreground"}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </WizardShell>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CallingsTab
+// ---------------------------------------------------------------------------
 
 type CallingsSortKey = "name" | "max_slots" | "is_public";
 type CallingsSortConfig = { key: CallingsSortKey; direction: "asc" | "desc" } | null;
 
 const CALLINGS_PER_PAGE = 10;
 
-function CallingPermissionsDialog({
-  open,
-  calling,
-  permissions,
-  permissionsLoading,
-  onClose,
-  onTogglePermission,
-}: {
-  open: boolean;
-  calling: ApiCalling | null;
-  permissions: ApiUserPermissions;
-  permissionsLoading: boolean;
-  onClose: () => void;
-  onTogglePermission: (newScopes: number) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md [&>button:last-child]:hidden">
-        <DialogHeader className="sr-only">
-          <DialogTitle>Permissions — {calling?.name ?? ""}</DialogTitle>
-        </DialogHeader>
-        <Command>
-          <div className="border-b px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Shield className="size-4 text-primary" />
-              <span className="font-medium text-sm">Permissions — {calling?.name ?? ""}</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              All holders of this calling inherit these permissions.
-            </p>
-          </div>
-          <CommandInput placeholder="Search permissions…" />
-          <CommandList className="max-h-[320px]">
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup heading="Inherited Permissions">
-              {permissionsLoading
-                ? Array.from({ length: 7 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 rounded-md mx-2 my-0.5" />
-                  ))
-                : ASSIGNABLE_PERMISSIONS.map(({ flag, label }) => {
-                    const active = (permissions.scopes & flag) !== 0;
-                    return (
-                      <CommandItem key={flag} onSelect={() => onTogglePermission(permissions.scopes ^ flag)}>
-                        {active
-                          ? <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
-                          : <Circle className="mr-2 size-4 text-muted-foreground/50" />}
-                        <span className="text-sm">{label}</span>
-                      </CommandItem>
-                    );
-                  })}
-            </CommandGroup>
-          </CommandList>
-          <div className="flex items-center justify-end border-t px-4 py-2">
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </Command>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function CallingsTab() {
   const [expandedIds, toggleExpand] = useSetToggle<number>();
-  const [addOpen, setAddOpen] = useState(false);
+  const [addWizardOpen, setAddWizardOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCalling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApiCalling | null>(null);
-  const [permissionsTarget, setPermissionsTarget] = useState<ApiCalling | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<CallingsSortConfig>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -440,10 +428,11 @@ export function CallingsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const { data: callingPermissionsData, isLoading: callingPermissionsLoading } = useQuery<ApiUserPermissions>({
-    queryKey: [`/api/callings/${permissionsTarget?.id}/permissions`],
-    queryFn: () => apiRequest("GET", `/api/callings/${permissionsTarget!.id}/permissions`).then(r => r.json()),
-    enabled: permissionsTarget !== null,
+  const { data: editPermissionsData, isLoading: editPermissionsLoading } = useQuery<ApiUserPermissions>({
+    queryKey: [`/api/callings/${editTarget?.id}/permissions`],
+    queryFn: () =>
+      apiRequest("GET", `/api/callings/${editTarget!.id}/permissions`).then((r) => r.json()),
+    enabled: editTarget !== null,
   });
 
   const activeUsers = useMemo(() => users.filter((u) => u.active), [users]);
@@ -499,23 +488,56 @@ export function CallingsTab() {
     );
   };
 
+  // Fix B: addMutation — wrap permissions PUT in try/catch; warn on partial failure
   const addMutation = useMutation({
-    mutationFn: (form: CallingForm) => apiRequest("POST", "/api/callings/", form),
-    onSuccess: () => {
+    mutationFn: async ({ form, permissions }: { form: CallingForm; permissions: number }) => {
+      const res = await apiRequest("POST", "/api/callings/", form);
+      const calling = await res.json() as ApiCalling;
+      let permissionsSet = true;
+      if (permissions > 0) {
+        try {
+          await apiRequest("PUT", `/api/callings/${calling.id}/permissions`, { scopes: permissions });
+        } catch (permErr) {
+          console.error("[callings-tab] permissions PUT failed after calling created:", permErr);
+          permissionsSet = false;
+        }
+      }
+      return { calling, permissionsSet };
+    },
+    onSuccess: ({ permissionsSet }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
-      setAddOpen(false);
-      toast.success("Calling added.");
+      setAddWizardOpen(false);
+      if (permissionsSet) {
+        toast.success("Calling added.");
+      } else {
+        toast.warning("Calling created, but permissions could not be saved. Open Edit to set them.");
+      }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to add calling."),
   });
 
+  // Fix C: editMutation — wrap permissions PUT in try/catch; warn on partial failure
   const editMutation = useMutation({
-    mutationFn: ({ id, form }: { id: number; form: CallingForm }) =>
-      apiRequest("PUT", `/api/callings/${id}`, form),
-    onSuccess: () => {
+    mutationFn: async ({ id, form, permissions }: { id: number; form: CallingForm; permissions: number }) => {
+      await apiRequest("PUT", `/api/callings/${id}`, form);
+      let permissionsSet = true;
+      try {
+        await apiRequest("PUT", `/api/callings/${id}/permissions`, { scopes: permissions });
+      } catch (permErr) {
+        console.error("[callings-tab] permissions PUT failed after calling updated:", permErr);
+        permissionsSet = false;
+      }
+      return { id, permissionsSet };
+    },
+    onSuccess: ({ id, permissionsSet }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/callings/"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/callings/${id}/permissions`] });
       setEditTarget(null);
-      toast.success("Calling updated.");
+      if (permissionsSet) {
+        toast.success("Calling updated.");
+      } else {
+        toast.warning("Calling updated, but permissions could not be saved. Open Edit to try again.");
+      }
     },
     onError: (err: Error) => onCallingNameError(err, "Failed to update calling."),
   });
@@ -537,18 +559,6 @@ export function CallingsTab() {
     },
   });
 
-  const setCallingPermissionsMutation = useMutation({
-    mutationFn: ({ callingId, scopes }: { callingId: number; scopes: number }) =>
-      apiRequest("PUT", `/api/callings/${callingId}/permissions`, { scopes }).then(r => r.json() as Promise<ApiUserPermissions>),
-    onSuccess: (_data, { callingId }) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/callings/${callingId}/permissions`] });
-    },
-    onError: (err: unknown) => {
-      console.error("[callings-tab] setCallingPermissionsMutation error:", err);
-      toast.error("Failed to update permissions");
-    },
-  });
-
   return (
     <>
     <div className="overflow-hidden rounded-lg border bg-card">
@@ -567,7 +577,7 @@ export function CallingsTab() {
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs" size="sm">
+              <Button variant="outline" className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm">
                 Sort by
                 <ArrowUpDown className="size-3" />
               </Button>
@@ -580,7 +590,7 @@ export function CallingsTab() {
               <DropdownMenuItem onClick={() => handleSort("is_public")}>Visibility</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button className="h-8 gap-1.5 px-3 text-xs" size="sm" onClick={() => setAddOpen(true)}>
+          <Button className={cn("h-8 gap-1.5 px-3 text-xs", BUTTON_HOVER)} size="sm" onClick={() => setAddWizardOpen(true)}>
             <Plus className="size-3.5" />
             Add Calling
           </Button>
@@ -634,7 +644,7 @@ export function CallingsTab() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <span className={`size-1.5 rounded-full ${calling.is_public ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                          <span className={`size-1.5 rounded-full ${calling.is_public ? "bg-emerald-500" : "bg-destructive"}`} />
                           <span className="text-xs text-muted-foreground">{calling.is_public ? "Public" : "Private"}</span>
                         </div>
                       </TableCell>
@@ -644,7 +654,7 @@ export function CallingsTab() {
                       >
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button className="size-7" size="sm" variant="ghost">
+                            <Button className={cn("size-7", ICON_BTN_HOVER)} size="sm" variant="ghost">
                               <MoreHorizontal className="size-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -655,12 +665,6 @@ export function CallingsTab() {
                               disabled={calling.system_defined}
                             >
                               Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setPermissionsTarget(calling)}
-                              disabled={calling.system_defined}
-                            >
-                              Permissions
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -713,45 +717,42 @@ export function CallingsTab() {
         </p>
         {totalPages > 1 && (
           <div className="flex gap-2">
-            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
-            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+            <Button className={cn("h-7 px-2 text-xs", BUTTON_HOVER)} size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+            <Button className={cn("h-7 px-2 text-xs", BUTTON_HOVER)} size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
           </div>
         )}
       </div>
     </div>
 
-      <CallingDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onSave={(form) => addMutation.mutate(form)}
+      {/* Fix A: key={String(addWizardOpen)} remounts the wizard fresh on each open */}
+      <CallingWizard
+        key={String(addWizardOpen)}
+        open={addWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) setAddWizardOpen(false);
+        }}
+        onSave={(form, permissions) => addMutation.mutate({ form, permissions })}
         isPending={addMutation.isPending}
       />
 
-      {editTarget && (
-        <CallingDialog
+      {/* Fix E: only render edit wizard once permissions have loaded */}
+      {editTarget && !editPermissionsLoading && (
+        <CallingWizard
           key={editTarget.id}
           open
           onOpenChange={(open) => {
             if (!open) setEditTarget(null);
           }}
           initial={editTarget}
-          onSave={(form) => editMutation.mutate({ id: editTarget.id, form })}
+          initialPermissions={editPermissionsData?.scopes ?? 0}
+          onSave={(form, permissions) =>
+            editMutation.mutate({ id: editTarget.id, form, permissions })
+          }
           isPending={editMutation.isPending}
         />
       )}
 
-      <CallingPermissionsDialog
-        open={permissionsTarget !== null}
-        calling={permissionsTarget}
-        permissions={callingPermissionsData ?? { scopes: 0, flags: [] }}
-        permissionsLoading={callingPermissionsLoading}
-        onClose={() => setPermissionsTarget(null)}
-        onTogglePermission={(newScopes) => {
-          if (permissionsTarget === null) return;
-          setCallingPermissionsMutation.mutate({ callingId: permissionsTarget.id, scopes: newScopes });
-        }}
-      />
-
+      {/* Delete dialog */}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {

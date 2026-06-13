@@ -1,44 +1,41 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, ChevronsUpDown } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ICON_BTN_HOVER } from "@/lib/constants";
+import { cn, fullName, getInitials, apiErrorStatus, apiErrorBody } from "@/lib/utils";
+import { useChipInput } from "@/hooks/useChipInput";
+import { ChipInput, Chip } from "@/components/ui/chip-input";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 interface EditState {
   assignment: PresidencyAssignment;
-  responsibilities: string;
   selectedWardIds: Set<number>;
 }
 
 export function PresidencyAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
+  const chipInput = useChipInput();
 
   const {
     data: assignments = [],
@@ -61,6 +58,11 @@ export function PresidencyAssignmentsTab() {
     [wards],
   );
 
+  const availableWards = useMemo(
+    () => (editing ? wards.filter((w) => !editing.selectedWardIds.has(w.id)) : []),
+    [wards, editing?.selectedWardIds],
+  );
+
   const saveMutation = useMutation({
     mutationFn: ({
       calling_id,
@@ -68,11 +70,11 @@ export function PresidencyAssignmentsTab() {
       ward_ids,
     }: {
       calling_id: number;
-      responsibilities: string | null;
+      responsibilities: string[] | null;
       ward_ids: number[];
     }) =>
       apiRequest("PUT", `/api/presidency-assignments/${calling_id}`, {
-        responsibilities: responsibilities,
+        responsibilities,
         ward_ids,
       }),
     onSuccess: () => {
@@ -82,11 +84,11 @@ export function PresidencyAssignmentsTab() {
     },
     onError: (err: Error) => {
       console.error("[presidency-assignments-tab] save:", err);
-      const status = parseInt(err.message.split(":")[0], 10);
+      const status = apiErrorStatus(err);
       if (status === 403) {
         toast.error("You don't have permission to edit presidency assignments.");
       } else if (status === 400) {
-        toast.error(`Invalid data: ${err.message.split(": ").slice(1).join(": ")}`);
+        toast.error(`Invalid data: ${apiErrorBody(err)}`);
       } else if (status === 404) {
         toast.error("Assignment not found. Please refresh the page.");
       } else {
@@ -96,23 +98,37 @@ export function PresidencyAssignmentsTab() {
   });
 
   function openEdit(assignment: PresidencyAssignment) {
+    chipInput.reset(assignment.responsibilities);
     setEditing({
       assignment,
-      responsibilities: assignment.responsibilities.join(", "),
       selectedWardIds: new Set(assignment.wards_overseen),
     });
   }
 
-  function toggleWard(wardId: number) {
+  function updateWardIds(fn: (s: Set<number>) => void) {
     setEditing((prev) => {
       if (!prev) return prev;
       const next = new Set(prev.selectedWardIds);
-      if (next.has(wardId)) {
-        next.delete(wardId);
-      } else {
-        next.add(wardId);
-      }
+      fn(next);
       return { ...prev, selectedWardIds: next };
+    });
+  }
+
+  function addWard(wardId: number) {
+    updateWardIds((s) => s.add(wardId));
+  }
+
+  function removeWard(wardId: number) {
+    updateWardIds((s) => s.delete(wardId));
+  }
+
+  function handleSave() {
+    if (!editing) return;
+    const allChips = chipInput.flushDraft();
+    saveMutation.mutate({
+      calling_id: editing.assignment.calling_id,
+      responsibilities: allChips.length > 0 ? allChips : null,
+      ward_ids: Array.from(editing.selectedWardIds),
     });
   }
 
@@ -135,73 +151,96 @@ export function PresidencyAssignmentsTab() {
 
   if (wardsError) {
     console.error("[presidency-assignments-tab] load wards:", wardsError);
-    // Non-fatal — ward names degrade to IDs but cards still render
   }
 
   return (
     <>
-      <div className="grid gap-6 md:grid-cols-3">
-        {assignments.map((assignment) => (
-          <Card key={assignment.id} className="flex flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-start justify-between gap-2">
-                <span className="text-base font-semibold leading-snug">
-                  {assignment.calling_name}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => openEdit(assignment)}
-                  aria-label={`Edit ${assignment.calling_name}`}
-                >
-                  <Pencil className="size-4" />
-                  Edit
-                </Button>
-              </CardTitle>
-              <p className="text-sm font-medium text-foreground">
-                {assignment.current_holder
-                  ? `${assignment.current_holder.fname} ${assignment.current_holder.lname}`
-                  : <span className="text-muted-foreground">Unassigned</span>}
-              </p>
-            </CardHeader>
+      <div className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-3">
+          {assignments.map((assignment) => {
+            const isAssigned = assignment.current_holder !== null;
+            return (
+              <Card key={assignment.id} className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold leading-snug">
+                      {assignment.calling_name}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={ICON_BTN_HOVER}
+                      onClick={() => openEdit(assignment)}
+                      aria-label={`Edit ${assignment.calling_name}`}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
 
-            <CardContent className="flex-1 space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Responsibilities
-                </p>
-                {assignment.responsibilities.length > 0 ? (
-                  <ul className="space-y-1">
-                    {assignment.responsibilities.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">None listed</p>
-                )}
-              </div>
-
-              {assignment.wards_overseen.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Ward Assignments
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {assignment.wards_overseen.map((wardId) => (
-                      <Badge key={wardId} variant="outline" className="text-xs">
-                        {wardMap.get(wardId) ?? `Ward ${wardId}`}
-                      </Badge>
-                    ))}
+                <CardContent className="flex-1 space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-center size-9 rounded-full bg-muted text-sm font-semibold text-muted-foreground shrink-0">
+                      {assignment.current_holder ? getInitials(fullName(assignment.current_holder)) : "?"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {isAssigned
+                          ? fullName(assignment.current_holder!)
+                          : "Unassigned"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          isAssigned ? "bg-emerald-500" : "bg-muted-foreground",
+                        )}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {isAssigned ? "Assigned" : "Unassigned"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Responsibilities
+                    </p>
+                    {assignment.responsibilities.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {assignment.responsibilities.map((r, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">
+                            {r}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">None listed</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Ward Assignments
+                    </p>
+                    {assignment.wards_overseen.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {assignment.wards_overseen.map((wardId) => (
+                          <Badge key={wardId} variant="outline" className="text-xs">
+                            {wardMap.get(wardId) ?? `Ward ${wardId}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No wards assigned</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <Dialog
@@ -215,64 +254,49 @@ export function PresidencyAssignmentsTab() {
             <DialogTitle>
               Edit {editing?.assignment.calling_name ?? "Assignment"}
             </DialogTitle>
+            <DialogDescription>
+              {editing?.assignment.current_holder
+                ? fullName(editing.assignment.current_holder)
+                : "No member currently assigned"}
+            </DialogDescription>
           </DialogHeader>
 
           {editing && (
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="responsibilities">Responsibilities</Label>
-                <Textarea
-                  id="responsibilities"
-                  value={editing.responsibilities}
-                  onChange={(e) =>
-                    setEditing((prev) => prev && { ...prev, responsibilities: e.target.value })
-                  }
-                  placeholder="Comma-separated (e.g. Sunday School, Relief Society)"
-                  rows={4}
-                />
-              </div>
+              <ChipInput chipInput={chipInput} />
 
               <div className="space-y-1.5">
                 <Label>Ward Assignments</Label>
-                <PopoverPrimitive.Root modal={false}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between font-normal"
-                    >
-                      {editing.selectedWardIds.size > 0
-                        ? `${editing.selectedWardIds.size} ward(s) selected`
-                        : "Select wards…"}
-                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search wards…" />
-                      <CommandList>
-                        <CommandEmpty>No wards found.</CommandEmpty>
-                        <CommandGroup>
-                          {wards.map((ward) => (
-                            <CommandItem
-                              key={ward.id}
-                              value={ward.name}
-                              onSelect={() => toggleWard(ward.id)}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Checkbox
-                                checked={editing.selectedWardIds.has(ward.id)}
-                                onCheckedChange={() => toggleWard(ward.id)}
-                                aria-label={`Select ${ward.name}`}
-                              />
-                              <span>{ward.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </PopoverPrimitive.Root>
+                {editing.selectedWardIds.size > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {Array.from(editing.selectedWardIds).map((wardId) => (
+                      <Chip
+                        key={wardId}
+                        label={wardMap.get(wardId) ?? `Ward ${wardId}`}
+                        onRemove={() => removeWard(wardId)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {wardsError ? (
+                  <p className="text-xs text-muted-foreground">Ward data unavailable.</p>
+                ) : (
+                  <Select
+                    value=""
+                    onValueChange={(val) => addWard(Number(val))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select wards to add…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableWards.map((w) => (
+                        <SelectItem key={w.id} value={String(w.id)}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           )}
@@ -283,16 +307,9 @@ export function PresidencyAssignmentsTab() {
             </Button>
             <Button
               disabled={saveMutation.isPending}
-              onClick={() => {
-                if (!editing) return;
-                saveMutation.mutate({
-                  calling_id: editing.assignment.calling_id,
-                  responsibilities: editing.responsibilities.trim() || null,
-                  ward_ids: Array.from(editing.selectedWardIds),
-                });
-              }}
+              onClick={handleSave}
             >
-              {saveMutation.isPending ? "Saving…" : "Save"}
+              {saveMutation.isPending ? "Saving…" : "Save Assignment"}
             </Button>
           </DialogFooter>
         </DialogContent>

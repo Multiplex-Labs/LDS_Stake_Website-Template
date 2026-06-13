@@ -11,6 +11,10 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
+export const SHORT_MONTHS = MONTHS.map((m) => m.slice(0, 3));
+
+export const BUTTON_HOVER = "hover:scale-105 hover:shadow-lg transition-all duration-200";
+export const ICON_BTN_HOVER = "text-muted-foreground/50 hover:text-foreground transition-colors";
 
 export const KANBAN_STAGES = [
   { key: "0", id: "pending-stake-approval", label: "Stake Presidency Approval", badgeVariant: "outline",    cssClass: "stage-sp-approval"  },

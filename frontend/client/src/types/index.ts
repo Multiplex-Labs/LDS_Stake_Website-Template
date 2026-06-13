@@ -153,7 +153,7 @@ export interface PresidencyAssignment {
 }
 
 export interface PresidencyAssignmentUpdate {
-  responsibilities: string | null;
+  responsibilities: string[] | null;
   ward_ids: number[];
 }
 

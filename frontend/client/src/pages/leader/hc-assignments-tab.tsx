@@ -1,14 +1,16 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -19,25 +21,56 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { User, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { HC_CALLING_NAME } from "@/lib/constants";
-import { fullName } from "@/lib/utils";
+import { HC_CALLING_NAME, ICON_BTN_HOVER } from "@/lib/constants";
+import { fullName, parseCommaList, cn, apiErrorStatus } from "@/lib/utils";
+import { useChipInput } from "@/hooks/useChipInput";
+import { ChipInput } from "@/components/ui/chip-input";
 import type { HcAssignment, ApiUser, ApiCalling } from "@/types";
 
 interface EditState {
   slotNum: number;
   hcName: string;
-  responsibility: string;
   committee: string;
 }
 
+function formatUpdatedAt(ms: number): string {
+  if (ms === 0) return "never";
+  const now = Date.now();
+  const diffMin = Math.floor((now - ms) / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
+  const updated = new Date(ms);
+  const today = new Date();
+  const sameDay =
+    updated.getFullYear() === today.getFullYear() &&
+    updated.getMonth() === today.getMonth() &&
+    updated.getDate() === today.getDate();
+  const timeStr = updated.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  if (sameDay) return `today at ${timeStr}`;
+  return (
+    updated.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    ` at ${timeStr}`
+  );
+}
+
+const SKELETON_ROWS = [0, 1, 2, 3, 4];
+
 export function HCAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
+  const chipInput = useChipInput();
 
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<HcAssignment[]>({
-    queryKey: ["/api/assignments/"],
-  });
+  const {
+    data: assignments = [],
+    isLoading: assignmentsLoading,
+    dataUpdatedAt: assignmentsUpdatedAt,
+  } = useQuery<HcAssignment[]>({ queryKey: ["/api/assignments/"] });
   const { data: users = [], isLoading: usersLoading } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
@@ -74,6 +107,13 @@ export function HCAssignmentsTab() {
     return map;
   }, [assignments]);
 
+  const assignedCount = hcBySlot.size;
+
+  const updatedLabel = useMemo(
+    () => formatUpdatedAt(assignmentsUpdatedAt),
+    [assignmentsUpdatedAt],
+  );
+
   const saveMutation = useMutation({
     mutationFn: ({
       slotNum,
@@ -81,12 +121,12 @@ export function HCAssignmentsTab() {
       committee,
     }: {
       slotNum: number;
-      responsibility: string;
-      committee: string;
+      responsibility: string | null;
+      committee: string | null;
     }) =>
       apiRequest("PUT", `/api/assignments/slot/${slotNum}`, {
-        responsibility: responsibility.trim() || null,
-        committee: committee.trim() || null,
+        responsibility,
+        committee,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assignments/"] });
@@ -95,59 +135,173 @@ export function HCAssignmentsTab() {
     },
     onError: (err: Error) => {
       console.error("[hc-assignments-tab] save:", err);
-      toast.error("Failed to save assignment.");
+      const status = apiErrorStatus(err);
+      if (status === 403) {
+        toast.error("You don't have permission to edit assignments.");
+      } else if (status === 401) {
+        toast.error("Session expired", { description: "Please log in again." });
+      } else {
+        toast.error("Failed to save assignment.");
+      }
     },
   });
 
   function openEdit(slotNum: number) {
-    const hcEntry = hcBySlot.get(slotNum);
     const assignment = assignmentBySlot.get(slotNum);
+    chipInput.reset(parseCommaList(assignment?.responsibility ?? null));
     setEditing({
       slotNum,
-      hcName: hcEntry ?? "Unassigned",
-      responsibility: assignment?.responsibility ?? "",
+      hcName: hcBySlot.get(slotNum) ?? "Unassigned",
       committee: assignment?.committee ?? "",
     });
   }
 
+  function handleSave() {
+    if (!editing) return;
+    const allChips = chipInput.flushDraft();
+    saveMutation.mutate({
+      slotNum: editing.slotNum,
+      responsibility: allChips.length > 0 ? allChips.join(", ") : null,
+      committee: editing.committee.trim() || null,
+    });
+  }
+
+  const tableHeader = (
+    <TableHeader>
+      <TableRow>
+        <TableHead className="w-16 pl-4">Slot</TableHead>
+        <TableHead className="w-52">HC Member</TableHead>
+        <TableHead>Responsibilities</TableHead>
+        <TableHead className="w-40">Committee</TableHead>
+        <TableHead className="w-28">Status</TableHead>
+        <TableHead className="w-16" />
+      </TableRow>
+    </TableHeader>
+  );
+
   if (assignmentsLoading || usersLoading || callingsLoading) {
     return (
-      <div className="py-16 text-center text-muted-foreground text-sm">
-        Loading assignments…
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <Table>
+          {tableHeader}
+          <TableBody>
+            {SKELETON_ROWS.map((i) => (
+              <TableRow key={i}>
+                <TableCell className="pl-4">
+                  <Skeleton className="h-9 w-9 rounded-md" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-36" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-8" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="rounded-md border">
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card overflow-hidden">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">Slot</TableHead>
-              <TableHead className="w-48">HC Member</TableHead>
-              <TableHead>Responsibility</TableHead>
-              <TableHead className="w-40">Committee</TableHead>
-              <TableHead className="w-16" />
-            </TableRow>
-          </TableHeader>
+          {tableHeader}
           <TableBody>
             {hcSlots.map((slotNum) => {
               const hcEntry = hcBySlot.get(slotNum);
               const assignment = assignmentBySlot.get(slotNum);
+              const isAssigned = hcEntry != null;
+              const chips = parseCommaList(assignment?.responsibility ?? null);
               return (
                 <TableRow key={slotNum}>
-                  <TableCell className="text-muted-foreground text-sm">{slotNum}</TableCell>
-                  <TableCell className="font-medium">
-                    {hcEntry ?? (
-                      <span className="text-muted-foreground">Unassigned</span>
+                  <TableCell className="pl-4">
+                    <div
+                      className={cn(
+                        "inline-flex items-center justify-center w-9 h-9 rounded-md border-2 text-sm font-bold tabular-nums",
+                        isAssigned
+                          ? "border-emerald-500 text-emerald-500"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
+                      {String(slotNum).padStart(2, "0")}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <User className="size-4 text-muted-foreground shrink-0" />
+                      {hcEntry ? (
+                        <span className="text-sm font-medium">{hcEntry}</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Unassigned</span>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    {chips.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {chips.map((chip) => (
+                          <Badge key={chip} variant="secondary" className="text-xs">
+                            {chip}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">{assignment?.responsibility ?? ""}</TableCell>
-                  <TableCell className="text-sm">{assignment?.committee ?? ""}</TableCell>
+
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => openEdit(slotNum)}>
-                      Edit
+                    {assignment?.committee ? (
+                      <Badge variant="outline" className="text-xs">
+                        {assignment.committee}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full shrink-0",
+                          isAssigned ? "bg-emerald-500" : "bg-destructive",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "text-xs font-medium",
+                          isAssigned ? "text-emerald-500" : "text-destructive",
+                        )}
+                      >
+                        {isAssigned ? "Assigned" : "Empty"}
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEdit(slotNum)}
+                      aria-label={`Edit slot ${slotNum}`}
+                      className={ICON_BTN_HOVER}
+                    >
+                      <Pencil className="size-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -155,6 +309,22 @@ export function HCAssignmentsTab() {
             })}
           </TableBody>
         </Table>
+
+        <div className="border-t bg-muted/10 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>{assignedCount} assigned</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-destructive shrink-0" />
+              <span>{hcSlots.length - assignedCount} unassigned</span>
+            </div>
+          </div>
+          {assignmentsUpdatedAt > 0 && (
+            <p className="text-xs text-muted-foreground">Last updated {updatedLabel}</p>
+          )}
+        </div>
       </div>
 
       <Dialog
@@ -166,26 +336,22 @@ export function HCAssignmentsTab() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Assignment</DialogTitle>
+            <DialogDescription>
+              Slot {String(editing?.slotNum ?? 0).padStart(2, "0")}
+            </DialogDescription>
           </DialogHeader>
+
           {editing && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <p className="text-sm font-medium leading-none">HC Member</p>
-                <p className="text-sm font-medium py-2">{editing.hcName}</p>
+                <Label>HC Member</Label>
+                <div className="flex items-center gap-2 rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
+                  <User className="size-4 text-muted-foreground shrink-0" />
+                  <span className="font-medium">{editing.hcName}</span>
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="responsibility">Responsibility</Label>
-                <Textarea
-                  id="responsibility"
-                  value={editing.responsibility}
-                  onChange={(e) =>
-                    setEditing((prev) => prev && { ...prev, responsibility: e.target.value })
-                  }
-                  placeholder="Comma-separated (e.g. Sunday School, Relief Society)"
-                  rows={3}
-                />
-              </div>
+              <ChipInput chipInput={chipInput} />
 
               <div className="space-y-1.5">
                 <Label htmlFor="committee">Committee</Label>
@@ -200,26 +366,20 @@ export function HCAssignmentsTab() {
               </div>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>
               Cancel
             </Button>
             <Button
               disabled={saveMutation.isPending}
-              onClick={() => {
-                if (!editing) return;
-                saveMutation.mutate({
-                  slotNum: editing.slotNum,
-                  responsibility: editing.responsibility,
-                  committee: editing.committee,
-                });
-              }}
+              onClick={handleSave}
             >
-              {saveMutation.isPending ? "Saving…" : "Save"}
+              {saveMutation.isPending ? "Saving…" : "Save Assignment"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

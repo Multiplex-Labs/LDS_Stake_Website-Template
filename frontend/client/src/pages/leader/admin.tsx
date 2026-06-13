@@ -7,25 +7,17 @@ import { CallingsTab } from "./callings-tab";
 import { SpeakingTab } from "./speaking-tab";
 import { HCAssignmentsTab } from "./hc-assignments-tab";
 import { PresidencyAssignmentsTab } from "./presidency-assignments-tab";
+import { UserCog, UserKey, Speech, NotebookText, NotebookTabs } from "lucide-react"
 
 const TABS = [
-  { value: "users", label: "Users" },
-  { value: "callings", label: "Callings" },
-  { value: "speaking", label: "Speaking" },
-  { value: "hc-assignments", label: "HC Assignments" },
-  { value: "presidency", label: "Presidency" },
-  { value: "site-content", label: "Site Content" },
+  { value: "users", label: "Users", icon: UserCog },
+  { value: "callings", label: "Callings", icon: UserKey },
+  { value: "speaking", label: "Speaking Assignments", icon: Speech },
+  { value: "hc-assignments", label: "High Council Assignments", icon: NotebookText },
+  { value: "presidency", label: "Presidency Assignments", icon: NotebookTabs },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
-
-function TabPlaceholder({ name }: { name: string }) {
-  return (
-    <div className="py-16 text-center text-muted-foreground">
-      <p className="text-sm">{name} management — coming soon.</p>
-    </div>
-  );
-}
 
 export default function AdminHub() {
   const search = useSearch();
@@ -44,12 +36,12 @@ export default function AdminHub() {
   return (
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">
-            {TABS.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
+            {TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                {label}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -73,12 +65,6 @@ export default function AdminHub() {
           <TabsContent value="presidency">
             <PresidencyAssignmentsTab />
           </TabsContent>
-
-          {TABS.filter((t) => !["users", "callings", "speaking", "hc-assignments", "presidency"].includes(t.value)).map((tab) => (
-            <TabsContent key={tab.value} value={tab.value}>
-              <TabPlaceholder name={tab.label} />
-            </TabsContent>
-          ))}
         </Tabs>
       </div>
     </Layout>

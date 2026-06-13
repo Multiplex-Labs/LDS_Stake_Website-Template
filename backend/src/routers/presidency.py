@@ -45,7 +45,7 @@ class PresidencyAssignmentResponse(PydanticBaseModel):
 
 
 class PresidencyAssignmentUpdate(PydanticBaseModel):
-    responsibilities: Optional[str] = None
+    responsibilities: Optional[list[str]] = None
     ward_ids: list[int] = []
 
 
@@ -53,21 +53,32 @@ class PresidencyAssignmentUpdate(PydanticBaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _parse_json_list(value: str, cast) -> list | None:
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [cast(s) for s in parsed]
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        logger.warning("_parse_json_list: failed to parse %r: %s", value, exc)
+    return None
+
+
 def _parse_responsibilities(value: Optional[str]) -> list[str]:
     if not value:
         return []
+    result = _parse_json_list(value, lambda s: str(s).strip())
+    if result is not None:
+        return [r for r in result if r]
     return [s.strip() for s in value.split(",") if s.strip()]
 
 
 def _parse_wards_overseen(value: Optional[str]) -> list[int]:
     if not value:
         return []
-    try:
-        parsed = json.loads(value)
-        if isinstance(parsed, list):
-            return [int(x) for x in parsed]
-    except (json.JSONDecodeError, ValueError, TypeError):
-        logger.error("Could not parse wards_overseen JSON: %r", value)
+    result = _parse_json_list(value, int)
+    if result is not None:
+        return result
+    logger.error("Could not parse wards_overseen JSON: %r", value)
     return []
 
 
@@ -216,7 +227,7 @@ def update_presidency_assignment(
                 detail=f"Invalid ward IDs: {invalid_ids}",
             )
 
-    row.responsibilities = data.responsibilities if data.responsibilities else None
+    row.responsibilities = json.dumps(data.responsibilities) if data.responsibilities else None
     row.wards_overseen = json.dumps(data.ward_ids) if data.ward_ids else None
 
     session.add(row)
