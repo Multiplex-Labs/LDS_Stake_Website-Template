@@ -567,7 +567,7 @@ export function CallingsTab() {
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs" size="sm">
+              <Button variant="outline" className="h-8 gap-1.5 px-3 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm">
                 Sort by
                 <ArrowUpDown className="size-3" />
               </Button>
@@ -580,7 +580,7 @@ export function CallingsTab() {
               <DropdownMenuItem onClick={() => handleSort("is_public")}>Visibility</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button className="h-8 gap-1.5 px-3 text-xs" size="sm" onClick={() => setAddOpen(true)}>
+          <Button className="h-8 gap-1.5 px-3 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="size-3.5" />
             Add Calling
           </Button>
@@ -644,7 +644,7 @@ export function CallingsTab() {
                       >
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button className="size-7" size="sm" variant="ghost">
+                            <Button className="size-7 text-muted-foreground/50 hover:text-foreground transition-colors" size="sm" variant="ghost">
                               <MoreHorizontal className="size-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -713,8 +713,8 @@ export function CallingsTab() {
         </p>
         {totalPages > 1 && (
           <div className="flex gap-2">
-            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
-            <Button className="h-7 px-2 text-xs" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+            <Button className="h-7 px-2 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Previous</Button>
+            <Button className="h-7 px-2 text-xs hover:scale-105 hover:shadow-lg transition-all duration-200" size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
           </div>
         )}
       </div>
