@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { MONTHS, SELECT_NONE } from "@/lib/constants";
+import { MONTHS, SHORT_MONTHS, SELECT_NONE } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import { cn, extractWardNumber, getInitials, fullName } from "@/lib/utils";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
@@ -30,6 +30,14 @@ import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const MONTH_INDICES = MONTHS.map((_, i) => i);
+
+const TOPIC_GRID = "grid-cols-[14rem_1fr_1fr_10rem_6rem]";
+const BUTTON_HOVER = "hover:scale-105 hover:shadow-lg transition-all duration-200";
+const STATUS_CIRCLE_CLS = {
+  planned: "bg-emerald-500 text-white",
+  unsaved: "bg-amber-300 text-amber-900",
+  empty: "bg-destructive text-destructive-foreground",
+} as const;
 
 
 interface TopicEdit {
@@ -265,17 +273,19 @@ export function SpeakingTab() {
             <YearNav year={year} onChange={handleYearChange} />
           </div>
 
-          {/* Column headers */}
-          <div className="grid grid-cols-[14rem_1fr_1fr_10rem_6rem] items-center border-b bg-muted/10 px-4 py-2 text-xs text-muted-foreground">
-            <div>Month</div>
-            <div>Topic</div>
-            <div>Reference Material</div>
-            <div className="text-center">Status</div>
-            <div />
-          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[720px]">
+              {/* Column headers */}
+              <div className={cn(TOPIC_GRID, "grid items-center border-b bg-muted/10 px-4 py-2 text-xs text-muted-foreground")}>
+                <div>Month</div>
+                <div>Topic</div>
+                <div>Reference Material</div>
+                <div className="text-center">Status</div>
+                <div />
+              </div>
 
-          {/* Rows */}
-          <div className="divide-y min-w-[720px]">
+              {/* Rows */}
+              <div className="divide-y">
             {MONTH_INDICES.map((monthIdx) => {
               const status = getTopicStatus(monthIdx);
               const row = getRow(monthIdx);
@@ -287,19 +297,17 @@ export function SpeakingTab() {
               return (
                 <div
                   key={monthIdx}
-                  className="grid grid-cols-[14rem_1fr_1fr_10rem_6rem] items-center gap-3 px-4 py-2.5 hover:bg-muted/20"
+                  className={cn(TOPIC_GRID, "grid items-center gap-3 px-4 py-2.5 hover:bg-muted/20")}
                 >
                   {/* Month */}
                   <div className="flex items-center gap-3">
                     <span
                       className={cn(
                         "flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                        status === "planned" && "bg-emerald-500 text-white",
-                        status === "unsaved" && "bg-amber-300 text-amber-900",
-                        status === "empty" && "bg-destructive text-destructive-foreground",
+                        STATUS_CIRCLE_CLS[status],
                       )}
                     >
-                      {MONTHS[monthIdx].slice(0, 3)}
+                      {SHORT_MONTHS[monthIdx]}
                     </span>
                     <div>
                       <div className="text-sm font-medium">{MONTHS[monthIdx]}</div>
@@ -312,7 +320,7 @@ export function SpeakingTab() {
                   {/* Topic input */}
                   <Input
                     value={row.topic}
-                    readOnly={status === "planned"}
+                    disabled={status === "planned"}
                     onChange={(e) =>
                       setEdits((prev) => ({
                         ...prev,
@@ -321,13 +329,13 @@ export function SpeakingTab() {
                     }
                     placeholder="Add topic…"
                     aria-label={`${MONTHS[monthIdx]} topic`}
-                    className={cn("h-8 text-sm", status === "planned" && "read-only:bg-muted/30 cursor-default")}
+                    className="h-8 text-sm"
                   />
 
                   {/* Reference input */}
                   <Input
                     value={row.ref}
-                    readOnly={status === "planned"}
+                    disabled={status === "planned"}
                     onChange={(e) =>
                       setEdits((prev) => ({
                         ...prev,
@@ -336,7 +344,7 @@ export function SpeakingTab() {
                     }
                     placeholder="Add reference material…"
                     aria-label={`${MONTHS[monthIdx]} reference material`}
-                    className={cn("h-8 text-sm", status === "planned" && "read-only:bg-muted/30 cursor-default")}
+                    className="h-8 text-sm"
                   />
 
                   {/* Status badge */}
@@ -356,7 +364,7 @@ export function SpeakingTab() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                        className={cn("h-8", BUTTON_HOVER)}
                         onClick={() =>
                           setEdits((prev) => ({
                             ...prev,
@@ -372,7 +380,7 @@ export function SpeakingTab() {
                     ) : (
                       <Button
                         size="sm"
-                        className="h-8 hover:scale-105 hover:shadow-lg transition-all duration-200"
+                        className={cn("h-8", BUTTON_HOVER)}
                         disabled={!row.topic.trim() || isSaving || isAnyBatchSaving}
                         onClick={() => saveTopicMutation.mutate({ monthIdx, topic: row.topic, ref: row.ref })}
                       >
@@ -383,6 +391,8 @@ export function SpeakingTab() {
                 </div>
               );
             })}
+              </div>
+            </div>
           </div>
 
           {/* Footer */}
@@ -404,7 +414,7 @@ export function SpeakingTab() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 hover:scale-105 hover:shadow-lg transition-all duration-200"
+              className={cn("gap-1.5", BUTTON_HOVER)}
               disabled={savableCount === 0 || saveAllMutation.isPending}
               onClick={() =>
                 saveAllMutation.mutate({
@@ -455,7 +465,7 @@ export function SpeakingTab() {
                       {MONTHS.map((m, i) => (
                         <TableHead key={i} className="text-center px-1 min-w-[64px]">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className="text-xs">{m.slice(0, 3)}</span>
+                            <span className="text-xs">{SHORT_MONTHS[i]}</span>
                             <Button
                               variant="ghost"
                               size="icon"

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar, BookOpen } from "lucide-react";
 import { cn, extractWardNumber, fullName, apiErrorStatus } from "@/lib/utils";
-import { MONTHS } from "@/lib/constants";
+import { MONTHS, SHORT_MONTHS } from "@/lib/constants";
 import { useUserCallingMap, useWardMap, useTopicForMonth } from "@/lib/hooks";
 import { apiRequest } from "@/lib/queryClient";
 import type { SpeakingCalendar, SpeakingTopic, ApiUser, Ward } from "@/types";
@@ -236,7 +236,7 @@ export default function SpeakingSchedule() {
                   <TableRow>
                     <TableHead className="w-[180px] sticky left-0 z-10 font-bold bg-background">High Councilor</TableHead>
                     {MONTHS.map((m, i) => (
-                      <TableHead key={i} className="text-center min-w-[60px]">{m.slice(0, 3)}</TableHead>
+                      <TableHead key={i} className="text-center min-w-[60px]">{SHORT_MONTHS[i]}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>

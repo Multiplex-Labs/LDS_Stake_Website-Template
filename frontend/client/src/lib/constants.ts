@@ -11,6 +11,8 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
+export const SHORT_MONTHS = MONTHS.map((m) => m.slice(0, 3));
+
 
 export const KANBAN_STAGES = [
   { key: "0", id: "pending-stake-approval", label: "Stake Presidency Approval", badgeVariant: "outline",    cssClass: "stage-sp-approval"  },
