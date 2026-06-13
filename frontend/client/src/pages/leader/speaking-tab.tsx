@@ -57,10 +57,51 @@ function overrideAssignment(ucId: number, wardId: number | null, monthIdx: numbe
   });
 }
 
+function YearNav({ year, onChange }: { year: number; onChange: (y: number) => void }) {
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={year <= YEAR_OPTIONS[0]}
+        onClick={() => onChange(year - 1)}
+        aria-label="Previous year"
+      >
+        <ChevronLeftIcon className="size-4" />
+      </Button>
+      <Select value={String(year)} onValueChange={(v) => onChange(Number(v))}>
+        <SelectTrigger className="w-24 h-8 text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {YEAR_OPTIONS.map((y) => (
+            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
+        onClick={() => onChange(year + 1)}
+        aria-label="Next year"
+      >
+        <ChevronRightIcon className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 export function SpeakingTab() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [edits, setEdits] = useState<Record<number, TopicEdit>>({});
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+    setActiveCell(null);
+    setEdits({});
+  };
 
   const { data: topics = [], isLoading: topicsLoading } = useQuery<SpeakingTopic[]>({
     queryKey: ["/api/speaking/topics/", year],
@@ -222,39 +263,7 @@ export function SpeakingTab() {
                 <Badge variant="secondary">{plannedCount} of 12 planned</Badge>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={year <= YEAR_OPTIONS[0]}
-                onClick={() => { setYear((y) => y - 1); setActiveCell(null); setEdits({}); }}
-                aria-label="Previous year"
-              >
-                <ChevronLeftIcon className="size-4" />
-              </Button>
-              <Select
-                value={String(year)}
-                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); setEdits({}); }}
-              >
-                <SelectTrigger className="w-24 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEAR_OPTIONS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
-                onClick={() => { setYear((y) => y + 1); setActiveCell(null); setEdits({}); }}
-                aria-label="Next year"
-              >
-                <ChevronRightIcon className="size-4" />
-              </Button>
-            </div>
+            <YearNav year={year} onChange={handleYearChange} />
           </div>
 
           {/* Column headers */}
@@ -438,39 +447,7 @@ export function SpeakingTab() {
                 <p className="font-semibold text-sm">Ward Schedule</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={year <= YEAR_OPTIONS[0]}
-                onClick={() => { setYear((y) => y - 1); setActiveCell(null); setEdits({}); }}
-                aria-label="Previous year"
-              >
-                <ChevronLeftIcon className="size-4" />
-              </Button>
-              <Select
-                value={String(year)}
-                onValueChange={(v) => { setYear(Number(v)); setActiveCell(null); setEdits({}); }}
-              >
-                <SelectTrigger className="w-24 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEAR_OPTIONS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={year >= YEAR_OPTIONS[YEAR_OPTIONS.length - 1]}
-                onClick={() => { setYear((y) => y + 1); setActiveCell(null); setEdits({}); }}
-                aria-label="Next year"
-              >
-                <ChevronRightIcon className="size-4" />
-              </Button>
-            </div>
+            <YearNav year={year} onChange={handleYearChange} />
           </div>
 
           {!calendar ? (
@@ -511,7 +488,7 @@ export function SpeakingTab() {
                     {calendar.speakers
                       .filter((sp) => userCallingMap.has(sp.high_councilor_id))
                       .map((sp) => {
-                        const user = userCallingMap.get(sp.high_councilor_id) as ApiUser;
+                        const user = userCallingMap.get(sp.high_councilor_id)!;
                         return (
                           <TableRow key={sp.high_councilor_id}>
                             <TableCell className="sticky left-0 bg-background z-10">
