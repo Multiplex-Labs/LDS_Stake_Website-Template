@@ -116,7 +116,7 @@ def test_put_success_and_round_trip(
     assert calling is not None
 
     payload = {
-        "responsibilities": "Sunday School, Emergency Preparedness",
+        "responsibilities": ["Sunday School", "Emergency Preparedness"],
         "ward_ids": [],
     }
     r = client.put(
@@ -176,7 +176,7 @@ def test_put_without_permission_returns_403(
 
     r = client.put(
         f"/presidency-assignments/{calling.id}",
-        json={"responsibilities": "Test", "ward_ids": []},
+        json={"responsibilities": None, "ward_ids": []},
         headers=headers,
     )
     assert r.status_code == 403

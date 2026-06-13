@@ -45,7 +45,7 @@ class PresidencyAssignmentResponse(PydanticBaseModel):
 
 
 class PresidencyAssignmentUpdate(PydanticBaseModel):
-    responsibilities: Optional[str] = None
+    responsibilities: Optional[list[str]] = None
     ward_ids: list[int] = []
 
 
@@ -56,6 +56,12 @@ class PresidencyAssignmentUpdate(PydanticBaseModel):
 def _parse_responsibilities(value: Optional[str]) -> list[str]:
     if not value:
         return []
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [str(s).strip() for s in parsed if str(s).strip()]
+    except (json.JSONDecodeError, ValueError, TypeError):
+        pass
     return [s.strip() for s in value.split(",") if s.strip()]
 
 
@@ -216,7 +222,7 @@ def update_presidency_assignment(
                 detail=f"Invalid ward IDs: {invalid_ids}",
             )
 
-    row.responsibilities = data.responsibilities if data.responsibilities else None
+    row.responsibilities = json.dumps(data.responsibilities) if data.responsibilities else None
     row.wards_overseen = json.dumps(data.ward_ids) if data.ward_ids else None
 
     session.add(row)

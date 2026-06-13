@@ -1,44 +1,48 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, ChevronsUpDown } from "lucide-react";
+import { Pencil, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ICON_BTN_HOVER } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import type { PresidencyAssignment, Ward } from "@/types";
 
 interface EditState {
   assignment: PresidencyAssignment;
-  responsibilities: string;
+  chips: string[];
   selectedWardIds: Set<number>;
+}
+
+function getInitials(assignment: PresidencyAssignment): string {
+  if (!assignment.current_holder) return "?";
+  const { fname, lname } = assignment.current_holder;
+  return `${fname.charAt(0)}${lname.charAt(0)}`.toUpperCase();
 }
 
 export function PresidencyAssignmentsTab() {
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [chipDraft, setChipDraft] = useState<string>("");
+  const [wardSelectKey, setWardSelectKey] = useState(0);
+  const chipInputRef = useRef<HTMLInputElement>(null);
 
   const {
     data: assignments = [],
@@ -61,6 +65,11 @@ export function PresidencyAssignmentsTab() {
     [wards],
   );
 
+  const assignedCount = useMemo(
+    () => assignments.filter((a) => a.current_holder !== null).length,
+    [assignments],
+  );
+
   const saveMutation = useMutation({
     mutationFn: ({
       calling_id,
@@ -68,16 +77,17 @@ export function PresidencyAssignmentsTab() {
       ward_ids,
     }: {
       calling_id: number;
-      responsibilities: string | null;
+      responsibilities: string[] | null;
       ward_ids: number[];
     }) =>
       apiRequest("PUT", `/api/presidency-assignments/${calling_id}`, {
-        responsibilities: responsibilities,
+        responsibilities,
         ward_ids,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/presidency-assignments/"] });
       setEditing(null);
+      setChipDraft("");
       toast.success("Saved.");
     },
     onError: (err: Error) => {
@@ -96,23 +106,78 @@ export function PresidencyAssignmentsTab() {
   });
 
   function openEdit(assignment: PresidencyAssignment) {
+    setChipDraft("");
+    setWardSelectKey((k) => k + 1);
     setEditing({
       assignment,
-      responsibilities: assignment.responsibilities.join(", "),
+      chips: assignment.responsibilities,
       selectedWardIds: new Set(assignment.wards_overseen),
     });
   }
 
-  function toggleWard(wardId: number) {
+  function addChip(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed || editing?.chips.includes(trimmed)) return;
+    setEditing((prev) => prev && { ...prev, chips: [...prev.chips, trimmed] });
+    setChipDraft("");
+  }
+
+  function removeChip(idx: number) {
+    setEditing((prev) => prev && { ...prev, chips: prev.chips.filter((_, i) => i !== idx) });
+  }
+
+  function handleChipChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    if (!value.includes(",")) {
+      setChipDraft(value);
+      return;
+    }
+    const parts = value.split(",");
+    parts.slice(0, -1).forEach((part) => addChip(part));
+    setChipDraft(parts[parts.length - 1]);
+  }
+
+  function handleChipKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addChip(chipDraft);
+    }
+    if (e.key === "Backspace" && chipDraft === "" && editing && editing.chips.length > 0) {
+      e.preventDefault();
+      removeChip(editing.chips.length - 1);
+    }
+  }
+
+  function addWard(wardId: number) {
     setEditing((prev) => {
       if (!prev) return prev;
       const next = new Set(prev.selectedWardIds);
-      if (next.has(wardId)) {
-        next.delete(wardId);
-      } else {
-        next.add(wardId);
-      }
+      next.add(wardId);
       return { ...prev, selectedWardIds: next };
+    });
+    setWardSelectKey((k) => k + 1);
+  }
+
+  function removeWard(wardId: number) {
+    setEditing((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.selectedWardIds);
+      next.delete(wardId);
+      return { ...prev, selectedWardIds: next };
+    });
+  }
+
+  function handleSave() {
+    if (!editing) return;
+    const draftTrimmed = chipDraft.trim();
+    const allChips =
+      draftTrimmed && !editing.chips.includes(draftTrimmed)
+        ? [...editing.chips, draftTrimmed]
+        : editing.chips;
+    saveMutation.mutate({
+      calling_id: editing.assignment.calling_id,
+      responsibilities: allChips.length > 0 ? allChips : null,
+      ward_ids: Array.from(editing.selectedWardIds),
     });
   }
 
@@ -135,79 +200,120 @@ export function PresidencyAssignmentsTab() {
 
   if (wardsError) {
     console.error("[presidency-assignments-tab] load wards:", wardsError);
-    // Non-fatal — ward names degrade to IDs but cards still render
   }
 
   return (
     <>
-      <div className="grid gap-6 md:grid-cols-3">
-        {assignments.map((assignment) => (
-          <Card key={assignment.id} className="flex flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-start justify-between gap-2">
-                <span className="text-base font-semibold leading-snug">
-                  {assignment.calling_name}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => openEdit(assignment)}
-                  aria-label={`Edit ${assignment.calling_name}`}
-                >
-                  <Pencil className="size-4" />
-                  Edit
-                </Button>
-              </CardTitle>
-              <p className="text-sm font-medium text-foreground">
-                {assignment.current_holder
-                  ? `${assignment.current_holder.fname} ${assignment.current_holder.lname}`
-                  : <span className="text-muted-foreground">Unassigned</span>}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Users className="size-5 text-muted-foreground" />
+            <div>
+              <h2 className="text-lg font-semibold">Presidency Assignments</h2>
+              <p className="text-sm text-muted-foreground">
+                Manage responsibilities and ward oversight for stake presidency members
               </p>
-            </CardHeader>
+            </div>
+          </div>
+          <Badge variant="secondary">
+            {assignedCount} of {assignments.length} assigned
+          </Badge>
+        </div>
 
-            <CardContent className="flex-1 space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Responsibilities
-                </p>
-                {assignment.responsibilities.length > 0 ? (
-                  <ul className="space-y-1">
-                    {assignment.responsibilities.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">None listed</p>
-                )}
-              </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {assignments.map((assignment) => {
+            const isAssigned = assignment.current_holder !== null;
+            return (
+              <Card key={assignment.id} className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold leading-snug">
+                      {assignment.calling_name}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={ICON_BTN_HOVER}
+                      onClick={() => openEdit(assignment)}
+                      aria-label={`Edit ${assignment.calling_name}`}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
 
-              {assignment.wards_overseen.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Ward Assignments
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {assignment.wards_overseen.map((wardId) => (
-                      <Badge key={wardId} variant="outline" className="text-xs">
-                        {wardMap.get(wardId) ?? `Ward ${wardId}`}
-                      </Badge>
-                    ))}
+                <CardContent className="flex-1 space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-center size-9 rounded-full bg-muted text-sm font-semibold text-muted-foreground shrink-0">
+                      {getInitials(assignment)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {isAssigned
+                          ? `${assignment.current_holder?.fname} ${assignment.current_holder?.lname}`
+                          : "Unassigned"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          isAssigned ? "bg-emerald-500" : "bg-muted-foreground",
+                        )}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {isAssigned ? "Assigned" : "Unassigned"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Responsibilities
+                    </p>
+                    {assignment.responsibilities.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {assignment.responsibilities.map((r, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">
+                            {r}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">None listed</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Ward Assignments
+                    </p>
+                    {assignment.wards_overseen.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {assignment.wards_overseen.map((wardId) => (
+                          <Badge key={wardId} variant="outline" className="text-xs">
+                            {wardMap.get(wardId) ?? `Ward ${wardId}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No wards assigned</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <Dialog
         open={editing != null}
         onOpenChange={(open) => {
-          if (!open) setEditing(null);
+          if (!open) {
+            setEditing(null);
+            setChipDraft("");
+          }
         }}
       >
         <DialogContent className="max-w-md">
@@ -215,84 +321,123 @@ export function PresidencyAssignmentsTab() {
             <DialogTitle>
               Edit {editing?.assignment.calling_name ?? "Assignment"}
             </DialogTitle>
+            <DialogDescription>
+              {editing?.assignment.current_holder
+                ? `${editing.assignment.current_holder.fname} ${editing.assignment.current_holder.lname}`
+                : "No member currently assigned"}
+            </DialogDescription>
           </DialogHeader>
 
           {editing && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="responsibilities">Responsibilities</Label>
-                <Textarea
-                  id="responsibilities"
-                  value={editing.responsibilities}
-                  onChange={(e) =>
-                    setEditing((prev) => prev && { ...prev, responsibilities: e.target.value })
-                  }
-                  placeholder="Comma-separated (e.g. Sunday School, Relief Society)"
-                  rows={4}
-                />
+                <Label htmlFor="chip-input">Responsibilities</Label>
+                <div
+                  className="flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-1 focus-within:ring-ring cursor-text"
+                  onClick={() => chipInputRef.current?.focus()}
+                >
+                  {editing.chips.map((chip, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+                    >
+                      {chip}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeChip(idx);
+                        }}
+                        className="text-muted-foreground hover:text-foreground transition-colors leading-none"
+                        aria-label={`Remove ${chip}`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    ref={chipInputRef}
+                    id="chip-input"
+                    type="text"
+                    value={chipDraft}
+                    onChange={handleChipChange}
+                    onKeyDown={handleChipKeyDown}
+                    onBlur={() => {
+                      if (chipDraft.trim()) addChip(chipDraft);
+                    }}
+                    placeholder={
+                      editing.chips.length === 0 ? "Type and press Enter to add…" : ""
+                    }
+                    className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground text-sm"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Press Enter to add, Backspace to remove last.
+                </p>
               </div>
 
               <div className="space-y-1.5">
                 <Label>Ward Assignments</Label>
-                <PopoverPrimitive.Root modal={false}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between font-normal"
-                    >
-                      {editing.selectedWardIds.size > 0
-                        ? `${editing.selectedWardIds.size} ward(s) selected`
-                        : "Select wards…"}
-                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search wards…" />
-                      <CommandList>
-                        <CommandEmpty>No wards found.</CommandEmpty>
-                        <CommandGroup>
-                          {wards.map((ward) => (
-                            <CommandItem
-                              key={ward.id}
-                              value={ward.name}
-                              onSelect={() => toggleWard(ward.id)}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Checkbox
-                                checked={editing.selectedWardIds.has(ward.id)}
-                                onCheckedChange={() => toggleWard(ward.id)}
-                                aria-label={`Select ${ward.name}`}
-                              />
-                              <span>{ward.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </PopoverPrimitive.Root>
+                {editing.selectedWardIds.size > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {Array.from(editing.selectedWardIds).map((wardId) => (
+                      <span
+                        key={wardId}
+                        className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+                      >
+                        {wardMap.get(wardId) ?? `Ward ${wardId}`}
+                        <button
+                          type="button"
+                          onClick={() => removeWard(wardId)}
+                          className="text-muted-foreground hover:text-foreground transition-colors leading-none"
+                          aria-label={`Remove ${wardMap.get(wardId) ?? `Ward ${wardId}`}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {wardsError ? (
+                  <p className="text-xs text-muted-foreground">Ward data unavailable.</p>
+                ) : (
+                  <Select
+                    key={wardSelectKey}
+                    onValueChange={(val) => addWard(Number(val))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select wards to add…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wards
+                        .filter((w) => !editing.selectedWardIds.has(w.id))
+                        .map((w) => (
+                          <SelectItem key={w.id} value={String(w.id)}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditing(null);
+                setChipDraft("");
+              }}
+            >
               Cancel
             </Button>
             <Button
               disabled={saveMutation.isPending}
-              onClick={() => {
-                if (!editing) return;
-                saveMutation.mutate({
-                  calling_id: editing.assignment.calling_id,
-                  responsibilities: editing.responsibilities.trim() || null,
-                  ward_ids: Array.from(editing.selectedWardIds),
-                });
-              }}
+              onClick={handleSave}
             >
-              {saveMutation.isPending ? "Saving…" : "Save"}
+              {saveMutation.isPending ? "Saving…" : "Save Assignment"}
             </Button>
           </DialogFooter>
         </DialogContent>
