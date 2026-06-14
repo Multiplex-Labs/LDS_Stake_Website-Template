@@ -10,8 +10,8 @@ import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/home";
 import StakeLeadership from "@/pages/stake/leadership";
-import StakeCalendar from "@/pages/stake/calendar";
 import StakeSports from "@/pages/stake/sports";
+import TempleRecommend from "@/pages/stake/temple-recommend";
 import ReserveBuilding from "@/pages/stake/reserve";
 
 import WardMap from "@/pages/ward/map";
@@ -46,9 +46,9 @@ function Router() {
       <Route path="/stake-leadership" component={StakeLeadership} />
 
       {/* Stake Info */}
-      <Route path="/stake-info/calendar" component={StakeCalendar} />
       <Route path="/stake-info/sports" component={StakeSports} />
       <Route path="/stake-info/reserve" component={ReserveBuilding} />
+      <Route path="/stake-info/temple-recommend" component={TempleRecommend} />
 
       {/* Ward Info */}
       <Route path="/ward-info/map" component={WardMap} />

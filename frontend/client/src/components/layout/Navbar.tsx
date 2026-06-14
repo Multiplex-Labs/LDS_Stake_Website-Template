@@ -196,9 +196,9 @@ export function Navbar() {
                 <NavigationMenuItem>
                   <NavigationMenuTrigger className="bg-transparent font-medium">Stake Info</NavigationMenuTrigger>
                   <NavigationMenuContent>
-                    <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
-                      <ListItem href="/stake-info/calendar" title="Calendar" />
-                      <ListItem href="/stake-info/sports" title="Sports" />
+                    <ul className="grid w-[400px] gap-3 p-4">
+<ListItem href="/stake-info/temple-recommend" title="Temple Recommends" />
+                      <ListItem href="/stake-info/sports" title="Stake Sports" />
                       <ListItem href="/stake-info/reserve" title="Reserve Building" />
                     </ul>
                   </NavigationMenuContent>
@@ -439,8 +439,8 @@ export function Navbar() {
                 <li className="pt-3 pb-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Stake Info</span>
                 </li>
-                <MobileLink href="/stake-info/calendar" onClick={() => setMobileOpen(false)}>Calendar</MobileLink>
-                <MobileLink href="/stake-info/sports" onClick={() => setMobileOpen(false)}>Sports</MobileLink>
+<MobileLink href="/stake-info/temple-recommend" onClick={() => setMobileOpen(false)}>Temple Recommends</MobileLink>
+                <MobileLink href="/stake-info/sports" onClick={() => setMobileOpen(false)}>Stake Sports</MobileLink>
                 <MobileLink href="/stake-info/reserve" onClick={() => setMobileOpen(false)}>Reserve Building</MobileLink>
 
                 <li className="pt-3 pb-1">

@@ -2,7 +2,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import heroImage from "@assets/temple-hero.jpg";
 import { motion } from "framer-motion";
-import { Users, Landmark, Megaphone, BookOpen } from "lucide-react";
+import { Users, Building2, BookOpen, UserCheck } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Home() {
@@ -59,22 +59,22 @@ export default function Home() {
       <section className="py-20 bg-background">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
-            <Link href="/stake-info/calendar" className="block h-full">
-              <FeatureCard
-                icon={<Landmark className="w-10 h-10 text-primary" />}
-                title="Calendar"
-              />
-            </Link>
-            <Link href="/stake-leadership" className="block h-full">
+<Link href="/stake-leadership" className="block h-full">
               <FeatureCard
                 icon={<Users className="w-10 h-10 text-primary" />}
                 title="Leadership"
               />
             </Link>
-            <Link href="/stake-info/sports" className="block h-full">
+            <Link href="/stake-info/reserve" className="block h-full">
               <FeatureCard
-                icon={<Megaphone className="w-10 h-10 text-primary" />}
-                title="Sports"
+                icon={<Building2 className="w-10 h-10 text-primary" />}
+                title="Reserve Building"
+              />
+            </Link>
+            <Link href="/ward-info/bishops" className="block h-full">
+              <FeatureCard
+                icon={<UserCheck className="w-10 h-10 text-primary" />}
+                title="Meet Our Bishops"
               />
             </Link>
             <Link href="/resources" className="block h-full">
