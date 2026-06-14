@@ -61,7 +61,7 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus, cn } from "@/lib/utils";
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
-import type { ApiCalling, ApiUser, ApiUserPermissions } from "@/types";
+import type { ApiCalling, ApiUser, ApiUserPermissions, Ward } from "@/types";
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep } from "@/components/ui/wizard-shell";
 
@@ -341,12 +341,14 @@ function PositionPicker({
 function SlotRow({
   callingId,
   slot,
+  wardName,
   occupant,
   activeUsers,
   lockSlots,
 }: {
   callingId: number;
   slot: number;
+  wardName?: string;
   occupant: ApiUser | undefined;
   activeUsers: ApiUser[];
   lockSlots: boolean;
@@ -394,7 +396,7 @@ function SlotRow({
       <TableRow className="hover:bg-muted/50">
         <TableCell />
         <TableCell className="pl-10 text-sm text-muted-foreground">
-          Slot {slot}
+          {wardName ?? `Slot ${slot}`}
         </TableCell>
         <TableCell colSpan={2} className="text-sm">
           {occupant ? (
@@ -440,7 +442,7 @@ function SlotRow({
               <strong>
                 {occupant?.fname} {occupant?.lname}
               </strong>{" "}
-              from slot {slot}. You can reassign them at any time.
+              from {wardName ? `the ${wardName} bishop slot` : `slot ${slot}`}. You can reassign them at any time.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -777,6 +779,10 @@ export function CallingsTab() {
     queryKey: ["/api/users/"],
   });
 
+  const { data: wards = [] } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+
   if (callingsIsError) console.error("[callings-tab] callings query:", callingsErr);
   if (usersIsError) console.error("[callings-tab] users query:", usersErr);
 
@@ -808,6 +814,14 @@ export function CallingsTab() {
     }
     return map;
   }, [users]);
+
+  const wardByBishopSlot = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const w of wards) {
+      if (w.bishop_slot_number != null) map.set(w.bishop_slot_number, w.name);
+    }
+    return map;
+  }, [wards]);
 
   const filteredCallings = useMemo(() => {
     return callings
@@ -1067,6 +1081,7 @@ export function CallingsTab() {
                           key={slot}
                           callingId={calling.id}
                           slot={slot}
+                          wardName={calling.name === "Bishop" ? wardByBishopSlot.get(slot) : undefined}
                           occupant={occupantMap.get(`${calling.id}:${slot}`)}
                           activeUsers={unassignedActiveUsers}
                           lockSlots={calling.lock_slots}

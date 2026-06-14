@@ -53,7 +53,7 @@ def load_wards():
                 session=session
             )
             logger.info(f"Creating ward '{w}'.")
-            ward = Ward(name=name, start_time=float(start_time_val), bishop_calling_id=bishop_slot.id, location=location_val)
+            ward = Ward(name=name, start_time=float(start_time_val), bishop_id=bishop_slot.id, location=location_val)
             session.add(ward)
             session.commit()
 

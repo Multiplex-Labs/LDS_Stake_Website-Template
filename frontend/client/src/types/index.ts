@@ -26,6 +26,7 @@ export interface Ward {
   bishop_id: number | null;
   start_time: number;
   location: string | null;
+  bishop_slot_number: number | null;
 }
 
 export interface ApiCalling {
