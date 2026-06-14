@@ -6,4 +6,5 @@ __pycache__
 *.sqlite3
 *.log
 *.csv
+!wards.csv
 *.txt

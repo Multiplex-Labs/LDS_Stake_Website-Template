@@ -76,7 +76,7 @@ import {
 } from "@/components/ui/command";
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
-import type { ApiUser, ApiCalling, ApiUserPermissions } from "@/types";
+import type { ApiUser, ApiCalling, ApiUserPermissions, Ward } from "@/types";
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep as WizardShellStep } from "@/components/ui/wizard-shell";
 
@@ -142,6 +142,7 @@ interface AddUserWizardProps {
   open: boolean;
   wizard: AddWizardState;
   callings: ApiCalling[];
+  wardByBishopSlot: Map<number, string>;
   addSelectedCalling: ApiCalling | undefined;
   addFreeSlots: number[];
   addPhotoCropView: boolean;
@@ -171,6 +172,7 @@ const AddUserWizard = memo(function AddUserWizard({
   open,
   wizard,
   callings,
+  wardByBishopSlot,
   addSelectedCalling,
   addFreeSlots,
   addPhotoCropView,
@@ -211,7 +213,11 @@ const AddUserWizard = memo(function AddUserWizard({
     { label: "Bio",     value: wizard.form.bio   || "—" },
     { label: "Calling", value: addSelectedCalling
         ? addSelectedCalling.max_slots > 1
-          ? `${addSelectedCalling.name} · Slot ${wizard.slotNumber}`
+          ? `${addSelectedCalling.name} · ${
+              addSelectedCalling.name === "Bishop"
+                ? (wardByBishopSlot.get(Number(wizard.slotNumber)) ?? `Slot ${wizard.slotNumber}`)
+                : `Slot ${wizard.slotNumber}`
+            }`
           : addSelectedCalling.name
         : "—" },
     { label: "Photo",   value: wizard.photo ? "Added" : "—" },
@@ -410,11 +416,13 @@ const AddUserWizard = memo(function AddUserWizard({
                 disabled={addFreeSlots.length === 0}
               >
                 <SelectTrigger className="w-[110px]">
-                  <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : "Slot…"} />
+                  <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : addSelectedCalling.name === "Bishop" ? "Ward…" : "Slot…"} />
                 </SelectTrigger>
                 <SelectContent>
                   {addFreeSlots.map((s) => (
-                    <SelectItem key={s} value={String(s)}>Slot {s}</SelectItem>
+                    <SelectItem key={s} value={String(s)}>
+                      {addSelectedCalling.name === "Bishop" ? (wardByBishopSlot.get(s) ?? `Slot ${s}`) : `Slot ${s}`}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -504,6 +512,8 @@ interface PermissionsDialogProps {
   permissionsLoading: boolean;
   callings: ApiCalling[];
   occupiedSlotsMap: Map<number, Set<number>>;
+  wardByUcId: Map<number, string>;
+  wardByBishopSlot: Map<number, string>;
   onClose: () => void;
   onTogglePermission: (newScopes: number) => void;
   onRemoveCalling: (args: { callingId: number; slotNumber: number }) => void;
@@ -517,6 +527,8 @@ const PermissionsDialog = memo(function PermissionsDialog({
   permissionsLoading,
   callings,
   occupiedSlotsMap,
+  wardByUcId,
+  wardByBishopSlot,
   onClose,
   onTogglePermission,
   onRemoveCalling,
@@ -573,7 +585,11 @@ const PermissionsDialog = memo(function PermissionsDialog({
                           <BriefcaseIcon className="size-4 text-muted-foreground" />
                           <span className="text-sm">
                             {calling.name}
-                            {calling.max_slots > 1 && <span className="ml-1.5 text-muted-foreground">· Slot {uc.slot_number}</span>}
+                            {calling.max_slots > 1 && (
+                              <span className="ml-1.5 text-muted-foreground">
+                                · {calling.name === "Bishop" ? (wardByUcId.get(uc.id) ?? `Slot ${uc.slot_number}`) : `Slot ${uc.slot_number}`}
+                              </span>
+                            )}
                           </span>
                         </div>
                         <Button
@@ -653,7 +669,9 @@ const PermissionsDialog = memo(function PermissionsDialog({
                             if (user) onAssignCalling({ callingId: calling.id, slotNumber: slot, userId: user.id, onSuccess: () => setPermMode("default") });
                           }}
                         >
-                          <span className="text-muted-foreground text-xs">Slot {slot}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {calling.name === "Bishop" ? (wardByBishopSlot.get(slot) ?? `Slot ${slot}`) : `Slot ${slot}`}
+                          </span>
                         </CommandItem>
                       ))}
                     </Fragment>
@@ -686,6 +704,11 @@ export function UserAdminContent() {
   const { data: callings = [] } = useQuery<ApiCalling[]>({
     queryKey: ["/api/callings/"],
   });
+
+  const { data: wards = [], isError: wardsIsError, error: wardsErr } = useQuery<Ward[]>({
+    queryKey: ["/api/wards/"],
+  });
+  if (wardsIsError) console.error("[users] wards query:", wardsErr);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
   const activeCount = useMemo(() => users.filter((u) => u.active).length, [users]);
@@ -742,6 +765,16 @@ export function UserAdminContent() {
     }
     return map;
   }, [users]);
+
+  const { wardByUcId, wardByBishopSlot } = useMemo(() => {
+    const byUcId = new Map<number, string>();
+    const bySlot = new Map<number, string>();
+    for (const w of wards) {
+      if (w.bishop_id != null) byUcId.set(w.bishop_id, w.name);
+      if (w.bishop_slot_number != null) bySlot.set(w.bishop_slot_number, w.name);
+    }
+    return { wardByUcId: byUcId, wardByBishopSlot: bySlot };
+  }, [wards]);
 
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery<ApiUserPermissions>({
     queryKey: [`/api/users/${permissionsUserId}/permissions`],
@@ -1512,6 +1545,7 @@ export function UserAdminContent() {
           open={isAddingUser}
           wizard={addWizard}
           callings={callings}
+          wardByBishopSlot={wardByBishopSlot}
           addSelectedCalling={addSelectedCalling}
           addFreeSlots={addFreeSlots}
           addPhotoCropView={addPhotoCropView}
@@ -1677,6 +1711,8 @@ export function UserAdminContent() {
           permissionsLoading={permissionsLoading}
           callings={callings}
           occupiedSlotsMap={occupiedSlotsMap}
+          wardByUcId={wardByUcId}
+          wardByBishopSlot={wardByBishopSlot}
           onClose={() => setPermissionsUserId(null)}
           onTogglePermission={(newScopes) => {
             if (permissionsUserId === null) return;
