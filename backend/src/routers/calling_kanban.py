@@ -16,6 +16,8 @@ from ..utils import (
     user_has_permission,
     get_bishops_ward,
     get_stake_presidency,
+    get_high_councilors,
+    get_proposal_status
 )
 from ..utils.calling_kanban import (
     _stage_scoped_approval_counts,
@@ -32,6 +34,7 @@ from ..models import (
     CallingApproval,
     CallingInterview,
     User,
+    ResponseSafeUser,
     Ward,
     Permission
 )
@@ -402,6 +405,70 @@ def change_approval_status(
     session.refresh(approval)
     update_proposal_status(proposal, session, request.app.state.discord_bot)  # Update proposal status based on changed approval
     return approval
+
+class ApprovalReminderResponse(BaseModel):
+    proposal: CallingProposal
+    users_reminded: list[ResponseSafeUser]
+    errors: list[str]
+
+@router.put("/proposals/{proposal_id}/approvals/remind")
+def remind_proposal(
+    request: Request,
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS))
+):
+    """Remind approvers to review a proposal"""
+    # Implementation for reminding approvers
+    proposal = _get_proposal_or_404(session, proposal_id)
+    approvals = session.exec(select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)).all()
+    ward = session.get(Ward, proposal.ward_id) if proposal.ward_id else None
+    status = get_proposal_status(proposal, session)
+    users_reminded = []
+    errors = []
+    if status == KanbanStages.SP_APPROVAL:
+        approvers = get_stake_presidency(session)
+    elif status == KanbanStages.HC_APPROVAL:
+        approvers = get_high_councilors(session)
+    else:
+        raise HTTPException(status_code=400, detail="Proposal is not at a stage that requires approvals")
+    
+    for approver in approvers:
+        if any(a.approver_id == approver.id for a in approvals):
+            continue  # This approver has already submitted an approval/rejection
+        try:
+            request.app.state.discord_bot.request_kanban_approval(
+                proposal_id=proposal.id,
+                approver_email=approver.email,
+                person=proposal.fname + " " + proposal.lname,
+                calling=proposal.proposed_calling,
+                ward=ward.name if ward else "(unknown)",
+                details_url=f"{request.base_url}calling-kanban/proposals/{proposal.id}"
+            )
+            users_reminded.append(ResponseSafeUser.from_user(approver))
+        except Exception as e:
+            logger.error(f"Failed to send reminder to {approver.email} for proposal ID {proposal.id}: {e}")
+            errors.append(f"Failed to send reminder to {approver.email}")
+
+@router.put("/proposals/approvals/remind")
+def remind_all_overdue(
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS))
+):
+    """Remind approvers to review all proposals that have overdue approvals"""
+    # Implementation for reminding approvers of all overdue proposals
+    proposals = session.exec(select(CallingProposal)).all()
+    total_reminded = 0
+    total_errors = 0
+    for proposal in proposals:
+        try:
+            remind_proposal(request, proposal.id, session, current_user)
+            total_reminded += 1
+        except Exception as e:
+            logger.error(f"Failed to send reminders for proposal ID {proposal.id}: {e}")
+            total_errors += 1
+    return {"detail": f"Reminders sent for {total_reminded} proposals with {total_errors} errors"}
 
 # CallingInterview endpoints
 @router.post("/proposals/{proposal_id}/interview", response_model=CallingInterview)

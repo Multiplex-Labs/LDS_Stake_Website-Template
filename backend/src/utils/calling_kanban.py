@@ -458,3 +458,12 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     # Will be manually set by users, and are not calculated by business logic
 
     return updates
+
+def get_proposal_status(proposal:CallingProposal, session: Session) -> KanbanStages:
+    """Return the current kanban stage of a calling proposal."""
+    updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal.id)
+    ).all()
+    if not updates:
+        raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
+    return _latest_update(updates).to_stage
