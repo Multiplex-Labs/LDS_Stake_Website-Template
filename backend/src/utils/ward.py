@@ -44,16 +44,30 @@ def load_wards():
 
         for slot_number, w in enumerate(wards, start=1):
             parts = w.split(",")
-            name = parts[0]
-            start_time_val = parts[1]
+            if len(parts) < 2:
+                logger.error(
+                    f"Ward definition line {slot_number} is malformed "
+                    f"(expected 'name,start_hour[,location]'): {w!r}. Skipping."
+                )
+                continue
+            name = parts[0].strip()
+            start_time_str = parts[1].strip()
+            try:
+                start_time_val = float(start_time_str)
+            except ValueError:
+                logger.error(
+                    f"Ward definition line {slot_number} has invalid start_time {start_time_str!r} "
+                    f"for ward {name!r}. Expected a decimal hour (e.g. 9.0). Skipping."
+                )
+                continue
             location_val = parts[2].strip() if len(parts) > 2 else None
             bishop_slot = get_or_make_user_calling(
                 calling_id=bishop_calling.id,
                 slot_id=slot_number,
                 session=session
             )
-            logger.info(f"Creating ward '{w}'.")
-            ward = Ward(name=name, start_time=float(start_time_val), bishop_id=bishop_slot.id, location=location_val)
+            logger.info(f"Creating ward '{name}'.")
+            ward = Ward(name=name, start_time=start_time_val, bishop_id=bishop_slot.id, location=location_val)
             session.add(ward)
             session.commit()
 

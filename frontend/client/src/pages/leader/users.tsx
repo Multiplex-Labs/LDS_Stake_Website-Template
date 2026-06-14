@@ -705,9 +705,10 @@ export function UserAdminContent() {
     queryKey: ["/api/callings/"],
   });
 
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsIsError, error: wardsErr } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+  if (wardsIsError) console.error("[users] wards query:", wardsErr);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
   const activeCount = useMemo(() => users.filter((u) => u.active).length, [users]);

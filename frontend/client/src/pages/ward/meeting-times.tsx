@@ -9,10 +9,10 @@ import { formatMeetingTime } from "@/lib/utils";
 import type { Ward, ApiUser } from "@/types";
 
 export default function MeetingTimes() {
-  const { data: wards, isLoading: wardsLoading } = useQuery<Ward[]>({
+  const { data: wards, isLoading: wardsLoading, isError: wardsError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  const { data: users, isLoading: usersLoading } = useQuery<ApiUser[]>({
+  const { data: users, isLoading: usersLoading, isError: usersError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
 
@@ -27,6 +27,16 @@ export default function MeetingTimes() {
       };
     });
   }, [wards, userCallingMap]);
+
+  if (wardsError || usersError) {
+    return (
+      <Layout>
+        <div className="text-center py-16">
+          <p className="text-destructive">Failed to load ward meeting times. Please refresh.</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

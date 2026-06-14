@@ -2,7 +2,8 @@ from logging import getLogger
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import SQLModel, Session, select
+from sqlalchemy.orm import selectinload
+from sqlmodel import Field, SQLModel, Session, select
 
 from ..models import Ward
 from ..db import get_session
@@ -13,12 +14,17 @@ router = APIRouter(prefix="/wards", tags=["ward"])
 
 
 class WardPublic(SQLModel):
-    id: Optional[int]
+    id: int
     name: str
-    bishop_id: Optional[int]
-    start_time: float
-    location: Optional[str]
-    bishop_slot_number: Optional[int]
+    bishop_id: Optional[int] = Field(
+        default=None,
+        description="ID of the UserCalling row (usercalling.id) for this ward's bishop slot, not a user id.",
+    )
+    start_time: float = Field(
+        description="Decimal hours since midnight (e.g., 9.0 = 9:00 AM, 13.5 = 1:30 PM). Valid range: [0, 24)."
+    )
+    location: Optional[str] = None
+    bishop_slot_number: Optional[int] = None
 
 
 def _ward_to_public(ward: Ward) -> WardPublic:
@@ -35,7 +41,8 @@ def _ward_to_public(ward: Ward) -> WardPublic:
 @router.get("/")
 def list_wards(session: Session = Depends(get_session)) -> List[WardPublic]:
     """Return all wards."""
-    return [_ward_to_public(w) for w in session.exec(select(Ward)).all()]
+    wards = session.exec(select(Ward).options(selectinload(Ward.bishop))).all()
+    return [_ward_to_public(w) for w in wards]
 
 
 @router.get("/{ward_id}")

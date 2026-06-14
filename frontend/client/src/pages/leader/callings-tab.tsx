@@ -779,12 +779,13 @@ export function CallingsTab() {
     queryKey: ["/api/users/"],
   });
 
-  const { data: wards = [] } = useQuery<Ward[]>({
+  const { data: wards = [], isError: wardsIsError, error: wardsErr } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
 
   if (callingsIsError) console.error("[callings-tab] callings query:", callingsErr);
   if (usersIsError) console.error("[callings-tab] users query:", usersErr);
+  if (wardsIsError) console.error("[callings-tab] wards query:", wardsErr);
 
   const { data: editPermissionsData, isLoading: editPermissionsLoading } = useQuery<ApiUserPermissions>({
     queryKey: [`/api/callings/${editTarget?.id}/permissions`],

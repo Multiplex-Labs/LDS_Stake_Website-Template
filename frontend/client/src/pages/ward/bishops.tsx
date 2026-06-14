@@ -84,7 +84,7 @@ export default function MeetOurBishops() {
                     <CardContent className="flex-1 flex flex-col pt-2">
                       <div className="space-y-3 mt-auto pt-4 border-t text-sm">
                         <div className="flex items-center gap-3 text-muted-foreground">
-                          <Phone className="w-4 h-4 text-primary" />
+                          <Phone className="size-4 text-primary" />
                           <span>{isEmpty ? "—" : (ward.bishopPhone ?? "—")}</span>
                         </div>
                       </div>

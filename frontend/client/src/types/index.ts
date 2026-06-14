@@ -23,7 +23,9 @@ export interface ActiveCalling {
 export interface Ward {
   id: number;
   name: string;
+  /** ID of the UserCalling row (usercalling.id) for this ward's bishop slot — not a user id. */
   bishop_id: number | null;
+  /** Decimal hours since midnight (e.g., 9.0 = 9:00 AM, 13.5 = 1:30 PM). */
   start_time: number;
   location: string | null;
   bishop_slot_number: number | null;
