@@ -5,25 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, MapPin, User } from "lucide-react";
 import { useUserCallingMap } from "@/lib/hooks";
+import { formatMeetingTime } from "@/lib/utils";
 import type { Ward, ApiUser } from "@/types";
-
-function formatMeetingTime(startTime: number, duration = 2): string {
-  const startHour = Math.floor(startTime);
-  const startMinute = Math.round((startTime - startHour) * 60);
-
-  const endTimeRaw = startTime + duration;
-  const endHour = Math.floor(endTimeRaw);
-  const endMinute = Math.round((endTimeRaw - endHour) * 60);
-
-  function formatPart(hour: number, minute: number): string {
-    const period = hour < 12 ? "AM" : "PM";
-    const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-    const displayMinute = minute.toString().padStart(2, "0");
-    return `${displayHour}:${displayMinute} ${period}`;
-  }
-
-  return `${formatPart(startHour, startMinute)} – ${formatPart(endHour, endMinute)}`;
-}
 
 export default function MeetingTimes() {
   const { data: wards, isLoading: wardsLoading } = useQuery<Ward[]>({
@@ -45,8 +28,6 @@ export default function MeetingTimes() {
     });
   }, [wards, userCallingMap]);
 
-  const skeletonCount = enrichedWards.length > 0 ? enrichedWards.length : 9;
-
   return (
     <Layout>
       <div className="bg-muted/30 py-12">
@@ -58,7 +39,7 @@ export default function MeetingTimes() {
       <div className="container mx-auto px-4 py-16">
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {wardsLoading
-            ? Array.from({ length: skeletonCount }).map((_, i) => (
+            ? Array.from({ length: 9 }).map((_, i) => (
                 <Card key={i} className="hover:shadow-md transition-shadow border-l-4 border-l-primary">
                   <CardHeader className="pb-3">
                     <Skeleton className="h-6 w-40" />

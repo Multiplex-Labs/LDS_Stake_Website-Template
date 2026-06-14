@@ -48,3 +48,19 @@ export function parseCommaList(value: string | null): string[] {
   if (!value) return [];
   return value.split(",").map((s) => s.trim()).filter(Boolean);
 }
+
+export function formatMeetingTime(startTime: number, duration = 2): string {
+  const startHour = Math.floor(startTime);
+  const startMinute = Math.round((startTime - startHour) * 60);
+  const endTimeRaw = startTime + duration;
+  const endHour = Math.floor(endTimeRaw);
+  const endMinute = Math.round((endTimeRaw - endHour) * 60);
+
+  function fmt(hour: number, minute: number): string {
+    const period = hour < 12 ? "AM" : "PM";
+    const h = hour % 12 === 0 ? 12 : hour % 12;
+    return `${h}:${minute.toString().padStart(2, "0")} ${period}`;
+  }
+
+  return `${fmt(startHour, startMinute)} – ${fmt(endHour, endMinute)}`;
+}

@@ -21,29 +21,7 @@ class WardPublic(SQLModel):
     bishop_slot_number: Optional[int]
 
 
-@router.get("/")
-def list_wards(session: Session = Depends(get_session)) -> List[WardPublic]:
-    """Return all wards."""
-    wards = session.exec(select(Ward)).all()
-    return [
-        WardPublic(
-            id=ward.id,
-            name=ward.name,
-            bishop_id=ward.bishop_id,
-            start_time=ward.start_time,
-            location=ward.location,
-            bishop_slot_number=ward.bishop.slot_number if ward.bishop else None,
-        )
-        for ward in wards
-    ]
-
-
-@router.get("/{ward_id}")
-def get_ward(ward_id: int, session: Session = Depends(get_session)) -> WardPublic:
-    """Return a single ward by id."""
-    ward = session.get(Ward, ward_id)
-    if not ward:
-        raise HTTPException(status_code=404, detail="Ward not found")
+def _ward_to_public(ward: Ward) -> WardPublic:
     return WardPublic(
         id=ward.id,
         name=ward.name,
@@ -52,3 +30,18 @@ def get_ward(ward_id: int, session: Session = Depends(get_session)) -> WardPubli
         location=ward.location,
         bishop_slot_number=ward.bishop.slot_number if ward.bishop else None,
     )
+
+
+@router.get("/")
+def list_wards(session: Session = Depends(get_session)) -> List[WardPublic]:
+    """Return all wards."""
+    return [_ward_to_public(w) for w in session.exec(select(Ward)).all()]
+
+
+@router.get("/{ward_id}")
+def get_ward(ward_id: int, session: Session = Depends(get_session)) -> WardPublic:
+    """Return a single ward by id."""
+    ward = session.get(Ward, ward_id)
+    if not ward:
+        raise HTTPException(status_code=404, detail="Ward not found")
+    return _ward_to_public(ward)

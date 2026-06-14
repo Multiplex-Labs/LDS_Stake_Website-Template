@@ -765,20 +765,14 @@ export function UserAdminContent() {
     return map;
   }, [users]);
 
-  const wardByUcId = useMemo(() => {
-    const map = new Map<number, string>();
+  const { wardByUcId, wardByBishopSlot } = useMemo(() => {
+    const byUcId = new Map<number, string>();
+    const bySlot = new Map<number, string>();
     for (const w of wards) {
-      if (w.bishop_id != null) map.set(w.bishop_id, w.name);
+      if (w.bishop_id != null) byUcId.set(w.bishop_id, w.name);
+      if (w.bishop_slot_number != null) bySlot.set(w.bishop_slot_number, w.name);
     }
-    return map;
-  }, [wards]);
-
-  const wardByBishopSlot = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const w of wards) {
-      if (w.bishop_slot_number != null) map.set(w.bishop_slot_number, w.name);
-    }
-    return map;
+    return { wardByUcId: byUcId, wardByBishopSlot: bySlot };
   }, [wards]);
 
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery<ApiUserPermissions>({

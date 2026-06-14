@@ -42,14 +42,14 @@ def load_wards():
             permissions=[Permission.SUBMIT_CALLING_PROPOSALS]
         )
 
-        for w in wards:
+        for slot_number, w in enumerate(wards, start=1):
             parts = w.split(",")
             name = parts[0]
             start_time_val = parts[1]
             location_val = parts[2].strip() if len(parts) > 2 else None
             bishop_slot = get_or_make_user_calling(
                 calling_id=bishop_calling.id,
-                slot_id=wards.index(w) + 1,
+                slot_id=slot_number,
                 session=session
             )
             logger.info(f"Creating ward '{w}'.")
