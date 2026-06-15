@@ -33,7 +33,9 @@ app = FastAPI(title="lds-stake-discordbot", lifespan=lifespan)
 from .routes import (
     hello_router,
     kanban_update_router,
+    backups_router,
 )
 
 app.include_router(hello_router)
 app.include_router(kanban_update_router)
+app.include_router(backups_router)

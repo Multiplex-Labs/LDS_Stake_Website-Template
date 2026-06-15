@@ -1,9 +1,11 @@
+from fileinput import filename
 import os
+import asyncio
 
 from typing import List
 from sqlmodel import Session, col, select
 from fastapi import HTTPException
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 
 logger = getLogger("application")
@@ -19,6 +21,7 @@ from ..models import (
     CallingInterview,
     UserCalling
 )
+from ..db import ORM
 
 from .discord_bot import DiscordBotHandle
 from .usercalling import HC_CALLING_NAME, STAKE_PRESIDENCY_CALLING_NAMES
@@ -458,3 +461,87 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
     # Will be manually set by users, and are not calculated by business logic
 
     return updates
+
+def get_proposal_status(proposal:CallingProposal, session: Session) -> KanbanStages:
+    """Return the current kanban stage of a calling proposal."""
+    updates = session.exec(
+        select(KanbanUpdate).where(KanbanUpdate.proposal_id == proposal.id)
+    ).all()
+    if not updates:
+        raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
+    return _latest_update(updates).to_stage
+
+def create_backup(discord_bot: DiscordBotHandle, session: Session) -> bool:
+    """Send a backup markdown file to the Discord bot to be posted in the backups channel."""
+    # Collect all proposals and include those not in DONE stage
+    proposals = session.exec(select(CallingProposal)).all()
+
+    in_flight = []
+    for p in proposals:
+        try:
+            status = get_current_proposal_status(p, session)
+        except Exception:
+            # treat proposals with no updates as in-flight
+            status = None
+        if status is None or status != KanbanStages.DONE:
+            in_flight.append((p, status))
+
+    lines = ["# Calling Proposals Backup", ""]
+    now = datetime.now(timezone.utc).astimezone().isoformat()
+    lines.append(f"Generated: {now}")
+    lines.append("")
+
+    if not in_flight:
+        lines.append("No in-flight proposals found.")
+    else:
+        for p, status in in_flight:
+            ward = session.get(Ward, p.ward_id) if p.ward_id else None
+            submitter = session.get(User, p.submitter) if p.submitter else None
+            status_name = status.name if status is not None else "(no updates)"
+            lines.extend([
+                f"## Proposal {p.id}: {p.fname} {p.lname}",
+                f"- Proposed Calling: **{p.proposed_calling}**",
+                f"- Ward: {ward.name if ward else '(unknown)'}",
+                f"- Spouse: {p.spouse_name or ''}",
+                f"- Submitted By: {submitter.fname + ' ' + submitter.lname if submitter else '(unknown)'}",
+                f"- Submitted At: {p.submitted_at.isoformat()}",
+                f"- Current Stage: {status_name}",
+                "",
+            ])
+
+    markdown = "\n".join(lines)
+    filename = f"calling_proposals_backup_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.pdf"
+
+    return discord_bot.send_backup(markdown, filename)
+
+class SessionFactory:
+    """Context Manager for session"""
+    def __init__(self):
+        self.orm = ORM()
+    def __enter__(self):
+        self.session = Session(self.orm.engine)
+        return self.session
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.session.close()
+
+async def create_backup_loop(
+    discord_bot: DiscordBotHandle,
+    backup_day: int = 7, # Saturday
+):
+    """Periodically create backups of the calling kanban data and send to Discord."""
+    while True:
+        try:
+            with SessionFactory() as session:
+                create_backup(discord_bot, session)
+        except Exception:
+            logger.exception("Error occurred during scheduled backup creation")
+        # Sleep until the next backup time (e.g. every Saturday at 2am)
+        now = datetime.now(timezone.utc)
+        next_backup = now.replace(hour=2, minute=0, second=0, microsecond=0)
+        days_ahead = (backup_day - now.weekday() + 7) % 7
+        if days_ahead == 0 and now >= next_backup:
+            days_ahead = 7
+        next_backup += timedelta(days=days_ahead)
+        interval_seconds = (next_backup - now).total_seconds()
+        logger.info(f"Next backup scheduled for {next_backup.isoformat()} (in {interval_seconds} seconds)")
+        await asyncio.sleep(interval_seconds)
