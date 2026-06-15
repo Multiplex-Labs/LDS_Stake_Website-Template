@@ -135,3 +135,15 @@ class DiscordBotHandle:
             "url": details_url,
         }
         return self._post("/kanban/request-approval/", json=body) is not None
+
+    @require_enabled()
+    def send_backup(self, markdown: str, filename: str | None = None) -> bool:
+        """Send markdown to the Discord bot backups route to be converted and posted.
+
+        Returns True if the request was accepted (non-error HTTP), False otherwise.
+        """
+        body = {
+            "markdown": markdown,
+            "filename": filename,
+        }
+        return self._post("/backups/", json=body) is not None

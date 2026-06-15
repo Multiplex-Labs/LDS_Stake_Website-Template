@@ -1,3 +1,4 @@
+from fileinput import filename
 import os
 
 from typing import List
@@ -467,3 +468,46 @@ def get_proposal_status(proposal:CallingProposal, session: Session) -> KanbanSta
     if not updates:
         raise HTTPException(status_code=404, detail="No kanban updates found for proposal")
     return _latest_update(updates).to_stage
+
+def create_backup(discord_bot: DiscordBotHandle, session: Session) -> bool:
+    """Send a backup markdown file to the Discord bot to be posted in the backups channel."""
+    # Collect all proposals and include those not in DONE stage
+    proposals = session.exec(select(CallingProposal)).all()
+
+    in_flight = []
+    for p in proposals:
+        try:
+            status = get_current_proposal_status(p, session)
+        except Exception:
+            # treat proposals with no updates as in-flight
+            status = None
+        if status is None or status != KanbanStages.DONE:
+            in_flight.append((p, status))
+
+    lines = ["# Calling Proposals Backup", ""]
+    now = datetime.now(timezone.utc).astimezone().isoformat()
+    lines.append(f"Generated: {now}")
+    lines.append("")
+
+    if not in_flight:
+        lines.append("No in-flight proposals found.")
+    else:
+        for p, status in in_flight:
+            ward = session.get(Ward, p.ward_id) if p.ward_id else None
+            submitter = session.get(User, p.submitter) if p.submitter else None
+            status_name = status.name if status is not None else "(no updates)"
+            lines.extend([
+                f"## Proposal {p.id}: {p.fname} {p.lname}",
+                f"- Proposed Calling: **{p.proposed_calling}**",
+                f"- Ward: {ward.name if ward else '(unknown)'}",
+                f"- Spouse: {p.spouse_name or ''}",
+                f"- Submitted By: {submitter.fname + ' ' + submitter.lname if submitter else '(unknown)'}",
+                f"- Submitted At: {p.submitted_at.isoformat()}",
+                f"- Current Stage: {status_name}",
+                "",
+            ])
+
+    markdown = "\n".join(lines)
+    filename = f"calling_proposals_backup_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.pdf"
+
+    return discord_bot.send_backup(markdown, filename)

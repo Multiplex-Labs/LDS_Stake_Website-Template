@@ -74,6 +74,14 @@ class ChannelsAndRolesCog(Cog):
             "everyone_view": False,
             "everyone_send": False,
         },
+        {
+            "name": "backups",
+            "topic": "Channel for receiving PDF backups of stake website data.",
+            "role_views": ["Stake President", "First Councilor", "Second Councilor", "High Councilor", "Stake Technology Specialist"],
+            "role_sends": [],
+            "everyone_view": False,
+            "everyone_send": False,
+        }
     ]
 
     def __init__(self, bot: LDSStakeBot):

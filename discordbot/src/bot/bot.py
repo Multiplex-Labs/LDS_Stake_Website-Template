@@ -9,6 +9,7 @@ from rich.console import Console
 from sqlmodel import select
 
 from .utils import BackendClient
+
 from ..db import get_session
 from ..models import UserMapping
 
@@ -27,8 +28,12 @@ class LDSStakeBot(Bot):
         self.backend_client = BackendClient(backend_url, backend_token, self.logger)
         self.logger.debug("LDSStakeBot initialized with intents: %s", self.intents)
         # set up Hook Objects
-        from .hooks import KanbanHook
+        from .hooks import (
+            KanbanHook,
+            BackupsHook
+        )
         self.kanban_hook = KanbanHook(self)
+        self.backups_hook = BackupsHook(self)
     async def setup_hook(self):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')
@@ -45,7 +50,7 @@ class LDSStakeBot(Bot):
                     if member:
                         return member
 
-from .cogs import UserMappingCog, ChannelsAndRolesCog
+from .cogs import UserMappingCog, ChannelsAndRolesCog, BackupsCog
 
 async def initialize_bot() -> LDSStakeBot:
     logger = logging.getLogger("application")
@@ -79,6 +84,7 @@ async def initialize_bot() -> LDSStakeBot:
     # Register cogs
     await client.add_cog(UserMappingCog(client))
     await client.add_cog(ChannelsAndRolesCog(client))
+    await client.add_cog(BackupsCog(client))
 
     if not TOKEN:
         logger.error("DISCORD_TOKEN is not set.")
