@@ -17,7 +17,8 @@ from ..utils import (
     get_bishops_ward,
     get_stake_presidency,
     get_high_councilors,
-    get_proposal_status
+    get_proposal_status,
+    create_backup
 )
 from ..utils.calling_kanban import (
     _stage_scoped_approval_counts,
@@ -774,3 +775,12 @@ def get_kanban_board(
             ))
     return board
 
+@router.post("/backup")
+def make_backup(
+    request: Request,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Endpoint to trigger a backup of the calling kanban data; implementation is up to the caller."""
+    
+    return create_backup(request.app.state.discord_bot, session)

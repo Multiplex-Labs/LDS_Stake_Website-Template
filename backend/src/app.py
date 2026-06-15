@@ -14,6 +14,7 @@ from .utils import (
     speaking_assignment_cleanup_loop,
     load_wards,
     DiscordBotHandle,
+    create_backup_loop
 )
 import os
 import asyncio
@@ -46,6 +47,8 @@ async def lifespan(app: FastAPI):
     session_cleanup_task = asyncio.create_task(session_cleanup_loop())
     ## Start background task for speaking assignment cleanup
     speaking_assignment_cleanup_task = asyncio.create_task(speaking_assignment_cleanup_loop())
+    ## Start background task for calling kanban backup creation
+    backup_loop_task = asyncio.create_task(create_backup_loop(app.state.discord_bot))
     ## Load speaking schedule from csv
     schedule = load_speaking_schedule()
     if schedule:
@@ -63,6 +66,7 @@ async def lifespan(app: FastAPI):
     # shutdown code can go here
     session_cleanup_task.cancel()
     speaking_assignment_cleanup_task.cancel()
+    backup_loop_task.cancel()
 
 app = FastAPI(title="lds-stake-backend", lifespan=lifespan)
 

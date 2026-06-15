@@ -1,10 +1,11 @@
 from fileinput import filename
 import os
+import asyncio
 
 from typing import List
 from sqlmodel import Session, col, select
 from fastapi import HTTPException
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 
 logger = getLogger("application")
@@ -20,6 +21,7 @@ from ..models import (
     CallingInterview,
     UserCalling
 )
+from ..db import ORM
 
 from .discord_bot import DiscordBotHandle
 from .usercalling import HC_CALLING_NAME, STAKE_PRESIDENCY_CALLING_NAMES
@@ -511,3 +513,35 @@ def create_backup(discord_bot: DiscordBotHandle, session: Session) -> bool:
     filename = f"calling_proposals_backup_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.pdf"
 
     return discord_bot.send_backup(markdown, filename)
+
+class SessionFactory:
+    """Context Manager for session"""
+    def __init__(self):
+        self.orm = ORM()
+    def __enter__(self):
+        self.session = Session(self.orm.engine)
+        return self.session
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.session.close()
+
+async def create_backup_loop(
+    discord_bot: DiscordBotHandle,
+    backup_day: int = 7, # Saturday
+):
+    """Periodically create backups of the calling kanban data and send to Discord."""
+    while True:
+        try:
+            with SessionFactory() as session:
+                create_backup(discord_bot, session)
+        except Exception:
+            logger.exception("Error occurred during scheduled backup creation")
+        # Sleep until the next backup time (e.g. every Saturday at 2am)
+        now = datetime.now(timezone.utc)
+        next_backup = now.replace(hour=2, minute=0, second=0, microsecond=0)
+        days_ahead = (backup_day - now.weekday() + 7) % 7
+        if days_ahead == 0 and now >= next_backup:
+            days_ahead = 7
+        next_backup += timedelta(days=days_ahead)
+        interval_seconds = (next_backup - now).total_seconds()
+        logger.info(f"Next backup scheduled for {next_backup.isoformat()} (in {interval_seconds} seconds)")
+        await asyncio.sleep(interval_seconds)
