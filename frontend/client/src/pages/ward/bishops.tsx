@@ -4,7 +4,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Phone, UserCircle2 } from "lucide-react";
+import { Phone, Mail, UserCircle2 } from "lucide-react";
 import { useUserCallingMap } from "@/lib/hooks";
 import { cn, getInitials } from "@/lib/utils";
 import type { Ward, ApiUser } from "@/types";
@@ -29,6 +29,7 @@ export default function MeetOurBishops() {
         ...ward,
         bishopName: bishop ? `${bishop.fname} ${bishop.lname}` : null,
         bishopPhone: bishop?.phone ?? null,
+        bishopEmail: bishop?.email ?? null,
         bishopProfileImage: bishop?.profile_image ?? null,
       };
     });
@@ -87,6 +88,10 @@ export default function MeetOurBishops() {
                           <Phone className="size-4 text-primary" />
                           <span>{isEmpty ? "—" : (ward.bishopPhone ?? "—")}</span>
                         </div>
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Mail className="size-4 text-primary" />
+                          <span>{isEmpty ? "—" : (ward.bishopEmail ?? "—")}</span>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -111,6 +116,10 @@ function BishopCardSkeleton() {
           <div className="flex items-center gap-3">
             <Skeleton className="h-4 w-4" />
             <Skeleton className="h-4 w-28" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-4 w-4" />
+            <Skeleton className="h-4 w-40" />
           </div>
         </div>
       </CardContent>
