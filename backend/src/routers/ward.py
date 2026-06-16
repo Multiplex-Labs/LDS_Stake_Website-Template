@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, SQLModel, Session, select
 
-from ..models import Ward
+from ..models import Ward, UserCalling, Calling, Permission
 from ..db import get_session
+from ..utils import CallingUser
 
 logger = getLogger("application")
 
@@ -25,6 +26,18 @@ class WardPublic(SQLModel):
     )
     location: Optional[str] = None
     bishop_slot_number: Optional[int] = None
+
+
+class WardCreate(SQLModel):
+    name: str
+    start_time: float
+    location: Optional[str] = None
+
+
+class WardUpdate(SQLModel):
+    name: str
+    start_time: float
+    location: Optional[str] = None
 
 
 def _ward_to_public(ward: Ward) -> WardPublic:
@@ -52,3 +65,84 @@ def get_ward(ward_id: int, session: Session = Depends(get_session)) -> WardPubli
     if not ward:
         raise HTTPException(status_code=404, detail="Ward not found")
     return _ward_to_public(ward)
+
+
+@router.post("/")
+def create_ward(
+    body: WardCreate,
+    session: Session = Depends(get_session),
+    _: object = Depends(CallingUser(permissions=[Permission.MANAGE_WARDS])),
+) -> WardPublic:
+    """Create a new ward and its associated Bishop calling slot."""
+    bishop_calling = session.exec(
+        select(Calling).where(Calling.name == "Bishop")
+    ).first()
+    if not bishop_calling:
+        raise HTTPException(status_code=500, detail="Bishop calling not found. Ensure system callings are initialised.")
+
+    # Determine the next slot number
+    existing_slots = session.exec(
+        select(UserCalling).where(UserCalling.calling_id == bishop_calling.id)
+    ).all()
+    next_slot = max((uc.slot_number for uc in existing_slots), default=0) + 1
+
+    # Expand max_slots on the calling to accommodate the new slot
+    bishop_calling.max_slots = max(bishop_calling.max_slots, next_slot)
+    session.add(bishop_calling)
+
+    # Create the UserCalling slot (unassigned)
+    bishop_slot = UserCalling(calling_id=bishop_calling.id, slot_number=next_slot, user_id=None)
+    session.add(bishop_slot)
+    session.flush()  # populate bishop_slot.id before using it
+
+    ward = Ward(name=body.name, start_time=body.start_time, location=body.location, bishop_id=bishop_slot.id)
+    session.add(ward)
+    session.commit()
+    session.refresh(ward)
+    session.refresh(bishop_slot)
+    ward.bishop = bishop_slot
+    return _ward_to_public(ward)
+
+
+@router.put("/{ward_id}")
+def update_ward(
+    ward_id: int,
+    body: WardUpdate,
+    session: Session = Depends(get_session),
+    _: object = Depends(CallingUser(permissions=[Permission.MANAGE_WARDS])),
+) -> WardPublic:
+    """Update a ward's name, meeting time, and location."""
+    ward = session.exec(
+        select(Ward).where(Ward.id == ward_id).options(selectinload(Ward.bishop))
+    ).first()
+    if not ward:
+        raise HTTPException(status_code=404, detail="Ward not found")
+
+    ward.name = body.name
+    ward.start_time = body.start_time
+    ward.location = body.location
+    session.add(ward)
+    session.commit()
+    session.refresh(ward)
+    return _ward_to_public(ward)
+
+
+@router.delete("/{ward_id}", status_code=204)
+def delete_ward(
+    ward_id: int,
+    session: Session = Depends(get_session),
+    _: object = Depends(CallingUser(permissions=[Permission.MANAGE_WARDS])),
+) -> None:
+    """Delete a ward, clearing any bishop assignment first."""
+    ward = session.get(Ward, ward_id)
+    if not ward:
+        raise HTTPException(status_code=404, detail="Ward not found")
+
+    if ward.bishop_id is not None:
+        bishop_slot = session.get(UserCalling, ward.bishop_id)
+        if bishop_slot and bishop_slot.user_id is not None:
+            bishop_slot.user_id = None
+            session.add(bishop_slot)
+
+    session.delete(ward)
+    session.commit()
