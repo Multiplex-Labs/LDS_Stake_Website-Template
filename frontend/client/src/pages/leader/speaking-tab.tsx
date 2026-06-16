@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { X, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon, PencilLine, ClipboardClock } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -122,10 +122,8 @@ export function SpeakingTab() {
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [edits, setEdits] = useState<Record<number, TopicEdit>>({});
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const confirmActionRef = useRef<ConfirmAction | null>(null);
 
   function requestConfirm(action: ConfirmAction) {
-    confirmActionRef.current = action;
     setConfirmAction(action);
   }
 
@@ -303,7 +301,7 @@ export function SpeakingTab() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => { confirmActionRef.current?.onConfirm(); setConfirmAction(null); }}
+              onClick={() => { confirmAction?.onConfirm(); setConfirmAction(null); }}
             >
               Clear
             </AlertDialogAction>

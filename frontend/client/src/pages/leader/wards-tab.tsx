@@ -108,14 +108,6 @@ function WardModal({ open, onOpenChange, title, initial = EMPTY_FORM, onSave, is
   const [form, setForm] = useState<WardForm>(initial);
   const [errors, setErrors] = useState<WardFormErrors>({});
 
-  function handleOpenChange(next: boolean) {
-    if (!next) {
-      setForm(initial);
-      setErrors({});
-    }
-    onOpenChange(next);
-  }
-
   function handleSubmit() {
     const errs = validateWardForm(form);
     if (Object.keys(errs).length > 0) {
@@ -126,7 +118,7 @@ function WardModal({ open, onOpenChange, title, initial = EMPTY_FORM, onSave, is
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -177,7 +169,7 @@ function WardModal({ open, onOpenChange, title, initial = EMPTY_FORM, onSave, is
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isPending}>
@@ -289,14 +281,6 @@ export function WardsTab() {
       }
     },
   });
-
-  const editForm: WardForm | undefined = editTarget
-    ? {
-        name: editTarget.name,
-        time: floatToTime(editTarget.start_time),
-        location: editTarget.location ?? "",
-      }
-    : undefined;
 
   return (
     <>
@@ -429,13 +413,13 @@ export function WardsTab() {
       />
 
       {/* Edit modal */}
-      {editTarget && editForm && (
+      {editTarget && (
         <WardModal
           key={editTarget.id}
           open
           onOpenChange={(open) => { if (!open) setEditTarget(null); }}
           title={`Edit ${editTarget.name}`}
-          initial={editForm}
+          initial={{ name: editTarget.name, time: floatToTime(editTarget.start_time), location: editTarget.location ?? "" }}
           onSave={(form) => editMutation.mutate({ id: editTarget.id, form })}
           isPending={editMutation.isPending}
           submitLabel="Save Changes"

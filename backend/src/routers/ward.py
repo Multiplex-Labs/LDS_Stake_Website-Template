@@ -7,7 +7,7 @@ from sqlmodel import Field, SQLModel, Session, select
 
 from ..models import Ward, UserCalling, Calling, Permission
 from ..db import get_session
-from ..utils import CallingUser
+from ..utils import CallingUser, BISHOP_CALLING_NAME
 
 logger = getLogger("application")
 
@@ -28,13 +28,7 @@ class WardPublic(SQLModel):
     bishop_slot_number: Optional[int] = None
 
 
-class WardCreate(SQLModel):
-    name: str
-    start_time: float
-    location: Optional[str] = None
-
-
-class WardUpdate(SQLModel):
+class WardPayload(SQLModel):
     name: str
     start_time: float
     location: Optional[str] = None
@@ -69,13 +63,13 @@ def get_ward(ward_id: int, session: Session = Depends(get_session)) -> WardPubli
 
 @router.post("/")
 def create_ward(
-    body: WardCreate,
+    body: WardPayload,
     session: Session = Depends(get_session),
     _: object = Depends(CallingUser(permissions=[Permission.MANAGE_WARDS])),
 ) -> WardPublic:
     """Create a new ward and its associated Bishop calling slot."""
     bishop_calling = session.exec(
-        select(Calling).where(Calling.name == "Bishop")
+        select(Calling).where(Calling.name == BISHOP_CALLING_NAME)
     ).first()
     if not bishop_calling:
         raise HTTPException(status_code=500, detail="Bishop calling not found. Ensure system callings are initialised.")
@@ -107,7 +101,7 @@ def create_ward(
 @router.put("/{ward_id}")
 def update_ward(
     ward_id: int,
-    body: WardUpdate,
+    body: WardPayload,
     session: Session = Depends(get_session),
     _: object = Depends(CallingUser(permissions=[Permission.MANAGE_WARDS])),
 ) -> WardPublic:
