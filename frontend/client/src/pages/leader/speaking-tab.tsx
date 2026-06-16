@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { X, ChevronLeftIcon, ChevronRightIcon, Trash2, SaveIcon, PencilLine, ClipboardClock } from "lucide-react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -101,10 +111,23 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
   );
 }
 
+interface ConfirmAction {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}
+
 export function SpeakingTab() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [edits, setEdits] = useState<Record<number, TopicEdit>>({});
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const confirmActionRef = useRef<ConfirmAction | null>(null);
+
+  function requestConfirm(action: ConfirmAction) {
+    confirmActionRef.current = action;
+    setConfirmAction(action);
+  }
 
   const handleYearChange = (newYear: number) => {
     setYear(newYear);
@@ -270,6 +293,23 @@ export function SpeakingTab() {
 
   return (
     <div className="space-y-8">
+      <AlertDialog open={confirmAction !== null} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmAction?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmAction?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { confirmActionRef.current?.onConfirm(); setConfirmAction(null); }}
+            >
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <section>
         <div className="rounded-xl border bg-card overflow-hidden">
           {/* Header */}
@@ -469,7 +509,11 @@ export function SpeakingTab() {
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
-                              onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
+                              onClick={() => requestConfirm({
+                                title: `Clear all ${m} assignments?`,
+                                description: `This will remove every ward assignment for ${m} ${year}. This cannot be undone.`,
+                                onConfirm: () => clearMonthMutation.mutate({ monthIdx: i }),
+                              })}
                               disabled={clearMonthMutation.isPending && clearMonthMutation.variables?.monthIdx === i}
                               title={`Clear all ${m} assignments`}
                               aria-label={`Clear all ${m} assignments`}
@@ -569,7 +613,11 @@ export function SpeakingTab() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 text-muted-foreground/30 hover:text-destructive"
-                                onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
+                                onClick={() => requestConfirm({
+                                  title: `Clear all assignments for ${user.fname} ${user.lname}?`,
+                                  description: `This will remove every ward assignment for ${user.fname} ${user.lname} in ${year}. This cannot be undone.`,
+                                  onConfirm: () => clearHCMutation.mutate({ ucId: sp.high_councilor_id }),
+                                })}
                                 disabled={clearHCMutation.isPending && clearHCMutation.variables?.ucId === sp.high_councilor_id}
                                 title="Clear all assignments for this high councilor"
                                 aria-label="Clear all assignments for this high councilor"
