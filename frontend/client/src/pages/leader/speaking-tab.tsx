@@ -19,6 +19,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -101,10 +111,21 @@ function YearNav({ year, onChange }: { year: number; onChange: (y: number) => vo
   );
 }
 
+interface ConfirmAction {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}
+
 export function SpeakingTab() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [edits, setEdits] = useState<Record<number, TopicEdit>>({});
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+
+  function requestConfirm(action: ConfirmAction) {
+    setConfirmAction(action);
+  }
 
   const handleYearChange = (newYear: number) => {
     setYear(newYear);
@@ -180,17 +201,25 @@ export function SpeakingTab() {
   });
 
   const clearMonthMutation = useMutation({
-    mutationFn: ({ monthIdx }: { monthIdx: number }) =>
-      Promise.allSettled(
-        calendar!.speakers
+    mutationFn: ({ monthIdx }: { monthIdx: number }) => {
+      if (!calendar) return Promise.resolve([]);
+      return Promise.allSettled(
+        calendar.speakers
           .filter((sp) => sp.assignments[monthIdx]?.ward_id != null)
           .map((sp) => overrideAssignment(sp.high_councilor_id, null, monthIdx, year))
-      ),
+      );
+    },
     onSuccess: (results) => {
+      setConfirmAction(null);
       invalidateSpeakingData(year);
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Month cleared.");
+    },
+    onError: (err: unknown) => {
+      setConfirmAction(null);
+      console.error("[speaking-tab] clear month:", err);
+      toast.error("Failed to clear month assignments.");
     },
   });
 
@@ -204,10 +233,16 @@ export function SpeakingTab() {
       );
     },
     onSuccess: (results) => {
+      setConfirmAction(null);
       invalidateSpeakingData(year);
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Schedule cleared.");
+    },
+    onError: (err: unknown) => {
+      setConfirmAction(null);
+      console.error("[speaking-tab] clear HC:", err);
+      toast.error("Failed to clear assignments.");
     },
   });
 
@@ -238,6 +273,10 @@ export function SpeakingTab() {
         });
         toast.error(`${failed} of ${results.length} topics failed to save.`);
       }
+    },
+    onError: (err: unknown) => {
+      console.error("[speaking-tab] save all topics:", err);
+      toast.error("Failed to save topics. Please try again.");
     },
   });
 
@@ -270,6 +309,24 @@ export function SpeakingTab() {
 
   return (
     <div className="space-y-8">
+      <AlertDialog open={confirmAction !== null} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmAction?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmAction?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={clearMonthMutation.isPending || clearHCMutation.isPending}
+              onClick={() => confirmAction?.onConfirm()}
+            >
+              {clearMonthMutation.isPending || clearHCMutation.isPending ? "Clearing…" : "Clear"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <section>
         <div className="rounded-xl border bg-card overflow-hidden">
           {/* Header */}
@@ -469,7 +526,11 @@ export function SpeakingTab() {
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5 text-muted-foreground/30 hover:text-destructive"
-                              onClick={() => clearMonthMutation.mutate({ monthIdx: i })}
+                              onClick={() => requestConfirm({
+                                title: `Clear all ${m} assignments?`,
+                                description: `This will remove every ward assignment for ${m} ${year}. This cannot be undone.`,
+                                onConfirm: () => clearMonthMutation.mutate({ monthIdx: i }),
+                              })}
                               disabled={clearMonthMutation.isPending && clearMonthMutation.variables?.monthIdx === i}
                               title={`Clear all ${m} assignments`}
                               aria-label={`Clear all ${m} assignments`}
@@ -569,7 +630,11 @@ export function SpeakingTab() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 text-muted-foreground/30 hover:text-destructive"
-                                onClick={() => clearHCMutation.mutate({ ucId: sp.high_councilor_id })}
+                                onClick={() => requestConfirm({
+                                  title: `Clear all assignments for ${user.fname} ${user.lname}?`,
+                                  description: `This will remove every ward assignment for ${user.fname} ${user.lname} in ${year}. This cannot be undone.`,
+                                  onConfirm: () => clearHCMutation.mutate({ ucId: sp.high_councilor_id }),
+                                })}
                                 disabled={clearHCMutation.isPending && clearHCMutation.variables?.ucId === sp.high_councilor_id}
                                 title="Clear all assignments for this high councilor"
                                 aria-label="Clear all assignments for this high councilor"

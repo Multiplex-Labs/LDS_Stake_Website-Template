@@ -183,6 +183,7 @@ export const ASSIGNABLE_PERMISSIONS = [
   { flag: 4,  label: "Manage Assignments" },
   { flag: 8,  label: "Manage Speaking Schedule" },
   { flag: 16, label: "Submit Calling Proposals" },
-  { flag: 32, label: "Manage Calling Proposals" },
-  { flag: 64, label: "View Calling Proposals" },
+  { flag: 32,  label: "Manage Calling Proposals" },
+  { flag: 64,  label: "View Calling Proposals" },
+  { flag: 256, label: "Manage Wards" },
 ] as const;

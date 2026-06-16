@@ -38,7 +38,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -49,7 +48,6 @@ import {
   Camera,
   Check as CheckIcon,
   User as UserIcon,
-  AlignLeft as AlignLeftIcon,
   Lock as LockIcon,
   Briefcase as BriefcaseIcon,
   ChevronRight as ChevronRightIcon,
@@ -84,14 +82,13 @@ type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
 
 const USERS_PER_PAGE = 10;
-type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 interface EditForm {
   fname: string;
   lname: string;
   email: string;
   phone: string;
-  bio: string;
   active: boolean;
 }
 
@@ -100,7 +97,6 @@ interface AddWizardForm {
   lname: string;
   email: string;
   phone: string;
-  bio: string;
   password: string;
   confirmPassword: string;
 }
@@ -122,7 +118,7 @@ interface AddWizardState {
 
 const INITIAL_WIZARD_STATE: AddWizardState = {
   step: 1,
-  form: { fname: "", lname: "", email: "", phone: "", bio: "", password: "", confirmPassword: "" },
+  form: { fname: "", lname: "", email: "", phone: "", password: "", confirmPassword: "" },
   errors: {},
   callingId: "",
   slotNumber: "",
@@ -131,11 +127,10 @@ const INITIAL_WIZARD_STATE: AddWizardState = {
 
 const WIZARD_STEPS = [
   { id: 1, label: "Basic Info",    description: "Name, email, and contact details.", icon: <UserIcon className="size-3.5" />,     skippable: false },
-  { id: 2, label: "Bio",            description: "Optional biography or notes.",      icon: <AlignLeftIcon className="size-3.5" />, skippable: true  },
-  { id: 3, label: "Password",       description: "Set an initial login password.",    icon: <LockIcon className="size-3.5" />,      skippable: false },
-  { id: 4, label: "Assign Calling", description: "Optionally assign a calling.",      icon: <BriefcaseIcon className="size-3.5" />, skippable: true  },
-  { id: 5, label: "Profile Photo",  description: "Optionally add a profile photo.",   icon: <Camera className="size-3.5" />,        skippable: true  },
-  { id: 6, label: "Review",         description: "Confirm details and create user.",  icon: <CheckIcon className="size-3.5" />,     skippable: false },
+  { id: 2, label: "Password",       description: "Set an initial login password.",    icon: <LockIcon className="size-3.5" />,      skippable: false },
+  { id: 3, label: "Assign Calling", description: "Optionally assign a calling.",      icon: <BriefcaseIcon className="size-3.5" />, skippable: true  },
+  { id: 4, label: "Profile Photo",  description: "Optionally add a profile photo.",   icon: <Camera className="size-3.5" />,        skippable: true  },
+  { id: 5, label: "Review",         description: "Confirm details and create user.",  icon: <CheckIcon className="size-3.5" />,     skippable: false },
 ] as const satisfies readonly WizardShellStep[];
 
 interface AddUserWizardProps {
@@ -200,9 +195,8 @@ const AddUserWizard = memo(function AddUserWizard({
   const stepIndex = wizard.step - 1;
 
   function getSkipHandler() {
-    if (wizard.step === 2) return onSkip;
-    if (wizard.step === 4) return onSkipWithClear;
-    if (wizard.step === 5) return onSkipWithPhoto;
+    if (wizard.step === 3) return onSkipWithClear;
+    if (wizard.step === 4) return onSkipWithPhoto;
     return onSkip;
   }
 
@@ -210,7 +204,6 @@ const AddUserWizard = memo(function AddUserWizard({
     { label: "Name",    value: `${wizard.form.fname} ${wizard.form.lname}`.trim() },
     { label: "Email",   value: wizard.form.email },
     { label: "Phone",   value: wizard.form.phone || "—" },
-    { label: "Bio",     value: wizard.form.bio   || "—" },
     { label: "Calling", value: addSelectedCalling
         ? addSelectedCalling.max_slots > 1
           ? `${addSelectedCalling.name} · ${
@@ -344,18 +337,6 @@ const AddUserWizard = memo(function AddUserWizard({
       )}
 
       {wizard.step === 2 && (
-        <div className="space-y-1.5">
-          <Label>Bio</Label>
-          <Textarea
-            value={wizard.form.bio}
-            onChange={(e) => onSetWizard((w) => ({ ...w, form: { ...w.form, bio: e.target.value } }))}
-            placeholder="Brief description or notes..."
-            className="min-h-[120px]"
-          />
-        </div>
-      )}
-
-      {wizard.step === 3 && (
         <div className="grid gap-4">
           <div className="space-y-1.5">
             <Label>Password <span className="text-destructive">*</span></Label>
@@ -392,7 +373,7 @@ const AddUserWizard = memo(function AddUserWizard({
         </div>
       )}
 
-      {wizard.step === 4 && (
+      {wizard.step === 3 && (
         <div className="space-y-3">
           <div className="flex gap-2">
             <Select
@@ -418,7 +399,7 @@ const AddUserWizard = memo(function AddUserWizard({
                 <SelectTrigger className="w-[110px]">
                   <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : addSelectedCalling.name === "Bishop" ? "Ward…" : "Slot…"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                   {addFreeSlots.map((s) => (
                     <SelectItem key={s} value={String(s)}>
                       {addSelectedCalling.name === "Bishop" ? (wardByBishopSlot.get(s) ?? `Slot ${s}`) : `Slot ${s}`}
@@ -439,7 +420,7 @@ const AddUserWizard = memo(function AddUserWizard({
         </div>
       )}
 
-      {wizard.step === 5 && (
+      {wizard.step === 4 && (
         <div className="flex flex-col items-center gap-4">
           <Avatar className="h-24 w-24">
             <AvatarImage src={wizard.photo?.previewUrl} />
@@ -473,7 +454,7 @@ const AddUserWizard = memo(function AddUserWizard({
         </div>
       )}
 
-      {wizard.step === 6 && (
+      {wizard.step === 5 && (
         <div>
           {reviewRows.map((row, index) => (
             <div
@@ -852,7 +833,7 @@ export function UserAdminContent() {
     return errors;
   }
 
-  function validateStep3(form: AddWizardForm) {
+  function validateStep2(form: AddWizardForm) {
     const errors: AddWizardState["errors"] = {};
     if (!form.password) {
       errors.password = "Password is required";
@@ -869,7 +850,7 @@ export function UserAdminContent() {
     const { step, form } = addWizard;
     let errors: AddWizardState["errors"] = {};
     if (step === 1) errors = validateStep1(form);
-    else if (step === 3) errors = validateStep3(form);
+    else if (step === 2) errors = validateStep2(form);
     if (Object.keys(errors).length > 0) {
       setAddWizard((w) => ({ ...w, errors }));
       return;
@@ -906,7 +887,6 @@ export function UserAdminContent() {
         lname: user.lname,
         active: !user.active,
         phone: user.phone,
-        bio: user.bio,
         profile_image: user.profile_image,
       }),
     onSuccess: () => {
@@ -932,7 +912,6 @@ export function UserAdminContent() {
         lname: form.lname,
         active: form.active,
         phone: form.phone || null,
-        bio: form.bio || null,
         profile_image: user.profile_image,
       }),
     onSuccess: (_, { form }) => {
@@ -1015,7 +994,6 @@ export function UserAdminContent() {
         lname: vars.lname,
         active: true,
         phone: vars.phone || null,
-        bio: vars.bio || null,
         profile_image: null,
         password: vars.password,
       });
@@ -1151,7 +1129,6 @@ export function UserAdminContent() {
       lname: user.lname,
       email: user.email,
       phone: user.phone ?? "",
-      bio: user.bio ?? "",
       active: user.active,
     });
   };
@@ -1462,17 +1439,6 @@ export function UserAdminContent() {
                       <div className="space-y-2">
                         <Label>Phone</Label>
                         <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Optional" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Bio</Label>
-                        <Textarea
-                          value={editForm.bio}
-                          onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                          placeholder="Brief description or notes..."
-                          className="min-h-[100px] resize-none"
-                          maxLength={200}
-                        />
-                        <p className="text-right text-xs text-muted-foreground">{200 - editForm.bio.length} characters remaining</p>
                       </div>
                       <input
                         ref={fileInputRef}

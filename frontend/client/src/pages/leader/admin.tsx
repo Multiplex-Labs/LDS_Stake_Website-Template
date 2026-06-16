@@ -4,17 +4,19 @@ import { Layout } from "@/components/layout/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserAdminContent } from "./users";
 import { CallingsTab } from "./callings-tab";
+import { WardsTab } from "./wards-tab";
 import { SpeakingTab } from "./speaking-tab";
 import { HCAssignmentsTab } from "./hc-assignments-tab";
 import { PresidencyAssignmentsTab } from "./presidency-assignments-tab";
-import { UserCog, UserKey, Speech, NotebookText, NotebookTabs } from "lucide-react"
+import { UserCog, UserKey, Building2, Speech, NotebookText, NotebookTabs } from "lucide-react"
 
 const TABS = [
-  { value: "users", label: "Users", icon: UserCog },
-  { value: "callings", label: "Callings", icon: UserKey },
-  { value: "speaking", label: "Speaking Assignments", icon: Speech },
+  { value: "users",          label: "Users",                    icon: UserCog      },
+  { value: "callings",       label: "Callings",                 icon: UserKey      },
+  { value: "wards",          label: "Wards",                    icon: Building2    },
+  { value: "speaking",       label: "Speaking Assignments",     icon: Speech       },
   { value: "hc-assignments", label: "High Council Assignments", icon: NotebookText },
-  { value: "presidency", label: "Presidency Assignments", icon: NotebookTabs },
+  { value: "presidency",     label: "Presidency Assignments",   icon: NotebookTabs },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
@@ -52,6 +54,10 @@ export default function AdminHub() {
 
           <TabsContent value="callings">
             <CallingsTab />
+          </TabsContent>
+
+          <TabsContent value="wards">
+            <WardsTab />
           </TabsContent>
 
           <TabsContent value="speaking">
