@@ -399,7 +399,7 @@ const AddUserWizard = memo(function AddUserWizard({
                 <SelectTrigger className="w-[110px]">
                   <SelectValue placeholder={addFreeSlots.length === 0 ? "No slots" : addSelectedCalling.name === "Bishop" ? "Ward…" : "Slot…"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" className="max-h-60 overflow-y-auto">
                   {addFreeSlots.map((s) => (
                     <SelectItem key={s} value={String(s)}>
                       {addSelectedCalling.name === "Bishop" ? (wardByBishopSlot.get(s) ?? `Slot ${s}`) : `Slot ${s}`}
