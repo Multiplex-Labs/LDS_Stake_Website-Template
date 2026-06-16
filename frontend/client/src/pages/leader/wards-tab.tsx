@@ -192,11 +192,11 @@ export function WardsTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<WardSortConfig>(null);
 
-  const { data: wards = [], isLoading, isError } = useQuery<Ward[]>({
+  const { data: wards = [], isLoading, isError, error } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
 
-  if (isError) console.error("[wards-tab] wards query failed");
+  if (isError) console.error("[wards-tab] wards query failed:", error);
 
   const filteredWards = useMemo(() => {
     return wards
@@ -235,8 +235,11 @@ export function WardsTab() {
     },
     onError: (err: unknown) => {
       console.error("[wards-tab] add ward:", err);
-      if (apiErrorStatus(err) === 401) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
         toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Permission denied", { description: "You need Manage Wards permission." });
       } else {
         toast.error("Failed to add ward.");
       }
@@ -257,8 +260,11 @@ export function WardsTab() {
     },
     onError: (err: unknown) => {
       console.error("[wards-tab] edit ward:", err);
-      if (apiErrorStatus(err) === 401) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
         toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Permission denied", { description: "You need Manage Wards permission." });
       } else {
         toast.error("Failed to update ward.");
       }
@@ -274,8 +280,11 @@ export function WardsTab() {
     },
     onError: (err: unknown) => {
       console.error("[wards-tab] delete ward:", err);
-      if (apiErrorStatus(err) === 401) {
+      const status = apiErrorStatus(err);
+      if (status === 401) {
         toast.error("Session expired", { description: "Please log in again." });
+      } else if (status === 403) {
+        toast.error("Permission denied", { description: "You need Manage Wards permission." });
       } else {
         toast.error("Failed to delete ward.");
       }

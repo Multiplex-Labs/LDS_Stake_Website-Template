@@ -10,12 +10,15 @@ import { cn, getInitials } from "@/lib/utils";
 import type { Ward, ApiUser } from "@/types";
 
 export default function MeetOurBishops() {
-  const { data: wards, isLoading: wardsLoading, isError: wardsError } = useQuery<Ward[]>({
+  const { data: wards, isLoading: wardsLoading, isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
-  const { data: users = [], isLoading: usersLoading, isError: usersError } = useQuery<ApiUser[]>({
+  const { data: users = [], isLoading: usersLoading, isError: usersError, error: usersQueryError } = useQuery<ApiUser[]>({
     queryKey: ["/api/users/"],
   });
+
+  if (wardsError) console.error("[bishops] wards query failed:", wardsQueryError);
+  if (usersError) console.error("[bishops] users query failed:", usersQueryError);
 
   const isLoading = wardsLoading || usersLoading;
   const isError = wardsError || usersError;

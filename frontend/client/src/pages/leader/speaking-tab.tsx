@@ -201,17 +201,25 @@ export function SpeakingTab() {
   });
 
   const clearMonthMutation = useMutation({
-    mutationFn: ({ monthIdx }: { monthIdx: number }) =>
-      Promise.allSettled(
-        calendar!.speakers
+    mutationFn: ({ monthIdx }: { monthIdx: number }) => {
+      if (!calendar) return Promise.resolve([]);
+      return Promise.allSettled(
+        calendar.speakers
           .filter((sp) => sp.assignments[monthIdx]?.ward_id != null)
           .map((sp) => overrideAssignment(sp.high_councilor_id, null, monthIdx, year))
-      ),
+      );
+    },
     onSuccess: (results) => {
+      setConfirmAction(null);
       invalidateSpeakingData(year);
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Month cleared.");
+    },
+    onError: (err: unknown) => {
+      setConfirmAction(null);
+      console.error("[speaking-tab] clear month:", err);
+      toast.error("Failed to clear month assignments.");
     },
   });
 
@@ -225,10 +233,16 @@ export function SpeakingTab() {
       );
     },
     onSuccess: (results) => {
+      setConfirmAction(null);
       invalidateSpeakingData(year);
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) toast.error(`${failed} assignment(s) failed to clear.`);
       else toast.success("Schedule cleared.");
+    },
+    onError: (err: unknown) => {
+      setConfirmAction(null);
+      console.error("[speaking-tab] clear HC:", err);
+      toast.error("Failed to clear assignments.");
     },
   });
 
@@ -259,6 +273,10 @@ export function SpeakingTab() {
         });
         toast.error(`${failed} of ${results.length} topics failed to save.`);
       }
+    },
+    onError: (err: unknown) => {
+      console.error("[speaking-tab] save all topics:", err);
+      toast.error("Failed to save topics. Please try again.");
     },
   });
 
@@ -301,9 +319,10 @@ export function SpeakingTab() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => { confirmAction?.onConfirm(); setConfirmAction(null); }}
+              disabled={clearMonthMutation.isPending || clearHCMutation.isPending}
+              onClick={() => confirmAction?.onConfirm()}
             >
-              Clear
+              {clearMonthMutation.isPending || clearHCMutation.isPending ? "Clearing…" : "Clear"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
