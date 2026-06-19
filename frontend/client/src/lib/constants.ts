@@ -1,5 +1,6 @@
 export const SELECT_NONE = "__none__";
 export const HC_CALLING_NAME = "High Councilor";
+export const BISHOP_CALLING_NAME = "Bishop";
 
 export const WARDS = [
   "9th Ward", "10th Ward", "11th Ward", "12th Ward",
