@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { User, Check, X, Undo2} from "lucide-react";
+import { Check, X, Undo2} from "lucide-react";
 import { Link } from "wouter";
 import { useWardMap } from "@/lib/hooks";
+import { useAuthStore } from "@/stores/auth";
 import {
   Table,
   TableBody,
@@ -27,7 +28,7 @@ import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn, apiErrorStatus } from "@/lib/utils";
 import { BUTTON_HOVER } from "@/lib/constants";
-import type { KanbanBoard, CallingProposalWithCounts, Ward } from "@/types";
+import type { KanbanBoard, CallingProposalWithCounts, Ward, ApiCalling } from "@/types";
 import { Badge } from "@/components/ui/badge";
 
 // SP_APPROVAL = "0", HC_APPROVAL = "1" in the board response
@@ -98,9 +99,13 @@ function ProposalTable({ proposals, isLoading, wardMap, onSelect }: ProposalTabl
   );
 }
 
+const SP_CALLING_NAMES = new Set(["stake president", "stake first counselor", "stake second counselor"]);
+const HC_CALLING_NAME = "high councilor";
+
 export default function ReviewCallings() {
   const [selectedProposal, setSelectedProposal] = useState<CallingProposalWithCounts | null>(null);
   const [selectedStage, setSelectedStage] = useState<"SP" | "HC" | null>(null);
+  const currentUser = useAuthStore((s) => s.user);
 
   const { data: board = {}, isLoading, isError, error } = useQuery<KanbanBoard>({
     queryKey: ["/api/calling-kanban/board"],
@@ -108,11 +113,24 @@ export default function ReviewCallings() {
   const { data: wards = [], isError: wardsError, error: wardsQueryError } = useQuery<Ward[]>({
     queryKey: ["/api/wards/"],
   });
+  const { data: allCallings = [] } = useQuery<ApiCalling[]>({
+    queryKey: ["/api/callings/"],
+  });
   useEffect(() => {
     if (wardsError) console.error("[review] failed to load /api/wards/:", wardsQueryError);
   }, [wardsError, wardsQueryError]);
 
   const wardMap = useWardMap(wards);
+
+  const callingNamesById = new Map(allCallings.map((c) => [c.id, c.name.toLowerCase()]));
+  const userCallingNames = (currentUser?.callings ?? []).map((uc) => callingNamesById.get(uc.calling_id) ?? "");
+  const isSpMember = userCallingNames.some((n) => SP_CALLING_NAMES.has(n));
+  const isHcMember = userCallingNames.some((n) => n === HC_CALLING_NAME);
+
+  // view-only when: SP member on HC stage, HC member on SP stage, or neither role on either stage
+  const viewOnly =
+    (selectedStage === "HC" && !isHcMember) ||
+    (selectedStage === "SP" && !isSpMember);
 
   const spProposals: CallingProposalWithCounts[] = board[SP_APPROVAL_KEY] ?? [];
   const hcProposals: CallingProposalWithCounts[] = board[HC_APPROVAL_KEY] ?? [];
@@ -283,35 +301,42 @@ export default function ReviewCallings() {
             )}
 
             <DialogFooter className="gap-2 sm:gap-0">
-              {alreadyVoted && (
+              {!viewOnly && alreadyVoted && (
                 <p className="text-xs text-muted-foreground text-center">
                   You have already voted on this proposal.
+                </p>
+              )}
+              {viewOnly && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Viewing only — {selectedStage === "HC" ? "High Council" : "Stake Presidency"} approval stage.
                 </p>
               )}
               <div className="flex w-full justify-between items-center">
                 <Button variant="outline" onClick={() => { setSelectedProposal(null); setSelectedStage(null); }}>
                   Close
                 </Button>
-                <div className="flex gap-2">
-                  <Button
-                    variant="destructive"
-                    className="gap-2"
-                    disabled={approveMutation.isPending || alreadyVoted}
-                    onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: false })}
-                  >
-                    <X className="h-4 w-4" />
-                    Deny
-                  </Button>
-                  <Button
-                    variant="success"
-                    className="gap-2"
-                    disabled={approveMutation.isPending || alreadyVoted}
-                    onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: true })}
-                  >
-                    <Check className="h-4 w-4" />
-                    Approve
-                  </Button>
-                </div>
+                {!viewOnly && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      className="gap-2"
+                      disabled={approveMutation.isPending || alreadyVoted}
+                      onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: false })}
+                    >
+                      <X className="h-4 w-4" />
+                      Deny
+                    </Button>
+                    <Button
+                      variant="success"
+                      className="gap-2"
+                      disabled={approveMutation.isPending || alreadyVoted}
+                      onClick={() => approveMutation.mutate({ id: selectedProposal!.id, approved: true })}
+                    >
+                      <Check className="h-4 w-4" />
+                      Approve
+                    </Button>
+                  </div>
+                )}
               </div>
             </DialogFooter>
           </DialogContent>
