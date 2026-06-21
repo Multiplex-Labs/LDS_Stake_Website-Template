@@ -102,7 +102,7 @@ const formSchema = z
     releases: z.array(releaseEntrySchema).default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.submissionType === "calling" || data.submissionType === "calling_and_release") {
+    if (hasCalling(data.submissionType)) {
       if (!data.memberFirstName?.trim())
         ctx.addIssue({ code: "custom", path: ["memberFirstName"], message: "First name is required" });
       if (!data.memberLastName?.trim())
@@ -112,7 +112,7 @@ const formSchema = z
       if (!data.proposedCalling?.trim())
         ctx.addIssue({ code: "custom", path: ["proposedCalling"], message: "Calling is required" });
     }
-    if (data.submissionType === "release" || data.submissionType === "calling_and_release") {
+    if (hasReleases(data.submissionType)) {
       if (data.releases.length === 0)
         ctx.addIssue({ code: "custom", path: ["releases"], message: "At least one release is required" });
       data.releases.forEach((r, i) => {
@@ -125,6 +125,23 @@ const formSchema = z
 type FormValues = z.infer<typeof formSchema>;
 
 // ---------- Helpers ----------
+
+function hasCalling(type: FormValues["submissionType"]): boolean {
+  return type === "calling" || type === "calling_and_release";
+}
+
+function hasReleases(type: FormValues["submissionType"]): boolean {
+  return type === "release" || type === "calling_and_release";
+}
+
+function countMissingFields(
+  first: string | undefined,
+  last: string | undefined,
+  wardId: number | undefined,
+  calling: string | undefined,
+): number {
+  return [first?.trim(), last?.trim(), wardId ? "filled" : "", calling?.trim()].filter((v) => !v).length;
+}
 
 const NUMBER_WORDS = ["One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten"];
 function releaseLabel(n: number): string {
@@ -149,13 +166,16 @@ function isDuplicateProposal(
   proposedCalling: string,
 ): boolean {
   if (!fname.trim() || !lname.trim() || !wardId || !proposedCalling.trim()) return false;
+  const fl = fname.trim().toLowerCase();
+  const ll = lname.trim().toLowerCase();
+  const cl = proposedCalling.trim().toLowerCase();
   return Object.values(board).some((proposals) =>
     proposals.some(
       (p) =>
-        p.fname.toLowerCase() === fname.trim().toLowerCase() &&
-        p.lname.toLowerCase() === lname.trim().toLowerCase() &&
+        p.fname.toLowerCase() === fl &&
+        p.lname.toLowerCase() === ll &&
         p.ward_id === wardId &&
-        p.proposed_calling.toLowerCase() === proposedCalling.trim().toLowerCase(),
+        p.proposed_calling.toLowerCase() === cl,
     ),
   );
 }
@@ -210,10 +230,10 @@ function ReleaseCard({
   const p = (field: string) => `releases.${index}.${field}` as Path<FormValues>;
 
   const [releaseWardId, releaseFname, releaseLname, releaseCalling] = form.watch([
-    `releases.${index}.wardId`,
-    `releases.${index}.memberFirstName`,
-    `releases.${index}.memberLastName`,
-    `releases.${index}.proposedCalling`,
+    p("wardId"),
+    p("memberFirstName"),
+    p("memberLastName"),
+    p("proposedCalling"),
   ] as Path<FormValues>[]) as [number | undefined, string, string, string];
 
   const callingList = getCallingList(releaseWardId);
@@ -422,7 +442,6 @@ function SubmissionSummary({
         : "Calling + Release";
 
   const callingComplete = showCallingSection && callingMissingCount === 0;
-  const callingIncomplete = showCallingSection && callingMissingCount > 0;
 
   return (
     <Card className="lg:h-[calc(100vh-6rem)] lg:flex lg:flex-col">
@@ -476,7 +495,7 @@ function SubmissionSummary({
                   <span className="size-2 rounded-full bg-green-500 inline-block" />
                   Complete
                 </div>
-              ) : callingIncomplete ? (
+              ) : showCallingSection ? (
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs text-yellow-500">
                     <span className="size-2 rounded-full bg-yellow-500 inline-block" />
@@ -649,10 +668,8 @@ export default function SubmitCalling() {
 
   const wardMap = useWardMap(wards);
 
-  const showCallingSection =
-    submissionType === "calling" || submissionType === "calling_and_release";
-  const showReleasesSection =
-    submissionType === "release" || submissionType === "calling_and_release";
+  const showCallingSection = hasCalling(submissionType);
+  const showReleasesSection = hasReleases(submissionType);
 
   const showCallingDuplicate = useMemo(
     () =>
@@ -670,12 +687,7 @@ export default function SubmitCalling() {
 
   const callingMissingCount = useMemo(() => {
     if (!showCallingSection) return 0;
-    return [
-      watched.memberFirstName?.trim(),
-      watched.memberLastName?.trim(),
-      watched.wardId ? "filled" : "",
-      watched.proposedCalling?.trim(),
-    ].filter((v) => !v).length;
+    return countMissingFields(watched.memberFirstName, watched.memberLastName, watched.wardId, watched.proposedCalling);
   }, [showCallingSection, watched.memberFirstName, watched.memberLastName, watched.wardId, watched.proposedCalling]);
 
   const releaseSummaryData = useMemo(() => {
@@ -684,16 +696,9 @@ export default function SubmitCalling() {
       name: [r.memberFirstName?.trim(), r.memberLastName?.trim()].filter(Boolean).join(" "),
       ward: r.wardId ? (wardMap.get(r.wardId) ?? "") : "",
       calling: r.proposedCalling?.trim() ?? "",
-      missingCount: [
-        r.memberFirstName?.trim(),
-        r.memberLastName?.trim(),
-        r.wardId ? "filled" : "",
-        r.proposedCalling?.trim(),
-      ].filter((v) => !v).length,
+      missingCount: countMissingFields(r.memberFirstName, r.memberLastName, r.wardId, r.proposedCalling),
     }));
   }, [showReleasesSection, watched.releases, wardMap]);
-
-  const summaryReleaseCount = showReleasesSection ? (watched.releases?.length ?? 0) : 0;
 
   function handleTypeChange(type: "calling" | "release" | "calling_and_release") {
     form.setValue("submissionType", type);
@@ -720,12 +725,7 @@ export default function SubmitCalling() {
     mutationFn: async (values: FormValues) => {
       const requests: Promise<Response>[] = [];
 
-      const shouldSubmitCalling =
-        values.submissionType === "calling" || values.submissionType === "calling_and_release";
-      const shouldSubmitReleases =
-        values.submissionType === "release" || values.submissionType === "calling_and_release";
-
-      if (shouldSubmitCalling) {
+      if (hasCalling(values.submissionType)) {
         requests.push(
           apiRequest("POST", "/api/calling-kanban/proposals", {
             fname: values.memberFirstName,
@@ -738,7 +738,7 @@ export default function SubmitCalling() {
         );
       }
 
-      if (shouldSubmitReleases) {
+      if (hasReleases(values.submissionType)) {
         for (const r of values.releases) {
           requests.push(
             apiRequest("POST", "/api/calling-kanban/proposals", {
@@ -760,12 +760,7 @@ export default function SubmitCalling() {
 
       const snapshot: SubmittedItem[] = [];
 
-      const shouldSubmitCalling =
-        values.submissionType === "calling" || values.submissionType === "calling_and_release";
-      const shouldSubmitReleases =
-        values.submissionType === "release" || values.submissionType === "calling_and_release";
-
-      if (shouldSubmitCalling) {
+      if (hasCalling(values.submissionType)) {
         const fname = values.memberFirstName?.trim() ?? "";
         const lname = values.memberLastName?.trim() ?? "";
         snapshot.push({
@@ -776,7 +771,7 @@ export default function SubmitCalling() {
         });
       }
 
-      if (shouldSubmitReleases) {
+      if (hasReleases(values.submissionType)) {
         for (const r of values.releases) {
           snapshot.push({
             label: "Release",
@@ -795,9 +790,6 @@ export default function SubmitCalling() {
       });
     },
   });
-
-  // Suppress unused variable warning — summaryReleaseCount is kept for potential future use
-  void summaryReleaseCount;
 
   return (
     <Layout>
