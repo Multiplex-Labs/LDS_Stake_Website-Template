@@ -1,11 +1,24 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useFieldArray, useForm, useFormContext } from "react-hook-form";
 import { BUTTON_HOVER, BISHOP_CALLING_NAME } from "@/lib/constants";
 import { useWardMap } from "@/lib/hooks";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { Save, X, Plus, Diamond, TriangleAlert, CircleCheck, Check } from "lucide-react";
+import {
+  X,
+  TriangleAlert,
+  CircleCheck,
+  Check,
+  UserPlus,
+  UserMinus,
+  Users,
+  Info,
+  FileText,
+  CirclePlus,
+  Trash2,
+  Send,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -27,7 +40,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/auth";
@@ -80,18 +92,17 @@ const releaseEntrySchema = z.object({
 
 const formSchema = z
   .object({
-    submissionType: z.enum(["calling", "release"]),
+    submissionType: z.enum(["calling", "release", "calling_and_release"]),
     memberFirstName: z.string().optional(),
     memberLastName: z.string().optional(),
     spouseName: z.string().optional(),
     wardId: z.number().optional(),
     proposedCalling: z.string().optional(),
     notes: z.string().optional(),
-    includeReleases: z.boolean().default(false),
     releases: z.array(releaseEntrySchema).default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.submissionType === "calling") {
+    if (data.submissionType === "calling" || data.submissionType === "calling_and_release") {
       if (!data.memberFirstName?.trim())
         ctx.addIssue({ code: "custom", path: ["memberFirstName"], message: "First name is required" });
       if (!data.memberLastName?.trim())
@@ -101,9 +112,9 @@ const formSchema = z
       if (!data.proposedCalling?.trim())
         ctx.addIssue({ code: "custom", path: ["proposedCalling"], message: "Calling is required" });
     }
-    if (data.submissionType === "release" && data.releases.length === 0)
-      ctx.addIssue({ code: "custom", path: ["releases"], message: "At least one release is required" });
-    if (data.submissionType === "release" || data.includeReleases) {
+    if (data.submissionType === "release" || data.submissionType === "calling_and_release") {
+      if (data.releases.length === 0)
+        ctx.addIssue({ code: "custom", path: ["releases"], message: "At least one release is required" });
       data.releases.forEach((r, i) => {
         if (!r.wardId)
           ctx.addIssue({ code: "custom", path: ["releases", i, "wardId"], message: "Ward is required" });
@@ -114,6 +125,11 @@ const formSchema = z
 type FormValues = z.infer<typeof formSchema>;
 
 // ---------- Helpers ----------
+
+const NUMBER_WORDS = ["One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten"];
+function releaseLabel(n: number): string {
+  return `Release ${NUMBER_WORDS[n - 1] ?? n}`;
+}
 
 function makeEmptyRelease(presetWardId?: number) {
   return {
@@ -144,13 +160,13 @@ function isDuplicateProposal(
   );
 }
 
-function buildButtonLabel(isPending: boolean, callingCount: number, releaseCount: number): string {
-  if (isPending) return "Submitting…";
-  const parts = [
-    callingCount > 0 && `${callingCount} Calling`,
-    releaseCount > 0 && `${releaseCount} Release${releaseCount > 1 ? "s" : ""}`,
-  ].filter(Boolean);
-  return parts.length > 0 ? `Submit ${parts.join(" + ")}` : "Submit";
+// ---------- Snapshot type for success screen ----------
+
+interface SubmittedItem {
+  label: "Calling" | "Release";
+  name: string;
+  calling: string;
+  ward: string;
 }
 
 // ---------- DuplicateWarning ----------
@@ -207,227 +223,362 @@ function ReleaseCard({
     isDuplicateProposal(board, releaseFname ?? "", releaseLname ?? "", releaseWardId, releaseCalling ?? "");
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base">Release {index + 1}</CardTitle>
+    <div className="space-y-4 rounded-lg border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-sm">{releaseLabel(index + 1)}</span>
         {canRemove && (
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            size="sm"
+            className="text-destructive hover:text-destructive gap-1.5"
             onClick={onRemove}
           >
-            <X className="h-4 w-4" />
+            <Trash2 className="size-3.5" />
+            Remove
           </Button>
         )}
-      </CardHeader>
-      <CardContent className="grid gap-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
-            control={form.control}
-            name={p("memberFirstName")}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>First Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="John" {...field} value={field.value as string ?? ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name={p("memberLastName")}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="Doe" {...field} value={field.value as string ?? ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
-            control={form.control}
-            name={p("spouseName")}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Spouse's First Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="Jane" {...field} value={field.value as string ?? ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name={p("wardId")}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ward</FormLabel>
-                <Select
-                  onValueChange={(val) => field.onChange(Number(val))}
-                  value={(field.value as number | undefined)?.toString() ?? ""}
-                  disabled={bishopWardId !== undefined}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a ward" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {wards.map((ward) => (
-                      <SelectItem key={ward.id} value={ward.id.toString()}>
-                        {ward.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+      <p className="text-sm font-medium">Person being released</p>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <FormField
           control={form.control}
-          name={p("proposedCalling")}
+          name={p("memberFirstName")}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Calling Being Released</FormLabel>
-              {showOtherCalling ? (
-                <div className="flex gap-4">
-                  <FormControl>
-                    <Input
-                      placeholder="Enter calling"
-                      {...field}
-                      value={field.value as string ?? ""}
-                    />
-                  </FormControl>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="icon"
-                    className={BUTTON_HOVER}
-                    onClick={() => {
-                      onShowOtherCallingChange(false);
-                      field.onChange("");
-                    }}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ) : (
-                <Select
-                  onValueChange={(value) => {
-                    if (value === "Other") {
-                      onShowOtherCallingChange(true);
-                      field.onChange("");
-                    } else {
-                      field.onChange(value);
-                    }
-                  }}
-                  value={(field.value as string) ?? ""}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a calling" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="max-h-[300px]">
-                    {callingList.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <FormLabel>First Name</FormLabel>
+              <FormControl>
+                <Input placeholder="John" {...field} value={field.value as string ?? ""} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        <FormField
+          control={form.control}
+          name={p("memberLastName")}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Last Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Doe" {...field} value={field.value as string ?? ""} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
 
-        {showDuplicate && (
-          <DuplicateWarning
-            name={[releaseFname?.trim(), releaseLname?.trim()].filter(Boolean).join(" ")}
-            calling={releaseCalling?.trim() ?? ""}
-          />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <FormField
+          control={form.control}
+          name={p("spouseName")}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Spouse's First Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Jane" {...field} value={field.value as string ?? ""} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={p("wardId")}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Ward</FormLabel>
+              <Select
+                onValueChange={(val) => field.onChange(Number(val))}
+                value={(field.value as number | undefined)?.toString() ?? ""}
+                disabled={bishopWardId !== undefined}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a ward" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {wards.map((ward) => (
+                    <SelectItem key={ward.id} value={ward.id.toString()}>
+                      {ward.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      <FormField
+        control={form.control}
+        name={p("proposedCalling")}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Calling Being Released</FormLabel>
+            {showOtherCalling ? (
+              <div className="flex gap-4">
+                <FormControl>
+                  <Input
+                    placeholder="Enter calling"
+                    {...field}
+                    value={field.value as string ?? ""}
+                  />
+                </FormControl>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className={BUTTON_HOVER}
+                  onClick={() => {
+                    onShowOtherCallingChange(false);
+                    field.onChange("");
+                  }}
+                >
+                  <X />
+                </Button>
+              </div>
+            ) : (
+              <Select
+                onValueChange={(value) => {
+                  if (value === "Other") {
+                    onShowOtherCallingChange(true);
+                    field.onChange("");
+                  } else {
+                    field.onChange(value);
+                  }
+                }}
+                value={(field.value as string) ?? ""}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a calling" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent className="max-h-[300px]">
+                  {callingList.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <FormMessage />
+          </FormItem>
         )}
-      </CardContent>
-    </Card>
+      />
+
+      {showDuplicate && (
+        <DuplicateWarning
+          name={[releaseFname?.trim(), releaseLname?.trim()].filter(Boolean).join(" ")}
+          calling={releaseCalling?.trim() ?? ""}
+        />
+      )}
+    </div>
   );
 }
 
 // ---------- SubmissionSummary ----------
 
-interface SummaryItem {
-  label: "Calling" | "Release";
-  name: string;
-  calling: string;
-  ward: string;
-}
-
 interface SubmissionSummaryProps {
-  items: SummaryItem[];
+  submissionType: "calling" | "release" | "calling_and_release";
+  showCallingSection: boolean;
+  showReleasesSection: boolean;
+  callingName: string;
+  callingWard: string;
+  callingCalling: string;
+  callingMissingCount: number;
+  releases: Array<{
+    name: string;
+    ward: string;
+    calling: string;
+    missingCount: number;
+  }>;
   isPending: boolean;
-  callingCount: number;
-  releaseCount: number;
 }
 
-function SubmissionSummary({ items, isPending, callingCount, releaseCount }: SubmissionSummaryProps) {
+function SubmissionSummary({
+  submissionType,
+  showCallingSection,
+  showReleasesSection,
+  callingName,
+  callingWard,
+  callingCalling,
+  callingMissingCount,
+  releases,
+  isPending,
+}: SubmissionSummaryProps) {
+  const typeLabel =
+    submissionType === "calling"
+      ? "New Calling"
+      : submissionType === "release"
+        ? "Release Only"
+        : "Calling + Release";
+
+  const callingComplete = showCallingSection && callingMissingCount === 0;
+  const callingIncomplete = showCallingSection && callingMissingCount > 0;
+
   return (
-    <Card className="lg:sticky lg:top-4">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Submission Summary</CardTitle>
+    <Card className="lg:h-[calc(100vh-6rem)] lg:flex lg:flex-col">
+      <CardHeader className="pb-4 shrink-0">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <FileText className="size-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle>Submission Summary</CardTitle>
+            <p className="text-sm text-muted-foreground mt-0.5">Review your submission details.</p>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {items.length > 0 ? (
-          <ul className="space-y-2">
-            {items.map((item, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <Diamond className="size-3 mt-0.5 shrink-0 text-primary fill-primary" />
-                <span>
-                  <span className="font-medium">{item.label}</span>
-                  {" — "}
-                  {item.name ? (
-                    <>
-                      <span>{item.name}</span>
-                      {item.calling && (
-                        <>
-                          {" "}
-                          <span className="text-muted-foreground">
-                            → {item.calling}
-                            {item.ward ? ` (${item.ward})` : ""}
-                          </span>
-                        </>
-                      )}
-                    </>
-                  ) : item.calling ? (
-                    <span className="text-muted-foreground">
-                      {item.calling}
-                      {item.ward ? ` (${item.ward})` : ""}
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">Fill in the form to see a summary.</p>
+      <CardContent className="flex flex-col flex-1 min-h-0 overflow-hidden gap-4">
+        {/* Submission Type */}
+        <div className="shrink-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Submission Type
+          </p>
+          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary text-primary-foreground border-transparent">
+            {typeLabel}
+          </span>
+        </div>
+
+        <div className="border-t shrink-0" />
+
+        {/* Calling Section */}
+        {showCallingSection && (
+          <div className="space-y-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <UserPlus className="size-4 text-muted-foreground" />
+              <p className="text-sm font-semibold">Calling Recommendation</p>
+            </div>
+            <div className="pl-6 space-y-0.5">
+              <p className="text-sm font-medium">
+                {callingName || (
+                  <span className="text-muted-foreground italic">Name not entered</span>
+                )}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {callingWard || <span className="italic">Ward not selected</span>}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {callingCalling ? callingCalling : <span className="italic">Calling not selected</span>}
+              </p>
+            </div>
+            <div className="pl-6">
+              {callingComplete ? (
+                <div className="flex items-center gap-1.5 text-xs text-green-500">
+                  <span className="size-2 rounded-full bg-green-500 inline-block" />
+                  Complete
+                </div>
+              ) : callingIncomplete ? (
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 text-xs text-yellow-500">
+                    <span className="size-2 rounded-full bg-yellow-500 inline-block" />
+                    Incomplete
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {callingMissingCount} required field{callingMissingCount !== 1 ? "s" : ""} remaining
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
         )}
 
-        <Button type="submit" className="w-full gap-2" disabled={isPending}>
-          <Save className="size-4" />
-          {buildButtonLabel(isPending, callingCount, releaseCount)}
-        </Button>
+        {/* Releases Section — scrollable so the rest of the summary stays in view */}
+        {showReleasesSection && releases.length > 0 && (
+          <>
+            {showCallingSection && <div className="border-t shrink-0" />}
+            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
+              <div className="flex items-center gap-2 shrink-0">
+                <FileText className="size-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Releases</p>
+                <span className="ml-auto inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs size-5 font-semibold">
+                  {releases.length}
+                </span>
+              </div>
+              {releases.map((r, i) => (
+                <div key={i} className="pl-6 space-y-1 pb-2 border-b last:border-b-0">
+                  <p className="text-xs text-muted-foreground font-medium">{releaseLabel(i + 1)}</p>
+                  <p className="text-sm font-medium">
+                    {r.name || (
+                      <span className="text-muted-foreground italic">Name not entered</span>
+                    )}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {r.ward || <span className="italic">Ward not selected</span>}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {r.calling || <span className="italic">Calling not selected</span>}
+                  </p>
+                  {r.missingCount === 0 ? (
+                    <div className="flex items-center gap-1.5 text-xs text-green-500">
+                      <span className="size-2 rounded-full bg-green-500 inline-block" />
+                      Complete
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs text-yellow-500">
+                        <span className="size-2 rounded-full bg-yellow-500 inline-block" />
+                        Incomplete
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {r.missingCount} required field{r.missingCount !== 1 ? "s" : ""} remaining
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Before you submit + info note + buttons — always pinned to the bottom */}
+        <div className="mt-auto shrink-0 space-y-4">
+          <div className="border-t" />
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Before you submit
+            </p>
+            <ul className="space-y-1.5">
+              {[
+                "Review all information for accuracy",
+                "Ensure all required fields are complete",
+                "You can add multiple releases if needed",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <CircleCheck className="size-3.5 shrink-0 mt-0.5 text-green-500" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <Info className="size-3.5 shrink-0 mt-0.5 text-primary" />
+            <p className="text-xs text-muted-foreground">
+              All submissions will be reviewed by the Stake Presidency. You will be notified of the
+              decision.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Button type="submit" className="w-full gap-2" disabled={isPending}>
+              <Send className="size-4" />
+              {isPending ? "Submitting…" : "Submit for Review"}
+            </Button>
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/leader/calling-system">Cancel</Link>
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -439,8 +590,7 @@ export default function SubmitCalling() {
   const [, setLocation] = useLocation();
   const [showOtherCalling, setShowOtherCalling] = useState(false);
   const [releaseOtherCalling, setReleaseOtherCalling] = useState<Record<string, boolean>>({});
-  const [submittedItems, setSubmittedItems] = useState<SummaryItem[] | null>(null);
-  const summarySnapshot = useRef<SummaryItem[]>([]);
+  const [submittedItems, setSubmittedItems] = useState<SubmittedItem[] | null>(null);
 
   const currentUser = useAuthStore((s) => s.user);
 
@@ -479,7 +629,6 @@ export default function SubmitCalling() {
       wardId: undefined,
       proposedCalling: "",
       notes: "",
-      includeReleases: false,
       releases: [],
     },
   });
@@ -497,15 +646,18 @@ export default function SubmitCalling() {
 
   const watched = form.watch();
   const submissionType = watched.submissionType;
-  const includeReleases = watched.includeReleases;
 
   const wardMap = useWardMap(wards);
-  const showReleasesSection = submissionType === "release" || includeReleases;
+
+  const showCallingSection =
+    submissionType === "calling" || submissionType === "calling_and_release";
+  const showReleasesSection =
+    submissionType === "release" || submissionType === "calling_and_release";
 
   const showCallingDuplicate = useMemo(
     () =>
       board !== undefined &&
-      submissionType === "calling" &&
+      showCallingSection &&
       isDuplicateProposal(
         board,
         watched.memberFirstName ?? "",
@@ -513,52 +665,39 @@ export default function SubmitCalling() {
         watched.wardId,
         watched.proposedCalling ?? "",
       ),
-    [board, submissionType, watched.memberFirstName, watched.memberLastName, watched.wardId, watched.proposedCalling],
+    [board, showCallingSection, watched.memberFirstName, watched.memberLastName, watched.wardId, watched.proposedCalling],
   );
 
-  const summaryItems = useMemo((): SummaryItem[] => {
-    const items: SummaryItem[] = [];
+  const callingMissingCount = useMemo(() => {
+    if (!showCallingSection) return 0;
+    return [
+      watched.memberFirstName?.trim(),
+      watched.memberLastName?.trim(),
+      watched.wardId ? "filled" : "",
+      watched.proposedCalling?.trim(),
+    ].filter((v) => !v).length;
+  }, [showCallingSection, watched.memberFirstName, watched.memberLastName, watched.wardId, watched.proposedCalling]);
 
-    if (submissionType === "calling") {
-      const fname = watched.memberFirstName?.trim() ?? "";
-      const lname = watched.memberLastName?.trim() ?? "";
-      const calling = watched.proposedCalling?.trim() ?? "";
-      const wardName = watched.wardId ? (wardMap.get(watched.wardId) ?? "") : "";
-
-      if (fname || lname || calling) {
-        items.push({ label: "Calling", name: [fname, lname].filter(Boolean).join(" "), calling, ward: wardName });
-      }
-    }
-
-    if (showReleasesSection) {
-      for (const r of watched.releases ?? []) {
-        const fname = r.memberFirstName?.trim() ?? "";
-        const lname = r.memberLastName?.trim() ?? "";
-        const calling = r.proposedCalling?.trim() ?? "";
-        const wardName = r.wardId ? (wardMap.get(r.wardId) ?? "") : "";
-
-        if (fname || lname || calling) {
-          items.push({ label: "Release", name: [fname, lname].filter(Boolean).join(" "), calling, ward: wardName });
-        }
-      }
-    }
-
-    return items;
-  }, [submissionType, includeReleases, watched.memberFirstName, watched.memberLastName,
-      watched.proposedCalling, watched.wardId, watched.releases, wardMap, showReleasesSection]);
+  const releaseSummaryData = useMemo(() => {
+    if (!showReleasesSection) return [];
+    return (watched.releases ?? []).map((r) => ({
+      name: [r.memberFirstName?.trim(), r.memberLastName?.trim()].filter(Boolean).join(" "),
+      ward: r.wardId ? (wardMap.get(r.wardId) ?? "") : "",
+      calling: r.proposedCalling?.trim() ?? "",
+      missingCount: [
+        r.memberFirstName?.trim(),
+        r.memberLastName?.trim(),
+        r.wardId ? "filled" : "",
+        r.proposedCalling?.trim(),
+      ].filter((v) => !v).length,
+    }));
+  }, [showReleasesSection, watched.releases, wardMap]);
 
   const summaryReleaseCount = showReleasesSection ? (watched.releases?.length ?? 0) : 0;
 
-  function handleTypeChange(type: "calling" | "release") {
+  function handleTypeChange(type: "calling" | "release" | "calling_and_release") {
     form.setValue("submissionType", type);
-    if (type === "release" && releaseFields.length === 0) {
-      appendRelease(makeEmptyRelease(bishopWardId));
-    }
-  }
-
-  function handleIncludeReleasesToggle(checked: boolean) {
-    form.setValue("includeReleases", checked);
-    if (checked && releaseFields.length === 0) {
+    if ((type === "release" || type === "calling_and_release") && releaseFields.length === 0) {
       appendRelease(makeEmptyRelease(bishopWardId));
     }
   }
@@ -581,7 +720,12 @@ export default function SubmitCalling() {
     mutationFn: async (values: FormValues) => {
       const requests: Promise<Response>[] = [];
 
-      if (values.submissionType === "calling") {
+      const shouldSubmitCalling =
+        values.submissionType === "calling" || values.submissionType === "calling_and_release";
+      const shouldSubmitReleases =
+        values.submissionType === "release" || values.submissionType === "calling_and_release";
+
+      if (shouldSubmitCalling) {
         requests.push(
           apiRequest("POST", "/api/calling-kanban/proposals", {
             fname: values.memberFirstName,
@@ -594,27 +738,56 @@ export default function SubmitCalling() {
         );
       }
 
-      const releaseList =
-        (values.submissionType === "release" || values.includeReleases) ? values.releases : [];
-
-      for (const r of releaseList) {
-        requests.push(
-          apiRequest("POST", "/api/calling-kanban/proposals", {
-            fname: r.memberFirstName,
-            lname: r.memberLastName,
-            spouse_name: r.spouseName ?? "",
-            proposed_calling: r.proposedCalling,
-            ward_id: r.wardId,
-            is_release: true,
-          }),
-        );
+      if (shouldSubmitReleases) {
+        for (const r of values.releases) {
+          requests.push(
+            apiRequest("POST", "/api/calling-kanban/proposals", {
+              fname: r.memberFirstName,
+              lname: r.memberLastName,
+              spouse_name: r.spouseName ?? "",
+              proposed_calling: r.proposedCalling,
+              ward_id: r.wardId,
+              is_release: true,
+            }),
+          );
+        }
       }
 
       return Promise.all(requests);
     },
-    onSuccess: () => {
+    onSuccess: (_, values) => {
       queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
-      setSubmittedItems(summarySnapshot.current);
+
+      const snapshot: SubmittedItem[] = [];
+
+      const shouldSubmitCalling =
+        values.submissionType === "calling" || values.submissionType === "calling_and_release";
+      const shouldSubmitReleases =
+        values.submissionType === "release" || values.submissionType === "calling_and_release";
+
+      if (shouldSubmitCalling) {
+        const fname = values.memberFirstName?.trim() ?? "";
+        const lname = values.memberLastName?.trim() ?? "";
+        snapshot.push({
+          label: "Calling",
+          name: [fname, lname].filter(Boolean).join(" "),
+          calling: values.proposedCalling?.trim() ?? "",
+          ward: values.wardId ? (wardMap.get(values.wardId) ?? "") : "",
+        });
+      }
+
+      if (shouldSubmitReleases) {
+        for (const r of values.releases) {
+          snapshot.push({
+            label: "Release",
+            name: [r.memberFirstName?.trim(), r.memberLastName?.trim()].filter(Boolean).join(" "),
+            calling: r.proposedCalling?.trim() ?? "",
+            ward: r.wardId ? (wardMap.get(r.wardId) ?? "") : "",
+          });
+        }
+      }
+
+      setSubmittedItems(snapshot);
     },
     onError: () => {
       toast.error("Submission Failed", {
@@ -622,6 +795,9 @@ export default function SubmitCalling() {
       });
     },
   });
+
+  // Suppress unused variable warning — summaryReleaseCount is kept for potential future use
+  void summaryReleaseCount;
 
   return (
     <Layout>
@@ -661,7 +837,11 @@ export default function SubmitCalling() {
                 ))}
               </ul>
               <div className="flex justify-center gap-3 pt-2">
-                <Button type="button" variant="default" onClick={() => setLocation("/leader/calling-system")}>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => setLocation("/leader/calling-system")}
+                >
                   View on Board
                 </Button>
                 <Button
@@ -683,40 +863,74 @@ export default function SubmitCalling() {
 
         {submittedItems === null && (
           <>
-            <div className="inline-flex rounded-lg border overflow-hidden mb-6">
-              <Button
-                type="button"
-                variant={submissionType === "calling" ? "default" : "ghost"}
-                className="rounded-none"
-                onClick={() => handleTypeChange("calling")}
-              >
-                New Calling
-              </Button>
-              <Button
-                type="button"
-                variant={submissionType === "release" ? "default" : "ghost"}
-                className="rounded-none border-l"
-                onClick={() => handleTypeChange("release")}
-              >
-                Release Only
-              </Button>
+            {/* Type Selector */}
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {(
+                [
+                  {
+                    type: "calling",
+                    icon: UserPlus,
+                    title: "New Calling",
+                    description: "Recommend a new calling",
+                  },
+                  {
+                    type: "release",
+                    icon: UserMinus,
+                    title: "Release Only",
+                    description: "Release a member from a calling",
+                  },
+                  {
+                    type: "calling_and_release",
+                    icon: Users,
+                    title: "Calling + Release",
+                    description: "Recommend and release",
+                  },
+                ] as const
+              ).map(({ type, icon: Icon, title, description }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleTypeChange(type)}
+                  className={[
+                    "flex flex-col gap-1 items-start p-4 rounded-lg border cursor-pointer transition-colors text-left",
+                    submissionType === type
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card hover:bg-muted/50",
+                  ].join(" ")}
+                >
+                  <Icon className="size-5 mb-1" />
+                  <span className="font-semibold text-sm">{title}</span>
+                  <span className="text-xs opacity-70">{description}</span>
+                </button>
+              ))}
             </div>
+
 
             <Form {...form}>
               <form
+                id="submit-calling-form"
                 onSubmit={form.handleSubmit((v) => {
-                  summarySnapshot.current = summaryItems;
                   submitMutation.mutate(v);
                 })}
               >
                 <div className="flex flex-col lg:flex-row lg:items-start gap-6">
                   <div className="flex-1 space-y-6">
-                    {submissionType === "calling" && (
+                    {/* Calling Recommendation Card */}
+                    {showCallingSection && (
                       <Card>
-                        <CardHeader>
-                          <CardTitle>Calling Details</CardTitle>
+                        <CardHeader className="pb-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-primary/10">
+                              <UserPlus className="size-5 text-primary" />
+                            </div>
+                            <div>
+                              <CardTitle>Calling Recommendation</CardTitle>
+                            </div>
+                          </div>
                         </CardHeader>
                         <CardContent className="grid gap-6">
+                          <p className="text-sm font-medium">Person being recommended</p>
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                               control={form.control}
@@ -847,7 +1061,10 @@ export default function SubmitCalling() {
 
                           {showCallingDuplicate && (
                             <DuplicateWarning
-                              name={[watched.memberFirstName?.trim(), watched.memberLastName?.trim()]
+                              name={[
+                                watched.memberFirstName?.trim(),
+                                watched.memberLastName?.trim(),
+                              ]
                                 .filter(Boolean)
                                 .join(" ")}
                               calling={watched.proposedCalling?.trim() ?? ""}
@@ -859,14 +1076,25 @@ export default function SubmitCalling() {
                             name="notes"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Notes (Optional)</FormLabel>
+                                <FormLabel>
+                                  Notes{" "}
+                                  <span className="text-muted-foreground font-normal">
+                                    (Optional)
+                                  </span>
+                                </FormLabel>
                                 <FormControl>
                                   <Textarea
                                     placeholder="Add any additional context or notes about this recommendation..."
-                                    className="min-h-[100px]"
+                                    className="min-h-[100px] resize-none"
+                                    maxLength={500}
                                     {...field}
                                   />
                                 </FormControl>
+                                <div className="flex justify-end">
+                                  <span className="text-xs text-muted-foreground">
+                                    {(field.value ?? "").length} / 500
+                                  </span>
+                                </div>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -875,64 +1103,71 @@ export default function SubmitCalling() {
                       </Card>
                     )}
 
-                    {submissionType === "calling" && (
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          id="include-releases"
-                          checked={includeReleases}
-                          onCheckedChange={(checked) => handleIncludeReleasesToggle(checked === true)}
-                        />
-                        <label
-                          htmlFor="include-releases"
-                          className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          Also submit release(s)
-                        </label>
-                      </div>
-                    )}
-
+                    {/* Releases Section */}
                     {showReleasesSection && (
-                      <div className="space-y-4">
-                        {releaseFields.map((releaseField, index) => (
-                          <ReleaseCard
-                            key={releaseField.id}
-                            index={index}
-                            canRemove={submissionType === "calling" || releaseFields.length > 1}
-                            onRemove={() => removeReleaseAt(index)}
-                            wards={wards}
-                            bishopWardId={bishopWardId}
-                            showOtherCalling={releaseOtherCalling[releaseField.id] ?? false}
-                            onShowOtherCallingChange={(v) =>
-                              setReleaseOtherCalling((prev) => ({ ...prev, [releaseField.id]: v }))
-                            }
-                            board={board}
-                          />
-                        ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="gap-2 w-full"
-                          onClick={addRelease}
-                        >
-                          <Plus className="h-4 w-4" />
-                          Add Release
-                        </Button>
-                      </div>
+                      <Card>
+                        <CardHeader className="pb-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-primary/10">
+                              <FileText className="size-5 text-primary" />
+                            </div>
+                            <div>
+                              <CardTitle>Release(s)</CardTitle>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {releaseFields.map((releaseField, index) => (
+                            <ReleaseCard
+                              key={releaseField.id}
+                              index={index}
+                              canRemove={
+                                submissionType === "calling_and_release" ||
+                                releaseFields.length > 1
+                              }
+                              onRemove={() => removeReleaseAt(index)}
+                              wards={wards}
+                              bishopWardId={bishopWardId}
+                              showOtherCalling={releaseOtherCalling[releaseField.id] ?? false}
+                              onShowOtherCallingChange={(v) =>
+                                setReleaseOtherCalling((prev) => ({
+                                  ...prev,
+                                  [releaseField.id]: v,
+                                }))
+                              }
+                              board={board}
+                            />
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="gap-2 w-full"
+                            onClick={addRelease}
+                          >
+                            <CirclePlus className="h-4 w-4" />
+                            Add another release
+                          </Button>
+                        </CardContent>
+                      </Card>
                     )}
-
-                    <div className="flex justify-start">
-                      <Button variant="destructive" className="gap-2" size="default" asChild>
-                        <Link href="/leader/calling-system">Cancel</Link>
-                      </Button>
-                    </div>
                   </div>
 
-                  <div className="w-full lg:w-80 shrink-0">
+                  <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-4">
                     <SubmissionSummary
-                      items={summaryItems}
+                      submissionType={submissionType}
+                      showCallingSection={showCallingSection}
+                      showReleasesSection={showReleasesSection}
+                      callingName={[
+                        watched.memberFirstName?.trim(),
+                        watched.memberLastName?.trim(),
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      callingWard={watched.wardId ? (wardMap.get(watched.wardId) ?? "") : ""}
+                      callingCalling={watched.proposedCalling?.trim() ?? ""}
+                      callingMissingCount={callingMissingCount}
+                      releases={releaseSummaryData}
                       isPending={submitMutation.isPending}
-                      callingCount={submissionType === "calling" ? 1 : 0}
-                      releaseCount={summaryReleaseCount}
                     />
                   </div>
                 </div>
@@ -941,6 +1176,7 @@ export default function SubmitCalling() {
           </>
         )}
       </div>
+
     </Layout>
   );
 }
