@@ -372,11 +372,21 @@ def add_approval_bot(
 @router.get("/proposals/{proposal_id}/approvals", response_model=list[CallingApproval])
 def get_approvals(
     proposal_id: int,
+    stage_current: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Get all approvals for a calling proposal"""
     statement = select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)
+    if stage_current:
+        latest_update = session.exec(
+            select(KanbanUpdate)
+            .where(KanbanUpdate.proposal_id == proposal_id)
+            .order_by(KanbanUpdate.id.desc())
+            .limit(1)
+        ).first()
+        if latest_update:
+            statement = statement.where(CallingApproval.created_at >= latest_update.updated_at)
     approvals = session.exec(statement).all()
     return approvals
 
