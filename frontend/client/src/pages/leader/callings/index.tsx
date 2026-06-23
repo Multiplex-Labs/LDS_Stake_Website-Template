@@ -328,7 +328,7 @@ export default function CallingSystem() {
             >
               <Link href="/leader/sustainings">
                 <Megaphone className="h-4 w-4" />
-                Release & Sustainment Form
+                Release & Sustaining Form
               </Link>
             </Button>
           )}

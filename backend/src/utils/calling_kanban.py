@@ -395,7 +395,7 @@ def update_proposal_status(proposal:CallingProposal, session: Session, discord_b
             and _in_any_interval(a.created_at, sp_intervals)
         ]
         logger.debug(f"Found {len(sp_approvals)} SP approvals for proposal {proposal.id}")
-        if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD", "2")) and all(a.approved for a in sp_approvals):
+        if len(sp_approvals) >= int(os.getenv("SP_APPROVAL_THRESHOLD", "3")) and all(a.approved for a in sp_approvals):
             logger.debug(f"Found enough SP approvals for proposal {proposal.id}")
             sorted_approvals = sorted(sp_approvals, key=lambda a: a.created_at, reverse=True)
             latest_approver_id = sorted_approvals[0].approver_id

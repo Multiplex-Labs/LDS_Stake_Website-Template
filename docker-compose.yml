@@ -31,5 +31,5 @@ services:
       - ./slackbot/.env
     depends_on:
       - backend
-    profiles:
+  profiles:
       - slackbot

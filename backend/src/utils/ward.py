@@ -39,7 +39,7 @@ def load_wards():
             name="Bishop",
             max_slots=len(wards),
             is_public=True,
-            permissions=[Permission.SUBMIT_CALLING_PROPOSALS]
+            permissions=[Permission.VIEW_CALLING_PROPOSALS]
         )
 
         for slot_number, w in enumerate(wards, start=1):

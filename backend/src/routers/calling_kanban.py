@@ -210,8 +210,9 @@ def update_proposal(
     proposal.proposed_calling = proposal_data.proposed_calling
     proposal.ward_id = proposal_data.ward_id
     proposal.is_release = proposal_data.is_release
-    proposal.updated_at = datetime.now(timezone.utc)
-    
+    # updated_at is intentionally not modified: for DONE proposals it records the completion
+    # date, and editing metadata fields (name, calling, ward) should not change that timestamp.
+
     session.add(proposal)
     session.commit()
     session.refresh(proposal)
@@ -372,11 +373,21 @@ def add_approval_bot(
 @router.get("/proposals/{proposal_id}/approvals", response_model=list[CallingApproval])
 def get_approvals(
     proposal_id: int,
+    stage_current: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
 ):
     """Get all approvals for a calling proposal"""
     statement = select(CallingApproval).where(CallingApproval.proposal_id == proposal_id)
+    if stage_current:
+        latest_update = session.exec(
+            select(KanbanUpdate)
+            .where(KanbanUpdate.proposal_id == proposal_id)
+            .order_by(KanbanUpdate.id.desc())
+            .limit(1)
+        ).first()
+        if latest_update:
+            statement = statement.where(CallingApproval.created_at >= latest_update.updated_at)
     approvals = session.exec(statement).all()
     return approvals
 
@@ -542,6 +553,43 @@ def get_interview(
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
+
+class KanbanUpdateResponse(BaseModel):
+    id: int
+    proposal_id: int
+    updater_id: int
+    from_stage: int | None = None
+    to_stage: int
+    updated_at: datetime
+
+    @classmethod
+    def from_update(cls, u: KanbanUpdate) -> "KanbanUpdateResponse":
+        return cls(
+            id=u.id,
+            proposal_id=u.proposal_id,
+            updater_id=u.updater_id,
+            from_stage=int(u.from_stage) if u.from_stage is not None else None,
+            to_stage=int(u.to_stage),
+            updated_at=u.updated_at,
+        )
+
+
+@router.get("/proposals/{proposal_id}/history", response_model=list[KanbanUpdateResponse])
+def get_proposal_history(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS)),
+):
+    """Return all stage-transition records for a proposal, ordered chronologically."""
+    _get_proposal_or_404(session, proposal_id)
+    statement = (
+        select(KanbanUpdate)
+        .where(KanbanUpdate.proposal_id == proposal_id)
+        .order_by(KanbanUpdate.updated_at, KanbanUpdate.id)
+    )
+    updates = session.exec(statement).all()
+    return [KanbanUpdateResponse.from_update(u) for u in updates]
+
 
 @router.post("/proposals/{proposal_id}/sustain", response_model=CallingProposal)
 def sustain_proposal(

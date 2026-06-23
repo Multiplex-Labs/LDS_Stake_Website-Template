@@ -1,5 +1,6 @@
 export const SELECT_NONE = "__none__";
 export const HC_CALLING_NAME = "High Councilor";
+export const BISHOP_CALLING_NAME = "Bishop";
 
 export const WARDS = [
   "9th Ward", "10th Ward", "11th Ward", "12th Ward",
@@ -20,7 +21,7 @@ export const KANBAN_STAGES = [
   { key: "0", id: "pending-stake-approval", label: "Stake Presidency Approval", badgeVariant: "outline",    cssClass: "stage-sp-approval"  },
   { key: "1", id: "pending-hc-approval",    label: "High Council Approval",     badgeVariant: "ghost",      cssClass: "stage-hc-approval"  },
   { key: "2", id: "pending-interview",      label: "Interview",                 badgeVariant: "secondary",  cssClass: "stage-interview"    },
-  { key: "3", id: "pending-sustainment",    label: "Sustainment",               badgeVariant: "secondary",  cssClass: "stage-sustain"      },
+  { key: "3", id: "pending-sustainment",    label: "Sustaining",                badgeVariant: "secondary",  cssClass: "stage-sustain"      },
   { key: "4", id: "pending-setting-apart",  label: "Setting Apart",             badgeVariant: "neutral",    cssClass: "stage-set-apart"    },
   { key: "5", id: "pending-lcr",            label: "LCR Update",                badgeVariant: "default",    cssClass: "stage-lcr-update"   },
 ] as const;

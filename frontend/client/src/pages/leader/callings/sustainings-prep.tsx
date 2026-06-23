@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, type ChangeEvent, type ChangeEventHandler } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type ChangeEvent, type ChangeEventHandler } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -332,7 +332,7 @@ export default function SustainingPrep() {
   const [state, setState] = useState<SustainingPrepState>(() => loadSustainingPrep());
   const [ordinationOpen, setOrdinationOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<SustainingItem | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  const reconciled = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [month, setMonth] = useState<Date>(new Date());
   const [openWards, setOpenWards] = useState<Set<string>>(() =>
@@ -376,24 +376,44 @@ export default function SustainingPrep() {
     [wards],
   );
 
-  // Auto-populate pool on first load if no proposals are tracked yet
+  // Reconcile saved state against the live board on first load.
+  // Adds new stage-3 proposals, removes stale ones, and preserves valid ward assignments.
   useEffect(() => {
-    if (initialized || boardLoading || sustainProposals.length === 0) return;
-    setInitialized(true);
-    const allProposalItems = [
-      ...state.unassigned.filter((i) => i.type === "proposal"),
-      ...state.wardAssignments.flatMap((wa) => wa.items.filter((i) => i.type === "proposal")),
-    ];
-    if (allProposalItems.length === 0) {
-      setState((prev) => ({
-        ...prev,
-        unassigned: [
-          ...sustainProposals.map((p) => ({ type: "proposal" as const, proposalId: p.id })),
-          ...prev.unassigned.filter((i) => i.type === "ordination"),
-        ],
-      }));
-    }
-  }, [initialized, boardLoading, sustainProposals, state]);
+    if (reconciled.current || boardLoading || sustainProposals.length === 0) return;
+    reconciled.current = true;
+
+    const validIds = new Set(sustainProposals.map((p) => p.id));
+
+    const trackedIds = new Set<number>([
+      ...state.unassigned.flatMap((i) => (i.type === "proposal" ? [i.proposalId] : [])),
+      ...state.wardAssignments.flatMap((wa) =>
+        wa.items.flatMap((i) => (i.type === "proposal" ? [i.proposalId] : []))
+      ),
+    ]);
+
+    const newProposals = sustainProposals.filter((p) => !trackedIds.has(p.id));
+    const staleIds = new Set(Array.from(trackedIds).filter((id) => !validIds.has(id)));
+
+    if (newProposals.length === 0 && staleIds.size === 0) return;
+
+    setState((prev) => {
+      const unassigned = [
+        ...prev.unassigned.filter(
+          (i) => i.type === "ordination" || !staleIds.has(i.proposalId)
+        ),
+        ...newProposals.map((p) => ({ type: "proposal" as const, proposalId: p.id })),
+      ];
+      const wardAssignments = prev.wardAssignments
+        .map((wa) => ({
+          ...wa,
+          items: wa.items.filter(
+            (i) => i.type === "ordination" || !staleIds.has(i.proposalId)
+          ),
+        }))
+        .filter((wa) => wa.items.length > 0);
+      return { ...prev, unassigned, wardAssignments };
+    });
+  }, [boardLoading, sustainProposals]);
 
   // Persist every state change
   useEffect(() => {
@@ -402,7 +422,6 @@ export default function SustainingPrep() {
 
   const handleClearAll = useCallback(() => {
     clearSustainingPrep();
-    setInitialized(false);
     setOpenWards(new Set());
     setState({
       version: 1,

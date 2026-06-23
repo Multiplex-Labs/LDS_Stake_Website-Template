@@ -18,7 +18,7 @@ class KanbanUpdate(BaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
     proposal_id: int = Field(foreign_key="callingproposal.id", index=True)
     updater_id: int = Field(foreign_key="user.id", index=True)
-    from_stage: KanbanStages = Field(nullable=True)
+    from_stage: KanbanStages | None = Field(default=None, nullable=True)
     to_stage: KanbanStages
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
