@@ -1,9 +1,20 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Calendar, User, Search, MessageSquare, Undo2, Pencil,
   Briefcase, Building2, Info, CheckCircle2, Check,
@@ -33,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { toast } from "sonner";
 import { useWardMap } from "@/lib/hooks";
 import { apiRequest } from "@/lib/queryClient";
 import { apiErrorStatus, fullName, cn } from "@/lib/utils";
@@ -40,7 +52,7 @@ import { BUTTON_HOVER } from "@/lib/constants";
 import { useAuthStore } from "@/stores/auth";
 import type {
   KanbanBoard, CallingProposal, CallingProposalWithCounts,
-  Ward, ApiUser, CallingComment, CallingInterview, KanbanUpdate,
+  Ward, ApiUser, CallingComment, CallingInterview, KanbanTransition,
 } from "@/types";
 
 const LOAD_BATCH = 50;
@@ -68,15 +80,23 @@ function estimatedRelease(completedIso: string, callingName: string): string {
   return d.toISOString().split("T")[0];
 }
 
-interface EditForm {
-  fname: string;
-  lname: string;
-  spouse_name: string;
-  proposed_calling: string;
-  ward_id: number;
-  interviewer_id: number | null;
-}
+const editFormSchema = z.object({
+  fname: z.string().min(1, "First name is required"),
+  lname: z.string().min(1, "Last name is required"),
+  spouse_name: z.string().default(""),
+  proposed_calling: z.string().min(1, "Calling is required"),
+  ward_id: z.number({ invalid_type_error: "Ward is required" }).int().positive("Ward is required"),
+  interviewer_id: z.number().int().positive().nullable().default(null),
+});
 
+type EditFormValues = z.infer<typeof editFormSchema>;
+
+/**
+ * "completed" — step has passed.
+ * "upcoming"  — step has a known future date.
+ * "pending"   — step has no date yet; awaiting action.
+ * "na"        — step does not apply to this proposal type.
+ */
 type TimelineStatus = "completed" | "upcoming" | "pending" | "na";
 
 interface TimelineStep {
@@ -91,7 +111,7 @@ const STAGE = { SP_APPROVAL: 0, HC_APPROVAL: 1, INTERVIEW: 2, SUSTAIN: 3, SET_AP
 
 function buildTimelineSteps(
   item: CallingProposalWithCounts,
-  history: KanbanUpdate[],
+  history: KanbanTransition[],
   interview: CallingInterview | undefined,
   userMap: Map<number, ApiUser>,
 ): TimelineStep[] {
@@ -202,13 +222,13 @@ function buildTimelineSteps(
 function StepCircle({ status }: { status: TimelineStatus }) {
   if (status === "completed") {
     return (
-      <div className="size-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
-        <Check className="size-2.5 text-white stroke-[3]" />
+      <div className="size-5 rounded-full bg-success flex items-center justify-center shrink-0">
+        <Check className="size-2.5 text-success-foreground stroke-[3]" />
       </div>
     );
   }
   if (status === "upcoming") {
-    return <div className="size-5 rounded-full border-2 border-amber-500 bg-background shrink-0" />;
+    return <div className="size-5 rounded-full border-2 border-warning bg-background shrink-0" />;
   }
   if (status === "pending") {
     return <div className="size-5 rounded-full border-2 border-muted-foreground/40 bg-background shrink-0" />;
@@ -224,9 +244,9 @@ function StepBadge({ status }: { status: TimelineStatus }) {
 
   const cls =
     status === "completed"
-      ? "border-green-500/40 text-green-600 dark:text-green-400 bg-green-500/10"
+      ? "border-success/40 text-success bg-success/10"
       : status === "upcoming"
-      ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+      ? "border-warning/40 text-warning bg-warning/10"
       : status === "pending"
       ? "border-border text-muted-foreground"
       : "border-muted-foreground/20 text-muted-foreground/50";
@@ -290,8 +310,13 @@ export default function ArchiveCallings() {
 
   const [selectedItem, setSelectedItem] = useState<CallingProposalWithCounts | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState<EditForm>({
-    fname: "", lname: "", spouse_name: "", proposed_calling: "", ward_id: 0, interviewer_id: null,
+
+  const editForm = useForm<EditFormValues>({
+    resolver: zodResolver(editFormSchema),
+    defaultValues: {
+      fname: "", lname: "", spouse_name: "", proposed_calling: "",
+      ward_id: 0 as unknown as number, interviewer_id: null,
+    },
   });
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -325,17 +350,18 @@ export default function ArchiveCallings() {
     retry: false,
   });
 
-  const { data: history = [] } = useQuery<KanbanUpdate[]>({
+  const { data: history = [] } = useQuery<KanbanTransition[]>({
     queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "history"],
     queryFn: () => {
       if (!selectedItem) throw new Error("[archive] historyQuery fired without selectedItem");
       return apiRequest("GET", `/api/calling-kanban/proposals/${selectedItem.id}/history`).then((r) => r.json());
     },
     enabled: !!selectedItem,
+    retry: false,
   });
 
   const updateProposal = useMutation({
-    mutationFn: async ({ form, originalInterviewerId }: { form: EditForm; originalInterviewerId: number | null }) => {
+    mutationFn: async ({ form, originalInterviewerId }: { form: EditFormValues; originalInterviewerId: number | null }) => {
       if (!selectedItem) throw new Error("no selected item");
       const payload: CallingProposal = {
         ...selectedItem,
@@ -346,11 +372,21 @@ export default function ArchiveCallings() {
         ward_id: form.ward_id,
       };
       await apiRequest("PUT", `/api/calling-kanban/proposals/${selectedItem.id}`, payload);
+
+      // Interview update is best-effort: if the PUT above succeeds but this fails,
+      // we surface a warning rather than treating the whole save as failed.
+      let interviewerFailed = false;
       if (!selectedItem.is_release && form.interviewer_id !== null && form.interviewer_id !== originalInterviewerId) {
-        await apiRequest("POST", `/api/calling-kanban/proposals/${selectedItem.id}/interview?interviewer_id=${form.interviewer_id}`);
+        try {
+          await apiRequest("POST", `/api/calling-kanban/proposals/${selectedItem.id}/interview?interviewer_id=${form.interviewer_id}`);
+        } catch (interviewErr) {
+          console.error("[archive] Failed to update interviewer after proposal save:", interviewErr);
+          interviewerFailed = true;
+        }
       }
+      return { interviewerFailed };
     },
-    onSuccess: (_, { form }) => {
+    onSuccess: ({ interviewerFailed }, { form }) => {
       setSelectedItem((prev) =>
         prev
           ? { ...prev, fname: form.fname, lname: form.lname, spouse_name: form.spouse_name, proposed_calling: form.proposed_calling, ward_id: form.ward_id }
@@ -359,15 +395,23 @@ export default function ArchiveCallings() {
       setIsEditing(false);
       queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/board"] });
       queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/proposals", selectedItem?.id, "interview"] });
+      if (interviewerFailed) {
+        toast.warning("Partially Saved", {
+          description: "Proposal details were saved, but the interviewer assignment could not be updated.",
+        });
+      }
     },
     onError: (err) => {
       console.error("[archive] Failed to update proposal:", err);
+      toast.error("Failed to Save", {
+        description: "Could not save changes. Please try again.",
+      });
     },
   });
 
   function startEdit() {
     if (!selectedItem) return;
-    setEditForm({
+    editForm.reset({
       fname: selectedItem.fname,
       lname: selectedItem.lname,
       spouse_name: selectedItem.spouse_name ?? "",
@@ -377,11 +421,6 @@ export default function ArchiveCallings() {
     });
     updateProposal.reset();
     setIsEditing(true);
-  }
-
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    updateProposal.mutate({ form: editForm, originalInterviewerId: interview?.interviewer_id ?? null });
   }
 
   function handleDialogClose(open: boolean) {
@@ -663,7 +702,7 @@ export default function ArchiveCallings() {
                         <Badge variant={selectedItem.is_release ? "destructive" : "outline"}>
                           {selectedItem.is_release ? "Release" : "Calling"}
                         </Badge>
-                        <Badge variant="outline" className="gap-1 border-green-500/40 text-green-600 dark:text-green-400 bg-green-500/10">
+                        <Badge variant="outline" className="gap-1 border-success/40 text-success bg-success/10">
                           <CheckCircle2 className="size-3" />
                           Completed {formatDate(selectedItem.updated_at)}
                         </Badge>
@@ -685,55 +724,109 @@ export default function ArchiveCallings() {
                   {/* Scrollable body */}
                   <div className="overflow-y-auto flex-1 p-6 space-y-4">
                     {isEditing ? (
-                      <form id="archive-edit-form" onSubmit={handleSave} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="edit-fname">First Name</Label>
-                            <Input id="edit-fname" value={editForm.fname} onChange={(e) => setEditForm((f) => ({ ...f, fname: e.target.value }))} required />
+                      <Form {...editForm}>
+                        <form
+                          id="archive-edit-form"
+                          onSubmit={editForm.handleSubmit((data) => {
+                            updateProposal.mutate({ form: data, originalInterviewerId: interview?.interviewer_id ?? null });
+                          })}
+                          className="space-y-4"
+                        >
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField
+                              control={editForm.control}
+                              name="fname"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>First Name</FormLabel>
+                                  <FormControl><Input id="edit-fname" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={editForm.control}
+                              name="lname"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Last Name</FormLabel>
+                                  <FormControl><Input id="edit-lname" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={editForm.control}
+                              name="spouse_name"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Spouse</FormLabel>
+                                  <FormControl><Input id="edit-spouse" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={editForm.control}
+                              name="proposed_calling"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Calling</FormLabel>
+                                  <FormControl><Input id="edit-calling" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={editForm.control}
+                              name="ward_id"
+                              render={({ field }) => (
+                                <FormItem className="col-span-2">
+                                  <FormLabel>Ward</FormLabel>
+                                  <Select
+                                    value={field.value ? String(field.value) : ""}
+                                    onValueChange={(v) => field.onChange(Number(v))}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {wards.map((w) => <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            {!selectedItem.is_release && (
+                              <FormField
+                                control={editForm.control}
+                                name="interviewer_id"
+                                render={({ field }) => (
+                                  <FormItem className="col-span-2">
+                                    <FormLabel>Interviewer</FormLabel>
+                                    <Select
+                                      value={field.value !== null ? String(field.value) : "none"}
+                                      onValueChange={(v) => field.onChange(v === "none" ? null : Number(v))}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger><SelectValue placeholder="Select interviewer…" /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        {users.filter((u) => u.active).map((u) => (
+                                          <SelectItem key={u.id} value={String(u.id)}>{fullName(u)}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
                           </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="edit-lname">Last Name</Label>
-                            <Input id="edit-lname" value={editForm.lname} onChange={(e) => setEditForm((f) => ({ ...f, lname: e.target.value }))} required />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="edit-spouse">Spouse</Label>
-                            <Input id="edit-spouse" value={editForm.spouse_name} onChange={(e) => setEditForm((f) => ({ ...f, spouse_name: e.target.value }))} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="edit-calling">Calling</Label>
-                            <Input id="edit-calling" value={editForm.proposed_calling} onChange={(e) => setEditForm((f) => ({ ...f, proposed_calling: e.target.value }))} required />
-                          </div>
-                          <div className="space-y-1.5 col-span-2">
-                            <Label>Ward</Label>
-                            <Select value={String(editForm.ward_id)} onValueChange={(v) => setEditForm((f) => ({ ...f, ward_id: Number(v) }))}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {wards.map((w) => <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {!selectedItem.is_release && (
-                            <div className="space-y-1.5 col-span-2">
-                              <Label>Interviewer</Label>
-                              <Select
-                                value={editForm.interviewer_id !== null ? String(editForm.interviewer_id) : "none"}
-                                onValueChange={(v) => setEditForm((f) => ({ ...f, interviewer_id: v === "none" ? null : Number(v) }))}
-                              >
-                                <SelectTrigger><SelectValue placeholder="Select interviewer…" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {users.filter((u) => u.active).map((u) => (
-                                    <SelectItem key={u.id} value={String(u.id)}>{fullName(u)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </div>
-                        {updateProposal.isError && (
-                          <p className="text-sm text-destructive">Failed to save changes. Please try again.</p>
-                        )}
-                      </form>
+                        </form>
+                      </Form>
                     ) : (
                       <>
                         {/* Info cards */}

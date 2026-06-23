@@ -210,8 +210,9 @@ def update_proposal(
     proposal.proposed_calling = proposal_data.proposed_calling
     proposal.ward_id = proposal_data.ward_id
     proposal.is_release = proposal_data.is_release
-    proposal.updated_at = datetime.now(timezone.utc)
-    
+    # updated_at is intentionally not modified: for DONE proposals it records the completion
+    # date, and editing metadata fields (name, calling, ward) should not change that timestamp.
+
     session.add(proposal)
     session.commit()
     session.refresh(proposal)
@@ -561,6 +562,17 @@ class KanbanUpdateResponse(BaseModel):
     to_stage: int
     updated_at: datetime
 
+    @classmethod
+    def from_update(cls, u: KanbanUpdate) -> "KanbanUpdateResponse":
+        return cls(
+            id=u.id,
+            proposal_id=u.proposal_id,
+            updater_id=u.updater_id,
+            from_stage=int(u.from_stage) if u.from_stage is not None else None,
+            to_stage=int(u.to_stage),
+            updated_at=u.updated_at,
+        )
+
 
 @router.get("/proposals/{proposal_id}/history", response_model=list[KanbanUpdateResponse])
 def get_proposal_history(
@@ -576,17 +588,7 @@ def get_proposal_history(
         .order_by(KanbanUpdate.updated_at, KanbanUpdate.id)
     )
     updates = session.exec(statement).all()
-    return [
-        KanbanUpdateResponse(
-            id=u.id,
-            proposal_id=u.proposal_id,
-            updater_id=u.updater_id,
-            from_stage=int(u.from_stage) if u.from_stage is not None else None,
-            to_stage=int(u.to_stage),
-            updated_at=u.updated_at,
-        )
-        for u in updates
-    ]
+    return [KanbanUpdateResponse.from_update(u) for u in updates]
 
 
 @router.post("/proposals/{proposal_id}/sustain", response_model=CallingProposal)

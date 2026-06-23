@@ -36,6 +36,9 @@
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
 
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -72,6 +75,8 @@
   --destructive-foreground: 0 0% 98%;
   --success: 142 71% 38%;
   --success-foreground: 0 0% 98%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 98%;
   --border: 240 3.7% 15.9%;
   --input: 240 3.7% 15.9%;
   --ring: 240 4.9% 83.9%;
@@ -96,6 +101,8 @@
   --destructive-foreground: 210 40% 98%;
   --success: 142 72% 29%;
   --success-foreground: 0 0% 98%;
+  --warning: 38 92% 45%;
+  --warning-foreground: 0 0% 98%;
   --border: 214 32% 91%;
   --input: 214 32% 91%;
   --ring: 222 47% 20%;

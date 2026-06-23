@@ -109,12 +109,15 @@ export interface CallingInterview {
   interview_date: string | null;
 }
 
-export interface KanbanUpdate {
+// Numeric literal union for KanbanStages (0–6), mirrors backend KanbanStages enum.
+export type KanbanStage = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface KanbanTransition {
   id: number;
   proposal_id: number;
   updater_id: number;
-  from_stage: number | null;
-  to_stage: number;
+  from_stage: KanbanStage | null;
+  to_stage: KanbanStage;
   updated_at: string;
 }
 

@@ -193,8 +193,8 @@ interface SubmittedItem {
 
 function DuplicateWarning({ name, calling }: { name: string; calling: string }) {
   return (
-    <div className="flex items-start gap-2 border border-yellow-500/40 bg-yellow-500/10 text-sm rounded-md p-3">
-      <TriangleAlert className="size-4 shrink-0 mt-0.5 text-yellow-500" />
+    <div className="flex items-start gap-2 border border-warning/40 bg-warning/10 text-sm rounded-md p-3">
+      <TriangleAlert className="size-4 shrink-0 mt-0.5 text-warning" />
       <span>
         A proposal for <span className="font-medium">{name}</span> as{" "}
         <span className="font-medium">{calling}</span> is already in the pipeline.
@@ -491,14 +491,14 @@ function SubmissionSummary({
             </div>
             <div className="pl-6">
               {callingComplete ? (
-                <div className="flex items-center gap-1.5 text-xs text-green-500">
-                  <span className="size-2 rounded-full bg-green-500 inline-block" />
+                <div className="flex items-center gap-1.5 text-xs text-success">
+                  <span className="size-2 rounded-full bg-success inline-block" />
                   Complete
                 </div>
               ) : showCallingSection ? (
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-xs text-yellow-500">
-                    <span className="size-2 rounded-full bg-yellow-500 inline-block" />
+                  <div className="flex items-center gap-1.5 text-xs text-warning">
+                    <span className="size-2 rounded-full bg-warning inline-block" />
                     Incomplete
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -537,14 +537,14 @@ function SubmissionSummary({
                     {r.calling || <span className="italic">Calling not selected</span>}
                   </p>
                   {r.missingCount === 0 ? (
-                    <div className="flex items-center gap-1.5 text-xs text-green-500">
-                      <span className="size-2 rounded-full bg-green-500 inline-block" />
+                    <div className="flex items-center gap-1.5 text-xs text-success">
+                      <span className="size-2 rounded-full bg-success inline-block" />
                       Complete
                     </div>
                   ) : (
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-xs text-yellow-500">
-                        <span className="size-2 rounded-full bg-yellow-500 inline-block" />
+                      <div className="flex items-center gap-1.5 text-xs text-warning">
+                        <span className="size-2 rounded-full bg-warning inline-block" />
                         Incomplete
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -573,7 +573,7 @@ function SubmissionSummary({
                 "You can add multiple releases if needed",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <CircleCheck className="size-3.5 shrink-0 mt-0.5 text-green-500" />
+                  <CircleCheck className="size-3.5 shrink-0 mt-0.5 text-success" />
                   {item}
                 </li>
               ))}
