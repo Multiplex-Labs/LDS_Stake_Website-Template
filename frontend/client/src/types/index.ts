@@ -102,6 +102,22 @@ export interface CallingComment {
   edited_at: string | null;
 }
 
+export interface CallingInterview {
+  id: number;
+  proposal_id: number;
+  interviewer_id: number | null;
+  interview_date: string | null;
+}
+
+export interface KanbanUpdate {
+  id: number;
+  proposal_id: number;
+  updater_id: number;
+  from_stage: number | null;
+  to_stage: number;
+  updated_at: string;
+}
+
 export interface HcAssignment {
   id: number;
   slot_number: number;

@@ -553,6 +553,42 @@ def get_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
 
+class KanbanUpdateResponse(BaseModel):
+    id: int
+    proposal_id: int
+    updater_id: int
+    from_stage: int | None = None
+    to_stage: int
+    updated_at: datetime
+
+
+@router.get("/proposals/{proposal_id}/history", response_model=list[KanbanUpdateResponse])
+def get_proposal_history(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS)),
+):
+    """Return all stage-transition records for a proposal, ordered chronologically."""
+    _get_proposal_or_404(session, proposal_id)
+    statement = (
+        select(KanbanUpdate)
+        .where(KanbanUpdate.proposal_id == proposal_id)
+        .order_by(KanbanUpdate.updated_at, KanbanUpdate.id)
+    )
+    updates = session.exec(statement).all()
+    return [
+        KanbanUpdateResponse(
+            id=u.id,
+            proposal_id=u.proposal_id,
+            updater_id=u.updater_id,
+            from_stage=int(u.from_stage) if u.from_stage is not None else None,
+            to_stage=int(u.to_stage),
+            updated_at=u.updated_at,
+        )
+        for u in updates
+    ]
+
+
 @router.post("/proposals/{proposal_id}/sustain", response_model=CallingProposal)
 def sustain_proposal(
     request: Request,
