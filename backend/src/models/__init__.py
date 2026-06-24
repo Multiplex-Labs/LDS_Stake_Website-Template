@@ -21,3 +21,12 @@ from .calling_kanban import (
 )
 from .ward import Ward
 from .presidency_assignment import PresidencyAssignment
+from .temple_recommend import (
+    TempleRecommendConfig,
+    AppointmentType,
+    AvailabilityWindow,
+    AvailabilityException,
+    BookingStatus,
+    Booking,
+    BookingAuditLog,
+)

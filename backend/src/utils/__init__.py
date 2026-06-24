@@ -13,8 +13,14 @@ from .db import (
     create_presidency_assignments,
     validate_unique_field,
     speaking_assignment_cleanup_loop,
-    create_discord_bot_user
+    create_discord_bot_user,
+    upsert_temple_recommend_config,
+    create_default_appointment_types,
+    pre_populate_fast_sunday_exceptions,
+    CURATED_ICONS,
 )
+
+from .email import email_service
 
 from .time import format_datetime_http
 

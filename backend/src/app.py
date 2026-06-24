@@ -7,14 +7,17 @@ from sqlmodel import Session, select, func
 from .db.orm import ORM
 from .models import User
 from .utils import (
-    create_system_callings_and_assignments, 
+    create_system_callings_and_assignments,
     session_cleanup_loop,
     create_default_admin_user,
     load_speaking_schedule,
     speaking_assignment_cleanup_loop,
     load_wards,
     DiscordBotHandle,
-    create_backup_loop
+    create_backup_loop,
+    upsert_temple_recommend_config,
+    create_default_appointment_types,
+    pre_populate_fast_sunday_exceptions,
 )
 import os
 import asyncio
@@ -43,12 +46,19 @@ async def lifespan(app: FastAPI):
     create_system_callings_and_assignments()
     ## Load wards from file and create bishop callings and slots for each ward
     load_wards()
+    ## Temple recommend appointment seeding
+    upsert_temple_recommend_config()
+    create_default_appointment_types()
+    pre_populate_fast_sunday_exceptions()
     ## Start background task for session cleanup
     session_cleanup_task = asyncio.create_task(session_cleanup_loop())
     ## Start background task for speaking assignment cleanup
     speaking_assignment_cleanup_task = asyncio.create_task(speaking_assignment_cleanup_loop())
     ## Start background task for calling kanban backup creation
     backup_loop_task = asyncio.create_task(create_backup_loop(app.state.discord_bot))
+    ## Start background task to expire unconfirmed bookings
+    from .routers.appointment_bookings import expire_pending_bookings_loop
+    expire_bookings_task = asyncio.create_task(expire_pending_bookings_loop())
     ## Load speaking schedule from csv
     schedule = load_speaking_schedule()
     if schedule:
@@ -67,6 +77,7 @@ async def lifespan(app: FastAPI):
     session_cleanup_task.cancel()
     speaking_assignment_cleanup_task.cancel()
     backup_loop_task.cancel()
+    expire_bookings_task.cancel()
 
 app = FastAPI(title="lds-stake-backend", lifespan=lifespan)
 
@@ -98,6 +109,10 @@ from .routers import (
     calling_kanban_router,
     ward_router,
     presidency_router,
+    temple_config_router,
+    appointment_types_router,
+    appointment_availability_router,
+    appointment_bookings_router,
 )
 
 app.include_router(health_router)
@@ -109,3 +124,7 @@ app.include_router(speaking_router)
 app.include_router(calling_kanban_router)
 app.include_router(ward_router)
 app.include_router(presidency_router)
+app.include_router(temple_config_router)
+app.include_router(appointment_types_router)
+app.include_router(appointment_availability_router)
+app.include_router(appointment_bookings_router)

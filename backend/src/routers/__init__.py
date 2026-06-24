@@ -7,3 +7,7 @@ from .speaking import router as speaking_router
 from .calling_kanban import router as calling_kanban_router
 from .ward import router as ward_router
 from .presidency import router as presidency_router
+from .temple_config import router as temple_config_router
+from .appointment_types import router as appointment_types_router
+from .appointment_availability import router as appointment_availability_router
+from .appointment_bookings import router as appointment_bookings_router
