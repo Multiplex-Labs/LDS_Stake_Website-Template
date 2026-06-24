@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date as _date, datetime
 from enum import Enum
 from typing import Optional
 from sqlmodel import Field, SQLModel, UniqueConstraint
@@ -40,17 +40,20 @@ class AvailabilityWindow(BaseModel, table=True):
     day_of_week: int = Field(ge=0, le=6)  # 0=Monday, 6=Sunday
     start_minute: int = Field(ge=0, lt=1440)  # minute of day
     end_minute: int = Field(ge=0, lt=1440)
-    valid_from: Optional[date] = Field(default=None)
-    valid_until: Optional[date] = Field(default=None)
+    valid_from: Optional[_date] = Field(default=None)
+    valid_until: Optional[_date] = Field(default=None)
     is_active: bool = Field(default=True)
 
 
 class AvailabilityException(BaseModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    date: date
+    date: Optional[_date] = Field(default=None)   # None when recurrence is set
     reason: str
     is_global: bool = Field(default=False)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    # Recurring rules: None = one-time date exception
+    # "first_sunday_monthly" = first Sunday of every month (Fast Sunday)
+    recurrence: Optional[str] = Field(default=None)
 
 
 class BookingStatus(str, Enum):
@@ -73,7 +76,7 @@ class Booking(BaseModel, table=True):
     member_name: str
     member_email: str
     member_phone: str
-    booking_date: date
+    booking_date: _date
     start_minute_of_day: int
     end_minute_of_day: int
     start_datetime: datetime  # UTC

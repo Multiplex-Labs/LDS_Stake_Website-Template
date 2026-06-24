@@ -1,4 +1,6 @@
-from datetime import datetime, date, timedelta
+import calendar as _cal
+import json
+from datetime import datetime, date as _date, timedelta
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
@@ -52,11 +54,85 @@ def _get_interviewer_user_ids(session: Session) -> set:
     return interviewer_user_ids
 
 
+def _matches_freq(d: _date, rule: dict, start: _date) -> bool:
+    """Check if d matches the frequency pattern, ignoring end conditions."""
+    freq = rule.get("freq", "weekly")
+    interval = max(1, int(rule.get("interval", 1)))
+
+    if freq == "daily":
+        delta = (d - start).days
+        return delta >= 0 and delta % interval == 0
+
+    if freq == "weekly":
+        days = rule.get("days") or []
+        if d.weekday() not in days:
+            return False
+        return ((d - start).days // 7) % interval == 0
+
+    if freq == "monthly":
+        month_delta = (d.year - start.year) * 12 + (d.month - start.month)
+        if month_delta < 0 or month_delta % interval != 0:
+            return False
+        if rule.get("month_by") == "day":
+            return d.day == int(rule.get("month_day", start.day))
+        # Default: by weekday
+        mw = rule.get("month_weekday") or {"n": 1, "day": 6}
+        n, day = int(mw.get("n", 1)), int(mw.get("day", 6))
+        if d.weekday() != day:
+            return False
+        if n == -1:
+            last = _cal.monthrange(d.year, d.month)[1]
+            test = _date(d.year, d.month, last)
+            while test.weekday() != day:
+                test = _date(d.year, d.month, test.day - 1)
+            return d == test
+        return (n - 1) * 7 < d.day <= n * 7
+
+    if freq == "yearly":
+        year_delta = d.year - start.year
+        return year_delta >= 0 and year_delta % interval == 0 and d.month == start.month and d.day == start.day
+
+    return False
+
+
+def _matches_recurrence(d: _date, rule_str: str, start: Optional[_date] = None) -> bool:
+    """Return True if date d matches the given recurrence rule."""
+    if rule_str == "first_sunday_monthly":
+        return d.weekday() == 6 and d.day <= 7
+
+    try:
+        rule = json.loads(rule_str)
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+    anchor = start or d
+    if d < anchor:
+        return False
+
+    end_type = rule.get("end_type", "never")
+    if end_type == "on":
+        end_str = rule.get("end_date")
+        if end_str and d > _date.fromisoformat(end_str):
+            return False
+    elif end_type == "after":
+        end_count = int(rule.get("end_count", 0))
+        count = 0
+        cur = anchor
+        while cur <= d:
+            if _matches_freq(cur, rule, anchor):
+                count += 1
+            cur += timedelta(days=1)
+        if count > end_count:
+            return False
+
+    return _matches_freq(d, rule, anchor)
+
+
 def _generate_slots(
     session: Session,
     appointment_type_id: int,
-    date_from: date,
-    date_to: date,
+    date_from: _date,
+    date_to: _date,
 ) -> List[dict]:
     """Core slot generation algorithm."""
     config = session.get(TempleRecommendConfig, 1)
@@ -83,13 +159,25 @@ def _generate_slots(
     while current_date <= date_to:
         dow = current_date.weekday()  # 0=Mon, 6=Sun
 
-        # Skip if global exception exists for this date
+        # Skip if a global exception covers this date (one-time or recurring)
         global_exc = session.exec(
             select(AvailabilityException).where(
                 AvailabilityException.date == current_date,
                 AvailabilityException.is_global == True,
+                AvailabilityException.recurrence == None,
             )
         ).first()
+        if not global_exc:
+            recurring_global_excs = session.exec(
+                select(AvailabilityException).where(
+                    AvailabilityException.is_global == True,
+                    AvailabilityException.recurrence != None,
+                )
+            ).all()
+            global_exc = next(
+                (e for e in recurring_global_excs if _matches_recurrence(current_date, e.recurrence, e.date)),
+                None,
+            )
         if global_exc:
             current_date += timedelta(days=1)
             continue
@@ -186,8 +274,8 @@ class AvailabilityWindowCreate(SQLModel):
     day_of_week: int = Field(ge=0, le=6)
     start_minute: int = Field(ge=0, lt=1440)
     end_minute: int = Field(ge=0, lt=1440)
-    valid_from: Optional[date] = None
-    valid_until: Optional[date] = None
+    valid_from: Optional[_date] = None
+    valid_until: Optional[_date] = None
     is_active: bool = True
 
 
@@ -195,16 +283,27 @@ class AvailabilityWindowUpdate(SQLModel):
     day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
     start_minute: Optional[int] = Field(default=None, ge=0, lt=1440)
     end_minute: Optional[int] = Field(default=None, ge=0, lt=1440)
-    valid_from: Optional[date] = None
-    valid_until: Optional[date] = None
+    valid_from: Optional[_date] = None
+    valid_until: Optional[_date] = None
     is_active: Optional[bool] = None
 
 
+def _validate_recurrence(rule_str: str) -> bool:
+    if rule_str == "first_sunday_monthly":
+        return True
+    try:
+        rule = json.loads(rule_str)
+        return rule.get("freq") in {"daily", "weekly", "monthly", "yearly"}
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return False
+
+
 class AvailabilityExceptionCreate(SQLModel):
-    date: date
+    date: Optional[_date] = None
     reason: str
     is_global: bool = False
     user_id: Optional[int] = None
+    recurrence: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +313,8 @@ class AvailabilityExceptionCreate(SQLModel):
 @router.get("/slots")
 def get_slots(
     type_id: int = Query(...),
-    date_from: date = Query(...),
-    date_to: date = Query(...),
+    date_from: _date = Query(...),
+    date_to: _date = Query(...),
     session: Session = Depends(get_session),
 ) -> List[dict]:
     """Return available booking slots for a given appointment type and date range.
@@ -227,7 +326,7 @@ def get_slots(
 
     config = session.get(TempleRecommendConfig, 1)
     if config:
-        max_date = date.today() + timedelta(days=config.booking_window_days)
+        max_date = _date.today() + timedelta(days=config.booking_window_days)
         if date_from > max_date:
             raise HTTPException(
                 status_code=422,
@@ -251,11 +350,11 @@ def get_available_dates(
     """Return a set of dates in the given month that have at least one available slot. Public endpoint."""
     import calendar
     _, last_day = calendar.monthrange(year, month)
-    month_from = date(year, month, 1)
-    month_to = date(year, month, last_day)
+    month_from = _date(year, month, 1)
+    month_to = _date(year, month, last_day)
 
     # Clamp to today onwards and to booking window
-    today = date.today()
+    today = _date.today()
     config = session.get(TempleRecommendConfig, 1)
     max_date = today + timedelta(days=config.booking_window_days if config else 60)
 
@@ -295,7 +394,7 @@ def get_availability_health(
 ) -> List[dict]:
     """Return per-type next available slot info. Requires MANAGE_APPOINTMENTS."""
     config = session.get(TempleRecommendConfig, 1)
-    today = date.today()
+    today = _date.today()
     lookahead_days = config.booking_window_days if config else 60
     search_to = today + timedelta(days=lookahead_days)
 
@@ -441,21 +540,20 @@ def create_exception(
     """Create an availability exception. Requires MANAGE_APPOINTMENTS.
     If is_global=True, user_id must be None. If is_global=False, user_id must be set."""
     if body.is_global and body.user_id is not None:
-        raise HTTPException(
-            status_code=422,
-            detail="Global exceptions must not have a user_id.",
-        )
+        raise HTTPException(status_code=422, detail="Global exceptions must not have a user_id.")
     if not body.is_global and body.user_id is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Non-global exceptions must have a user_id.",
-        )
+        raise HTTPException(status_code=422, detail="Non-global exceptions must have a user_id.")
+    if body.recurrence is not None and not _validate_recurrence(body.recurrence):
+        raise HTTPException(status_code=422, detail=f"Unsupported recurrence rule: {body.recurrence}")
+    if body.recurrence is None and body.date is None:
+        raise HTTPException(status_code=422, detail="Either date or recurrence must be provided.")
 
     exc = AvailabilityException(
         date=body.date,
         reason=body.reason,
         is_global=body.is_global,
         user_id=body.user_id,
+        recurrence=body.recurrence,
     )
     session.add(exc)
     session.commit()

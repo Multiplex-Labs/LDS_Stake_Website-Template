@@ -247,10 +247,11 @@ export interface AvailabilityWindow {
 
 export interface AvailabilityException {
   id: number;
-  date: string;
+  date: string | null;     // null for recurring exceptions
   reason: string;
   is_global: boolean;
   user_id: number | null;
+  recurrence: string | null; // "first_sunday_monthly" | null
 }
 
 export type BookingStatus =
