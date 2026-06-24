@@ -1,6 +1,8 @@
 from typing import Optional
 from zoneinfo import available_timezones
 
+_VALID_TIMEZONES = available_timezones()
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Field, SQLModel, Session
 
@@ -45,7 +47,7 @@ def update_config(
     update_data = body.model_dump(exclude_none=True)
 
     if "timezone" in update_data:
-        if update_data["timezone"] not in available_timezones():
+        if update_data["timezone"] not in _VALID_TIMEZONES:
             raise HTTPException(status_code=422, detail="Invalid IANA timezone")
 
     for key, value in update_data.items():

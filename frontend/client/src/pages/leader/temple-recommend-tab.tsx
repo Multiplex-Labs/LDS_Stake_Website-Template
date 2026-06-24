@@ -90,26 +90,7 @@ import type {
   ApiCalling,
 } from "@/types";
 
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-function minutesToTime(m: number): string {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-}
-
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function formatTime12(m: number): string {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  const period = h < 12 ? "AM" : "PM";
-  const displayH = h % 12 === 0 ? 12 : h % 12;
-  return `${displayH}:${String(min).padStart(2, "0")} ${period}`;
-}
+import { DAYS_OF_WEEK, minutesToTime, timeToMinutes, formatTime12 } from "./time-utils";
 
 // ============================================================
 // SETTINGS SUB-TAB
@@ -1790,11 +1771,6 @@ function ExceptionSheet({
     return JSON.stringify(rule);
   }
 
-  function todayIso(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }
-
   const mutation = useMutation({
     mutationFn: async () => {
       const errs: Record<string, string> = {};
@@ -1806,7 +1782,7 @@ function ExceptionSheet({
       setErrors({});
 
       const res = await apiRequest("POST", "/api/appointment-availability/exceptions", {
-        date: mode === "one_time" ? oneTimeDate : todayIso(),
+        date: mode === "one_time" ? oneTimeDate : getLocalDateString(),
         reason: reason.trim(),
         recurrence: mode === "recurring" ? buildRecurrence() : null,
         is_global: isGlobal,

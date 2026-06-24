@@ -29,7 +29,7 @@ from ..models import (
 )
 from ..db import get_session
 from ..utils import CallingUser, email_service
-from .appointment_availability import _matches_recurrence
+from .appointment_availability import _matches_recurrence, _get_interviewer_user_ids
 
 logger = logging.getLogger("application")
 
@@ -48,24 +48,6 @@ def _generate_confirmation_token() -> str:
     payload = f"{random_part}:new"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{random_part}.{sig}"
-
-
-def _get_interviewer_user_ids(session: Session) -> set:
-    perm_rows = session.exec(
-        select(Permissions).where(Permissions.is_calling == True)
-    ).all()
-    calling_ids = [int(p.foreign_id) for p in perm_rows if (p.scopes & 512) == 512]
-    interviewer_user_ids: set = set()
-    for cid in calling_ids:
-        ucs = session.exec(
-            select(UserCalling).where(
-                UserCalling.calling_id == cid,
-                UserCalling.user_id.is_not(None),
-            )
-        ).all()
-        for uc in ucs:
-            interviewer_user_ids.add(uc.user_id)
-    return interviewer_user_ids
 
 
 def _find_interviewer_for_slot(

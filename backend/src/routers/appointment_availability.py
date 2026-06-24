@@ -6,6 +6,7 @@ from typing import List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import model_validator
 from sqlmodel import Field, SQLModel, Session, select
 
 from ..models import (
@@ -42,7 +43,7 @@ def _get_interviewer_user_ids(session: Session) -> set:
     calling_ids = [
         int(p.foreign_id)
         for p in perm_rows
-        if (p.scopes & 512) == 512
+        if p.scopes & int(Permission.MANAGE_APPOINTMENTS)
     ]
     interviewer_user_ids: set = set()
     for cid in calling_ids:
@@ -171,6 +172,13 @@ def _generate_slots(
     if not interviewer_user_ids:
         return []
 
+    recurring_global_excs = session.exec(
+        select(AvailabilityException).where(
+            AvailabilityException.is_global == True,
+            AvailabilityException.recurrence != None,
+        )
+    ).all()
+
     slots: List[dict] = []
     current_date = date_from
 
@@ -186,12 +194,6 @@ def _generate_slots(
             )
         ).first()
         if not global_exc:
-            recurring_global_excs = session.exec(
-                select(AvailabilityException).where(
-                    AvailabilityException.is_global == True,
-                    AvailabilityException.recurrence != None,
-                )
-            ).all()
             global_exc = next(
                 (e for e in recurring_global_excs if _matches_recurrence(current_date, e.recurrence, e.date)),
                 None,
@@ -305,6 +307,12 @@ class AvailabilityWindowCreate(SQLModel):
     valid_until: Optional[_date] = None
     is_active: bool = True
 
+    @model_validator(mode="after")
+    def check_minute_range(self) -> "AvailabilityWindowCreate":
+        if self.start_minute >= self.end_minute:
+            raise ValueError("end_minute must be greater than start_minute")
+        return self
+
 
 class AvailabilityWindowUpdate(SQLModel):
     day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
@@ -320,8 +328,12 @@ def _validate_recurrence(rule_str: str) -> bool:
         return True
     try:
         rule = json.loads(rule_str)
-        return rule.get("freq") in {"daily", "weekly", "monthly", "yearly"}
-    except (json.JSONDecodeError, AttributeError, TypeError):
+        if rule.get("freq") not in {"daily", "weekly", "monthly", "yearly"}:
+            return False
+        if rule.get("end_type") == "after" and int(rule.get("end_count", 0)) < 1:
+            return False
+        return True
+    except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
         return False
 
 
@@ -480,9 +492,6 @@ def create_window(
     _: object = Depends(CallingUser(permissions=[Permission.MANAGE_APPOINTMENTS])),
 ) -> AvailabilityWindow:
     """Create a new availability window. Requires MANAGE_APPOINTMENTS."""
-    if body.end_minute <= body.start_minute:
-        raise HTTPException(status_code=422, detail="end_minute must be greater than start_minute.")
-
     window = AvailabilityWindow(
         user_id=body.user_id,
         day_of_week=body.day_of_week,
@@ -514,7 +523,6 @@ def update_window(
     for key, value in update_data.items():
         setattr(window, key, value)
 
-    # Re-validate start/end after any updates
     if window.end_minute <= window.start_minute:
         raise HTTPException(status_code=422, detail="end_minute must be greater than start_minute.")
 
@@ -574,15 +582,6 @@ def create_exception(
         raise HTTPException(status_code=422, detail=f"Unsupported recurrence rule: {body.recurrence}")
     if body.recurrence is None and body.date is None:
         raise HTTPException(status_code=422, detail="Either date or recurrence must be provided.")
-
-    if body.recurrence is not None and body.recurrence not in {"first_sunday_monthly"}:
-        try:
-            rule = json.loads(body.recurrence)
-            if rule.get("end_type") == "after":
-                if int(rule.get("end_count", 0)) < 1:
-                    raise HTTPException(status_code=422, detail="end_count must be at least 1.")
-        except (json.JSONDecodeError, ValueError, TypeError):
-            pass  # already validated by _validate_recurrence
 
     exc = AvailabilityException(
         date=body.date,

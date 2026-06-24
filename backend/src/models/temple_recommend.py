@@ -1,10 +1,9 @@
-from datetime import date as _date, datetime
+from datetime import date as _date, datetime, timezone
 from enum import Enum
 from typing import Optional
 from sqlmodel import Field, SQLModel, UniqueConstraint
 from sqlalchemy import Column
 from sqlalchemy.dialects.sqlite import JSON as SAJSON
-from pydantic import model_validator
 
 from .base import BaseModel
 
@@ -44,12 +43,6 @@ class AvailabilityWindow(BaseModel, table=True):
     valid_from: Optional[_date] = Field(default=None)
     valid_until: Optional[_date] = Field(default=None)
     is_active: bool = Field(default=True)
-
-    @model_validator(mode="after")
-    def validate_minute_range(self) -> "AvailabilityWindow":
-        if self.start_minute >= self.end_minute:
-            raise ValueError("end_minute must be greater than start_minute")
-        return self
 
 
 class AvailabilityException(BaseModel, table=True):
@@ -96,7 +89,7 @@ class Booking(BaseModel, table=True):
     notification_sent_at: Optional[datetime] = Field(default=None)
     calendar_sync_status: str = Field(default="not_applicable")
     calendar_event_id: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class BookingAuditLog(BaseModel, table=True):
@@ -104,5 +97,5 @@ class BookingAuditLog(BaseModel, table=True):
     booking_id: int = Field(foreign_key="booking.id")
     event_type: str
     actor_user_id: Optional[int] = Field(default=None, foreign_key="user.id")
-    occurred_at: datetime = Field(default_factory=datetime.utcnow)
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     event_metadata: Optional[dict] = Field(default=None, sa_column=Column("metadata", SAJSON))

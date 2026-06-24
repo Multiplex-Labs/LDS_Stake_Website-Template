@@ -33,26 +33,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/auth";
 import type { AvailabilityWindow } from "@/types";
 
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-function minutesToTime(m: number): string {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-}
-
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function formatTime12(m: number): string {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  const period = h < 12 ? "AM" : "PM";
-  const displayH = h % 12 === 0 ? 12 : h % 12;
-  return `${displayH}:${String(min).padStart(2, "0")} ${period}`;
-}
+import { DAYS_OF_WEEK, minutesToTime, timeToMinutes, formatTime12 } from "./time-utils";
 
 const windowSchema = z.object({
   day_of_week: z.coerce.number().int().min(0).max(6),
