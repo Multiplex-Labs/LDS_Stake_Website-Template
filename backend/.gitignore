@@ -8,3 +8,4 @@ __pycache__
 *.csv
 !wards.csv
 *.txt
+src/static/profile_images/

@@ -3,3 +3,5 @@ openspec/
 CLAUDE.md
 example/
 .DS_Store
+.idea/
+/package-lock.json
