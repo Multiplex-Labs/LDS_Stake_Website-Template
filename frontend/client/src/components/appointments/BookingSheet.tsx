@@ -176,7 +176,7 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
 
   const dateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
 
-  const { data: slotsData, isLoading: slotsLoading } = useQuery<AppointmentSlot[]>({
+  const { data: slotsData, isLoading: slotsLoading, isError: slotsError } = useQuery<AppointmentSlot[]>({
     queryKey: ["/api/appointment-availability/slots", type?.id, dateStr],
     queryFn: () =>
       apiRequest(
@@ -331,6 +331,8 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
                     <Skeleton className="h-8 w-full" />
                     <Skeleton className="h-8 w-full" />
                   </div>
+                ) : slotsError ? (
+                  <p className="text-sm text-destructive py-4 text-center">Failed to load. Please refresh.</p>
                 ) : slotGroups.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">
                     No slots available on this date — try another day.
@@ -474,7 +476,7 @@ function SuccessView({ booking, typeName, config }: SuccessViewProps) {
         <div>
           <p className="font-medium text-sm">Appointment Requested</p>
           <p className="text-xs opacity-80">
-            Confirmation email sent to {booking.member_email}
+            A confirmation email will be sent to {booking.member_email}
           </p>
         </div>
       </div>

@@ -1,34 +1,44 @@
 """Tests for appointment types CRUD endpoints."""
+from datetime import datetime, timedelta
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from src.models import AppointmentType, Booking, BookingStatus, TempleRecommendConfig
+from src.models import (
+    AppointmentType,
+    Booking,
+    BookingStatus,
+    TempleRecommendConfig,
+)
+
+from .conftest import (
+    ensure_temple_config,
+    make_appointment_type,
+    make_interviewer_with_calling,
+    make_availability_window,
+    build_slot_utc,
+    get_next_weekday,
+    cleanup_booking,
+    login,
+    auth_headers,
+)
 
 
-def _login(client: TestClient, email: str, password: str) -> str:
-    resp = client.post("/auth/login", data={"username": email, "password": password})
-    assert resp.status_code == 200
-    return resp.json()["access_token"]
-
-
-def _auth(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _ensure_config(session: Session):
-    if session.get(TempleRecommendConfig, 1) is None:
-        session.add(TempleRecommendConfig(id=1))
-        session.commit()
-
-
-def _create_type(session: Session, name: str = "Test Type", system_defined: bool = False) -> AppointmentType:
+def _create_type(
+    session: Session,
+    name: str = "Test Type",
+    system_defined: bool = False,
+    is_active: bool = True,
+) -> AppointmentType:
+    """Create and persist an AppointmentType directly."""
     appt = AppointmentType(
         name=name,
         description="Test description",
         duration_mins=30,
         details="Some details",
         icon_name="Calendar",
-        is_active=True,
+        is_active=is_active,
         display_order=99,
         system_defined=system_defined,
     )
@@ -50,27 +60,16 @@ def test_list_appointment_types_public(client: TestClient, db_session: Session):
 
 
 def test_list_appointment_types_excludes_inactive(client: TestClient, db_session: Session):
-    inactive = AppointmentType(
-        name="Inactive Type",
-        description="",
-        duration_mins=30,
-        details="",
-        icon_name="Calendar",
-        is_active=False,
-        display_order=1,
-        system_defined=False,
-    )
-    db_session.add(inactive)
-    db_session.commit()
+    _create_type(db_session, "Inactive Type List", is_active=False)
     response = client.get("/appointment-types/")
     assert response.status_code == 200
     names = [t["name"] for t in response.json()]
-    assert "Inactive Type" not in names
+    assert "Inactive Type List" not in names
 
 
 def test_list_appointment_types_ordered_by_display_order(client: TestClient, db_session: Session):
-    _create_type(db_session, "Type A")
-    _create_type(db_session, "Type B")
+    _create_type(db_session, "Order Type A")
+    _create_type(db_session, "Order Type B")
     response = client.get("/appointment-types/")
     assert response.status_code == 200
     orders = [t["display_order"] for t in response.json()]
@@ -91,22 +90,22 @@ def test_create_appointment_type_requires_auth(client: TestClient):
 
 def test_create_appointment_type_requires_permission(client: TestClient, userpass):
     user, password = userpass
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/",
         json={"name": "No Perm Type", "icon_name": "Calendar"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 403
 
 
 def test_create_appointment_type_success(client: TestClient, admin):
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/",
         json={"name": "New Type XYZ", "icon_name": "Star", "duration_mins": 45},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 200
     payload = response.json()
@@ -118,11 +117,11 @@ def test_create_appointment_type_success(client: TestClient, admin):
 
 def test_create_appointment_type_invalid_icon(client: TestClient, admin):
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/",
         json={"name": "Bad Icon Type", "icon_name": "InvalidIconNotInList"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 422
 
@@ -130,27 +129,29 @@ def test_create_appointment_type_invalid_icon(client: TestClient, admin):
 def test_create_appointment_type_duplicate_name(client: TestClient, db_session: Session, admin):
     _create_type(db_session, "Dup Name Type")
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/",
         json={"name": "Dup Name Type", "icon_name": "Calendar"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 400
 
 
-def test_create_appointment_type_auto_display_order(client: TestClient, db_session: Session, admin):
-    existing = _create_type(db_session, "Existing Type")
+def test_create_appointment_type_auto_display_order(
+    client: TestClient, db_session: Session, admin
+):
+    existing = _create_type(db_session, "Existing Type For Order")
     existing.display_order = 5
     db_session.add(existing)
     db_session.commit()
 
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/",
         json={"name": "Auto Order Type", "icon_name": "Clock"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 200
     assert response.json()["display_order"] > 5
@@ -163,11 +164,11 @@ def test_create_appointment_type_auto_display_order(client: TestClient, db_sessi
 def test_patch_appointment_type_success(client: TestClient, db_session: Session, admin):
     appt = _create_type(db_session, "Patch Target")
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.patch(
         f"/appointment-types/{appt.id}",
         json={"description": "Updated description"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 200
     assert response.json()["type"]["description"] == "Updated description"
@@ -175,26 +176,72 @@ def test_patch_appointment_type_success(client: TestClient, db_session: Session,
 
 
 def test_patch_appointment_type_invalid_icon(client: TestClient, db_session: Session, admin):
-    appt = _create_type(db_session, "Patch Icon")
+    appt = _create_type(db_session, "Patch Icon Test")
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.patch(
         f"/appointment-types/{appt.id}",
         json={"icon_name": "NotAnIcon"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 422
 
 
 def test_patch_appointment_type_not_found(client: TestClient, admin):
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.patch(
         "/appointment-types/99999",
         json={"description": "x"},
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 404
+
+
+def test_patch_type_duration_warns_when_future_bookings_exist(
+    client: TestClient, db_session: Session, admin, userpass
+):
+    """Changing duration_mins should emit a warning when future CONFIRMED bookings exist."""
+    user, _ = userpass
+    ensure_temple_config(db_session)
+    appt = _create_type(db_session, "Duration Warn Type")
+    make_interviewer_with_calling(db_session, user, prefix="DurationWarn")
+
+    target_day = get_next_weekday(2)  # Wednesday
+    slot_utc = build_slot_utc(target_day, 9, 30)
+
+    # Create a CONFIRMED future booking for this appointment type directly
+    booking = Booking(
+        appointment_type_id=appt.id,
+        interviewer_user_id=user.id,
+        member_name="Future Member",
+        member_email="future@example.com",
+        member_phone="555-7777",
+        booking_date=target_day,
+        start_minute_of_day=570,
+        end_minute_of_day=600,
+        start_datetime=slot_utc,
+        end_datetime=slot_utc + timedelta(minutes=30),
+        status=BookingStatus.CONFIRMED,
+        confirmation_token="duration-warn-token-unique",
+    )
+    db_session.add(booking)
+    db_session.commit()
+    db_session.refresh(booking)
+
+    admin_user, admin_password = admin
+    token = login(client, admin_user.email, admin_password)
+    response = client.patch(
+        f"/appointment-types/{appt.id}",
+        json={"duration_mins": 45},
+        headers=auth_headers(token),
+    )
+
+    cleanup_booking(db_session, booking)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["warnings"]) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -202,25 +249,27 @@ def test_patch_appointment_type_not_found(client: TestClient, admin):
 # ---------------------------------------------------------------------------
 
 def test_delete_appointment_type_success(client: TestClient, db_session: Session, admin):
-    appt = _create_type(db_session, "Delete Me")
+    appt = _create_type(db_session, "Delete Me Type")
     user, password = admin
-    token = _login(client, user.email, password)
-    response = client.delete(f"/appointment-types/{appt.id}", headers=_auth(token))
+    token = login(client, user.email, password)
+    response = client.delete(f"/appointment-types/{appt.id}", headers=auth_headers(token))
     assert response.status_code == 204
 
 
-def test_delete_appointment_type_system_defined_returns_409(client: TestClient, db_session: Session, admin):
+def test_delete_appointment_type_system_defined_returns_409(
+    client: TestClient, db_session: Session, admin
+):
     appt = _create_type(db_session, "System Defined Type", system_defined=True)
     user, password = admin
-    token = _login(client, user.email, password)
-    response = client.delete(f"/appointment-types/{appt.id}", headers=_auth(token))
+    token = login(client, user.email, password)
+    response = client.delete(f"/appointment-types/{appt.id}", headers=auth_headers(token))
     assert response.status_code == 409
 
 
 def test_delete_appointment_type_not_found(client: TestClient, admin):
     user, password = admin
-    token = _login(client, user.email, password)
-    response = client.delete("/appointment-types/99999", headers=_auth(token))
+    token = login(client, user.email, password)
+    response = client.delete("/appointment-types/99999", headers=auth_headers(token))
     assert response.status_code == 404
 
 
@@ -233,14 +282,14 @@ def test_reorder_appointment_types(client: TestClient, db_session: Session, admi
     b = _create_type(db_session, "Reorder B")
 
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/reorder",
         json=[
             {"id": a.id, "display_order": 10},
             {"id": b.id, "display_order": 5},
         ],
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 200
     results = {t["id"]: t["display_order"] for t in response.json()}
@@ -250,10 +299,10 @@ def test_reorder_appointment_types(client: TestClient, db_session: Session, admi
 
 def test_reorder_with_unknown_id_returns_404(client: TestClient, admin):
     user, password = admin
-    token = _login(client, user.email, password)
+    token = login(client, user.email, password)
     response = client.post(
         "/appointment-types/reorder",
         json=[{"id": 99999, "display_order": 1}],
-        headers=_auth(token),
+        headers=auth_headers(token),
     )
     assert response.status_code == 404

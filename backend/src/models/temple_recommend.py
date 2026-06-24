@@ -4,6 +4,7 @@ from typing import Optional
 from sqlmodel import Field, SQLModel, UniqueConstraint
 from sqlalchemy import Column
 from sqlalchemy.dialects.sqlite import JSON as SAJSON
+from pydantic import model_validator
 
 from .base import BaseModel
 
@@ -43,6 +44,12 @@ class AvailabilityWindow(BaseModel, table=True):
     valid_from: Optional[_date] = Field(default=None)
     valid_until: Optional[_date] = Field(default=None)
     is_active: bool = Field(default=True)
+
+    @model_validator(mode="after")
+    def validate_minute_range(self) -> "AvailabilityWindow":
+        if self.start_minute >= self.end_minute:
+            raise ValueError("end_minute must be greater than start_minute")
+        return self
 
 
 class AvailabilityException(BaseModel, table=True):

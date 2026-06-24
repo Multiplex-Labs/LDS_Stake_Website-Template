@@ -1,3 +1,4 @@
+import html
 import smtplib
 import os
 import logging
@@ -59,9 +60,11 @@ class EmailService:
         cancel_url: str,
     ) -> bool:
         subject = f"Appointment Confirmation — {type_name}"
-        html = f"""
+        safe_name = html.escape(member_name)
+        safe_email = html.escape(member_email)
+        html_body = f"""
         <h2>Appointment Confirmed</h2>
-        <p>Dear {member_name},</p>
+        <p>Dear {safe_name},</p>
         <p>Your appointment has been scheduled:</p>
         <ul>
           <li><strong>Type:</strong> {type_name}</li>
@@ -74,7 +77,7 @@ class EmailService:
         <p><a href="{cancel_url}">Cancel your appointment</a></p>
         <p>Please come in Sunday dress as you would to Sacrament meeting or visiting the Temple.</p>
         """
-        return self.send(member_email, subject, html)
+        return self.send(safe_email, subject, html_body)
 
     def interviewer_notification(
         self,
@@ -88,19 +91,22 @@ class EmailService:
         time_str: str,
     ) -> bool:
         subject = f"New Appointment Booking — {type_name}"
-        html = f"""
+        safe_name = html.escape(member_name)
+        safe_email = html.escape(member_email)
+        safe_phone = html.escape(member_phone)
+        html_body = f"""
         <h2>New Appointment Booking</h2>
         <p>A new appointment has been booked:</p>
         <ul>
           <li><strong>Type:</strong> {type_name}</li>
           <li><strong>Date:</strong> {date_str}</li>
           <li><strong>Time:</strong> {time_str}</li>
-          <li><strong>Member:</strong> {member_name}</li>
-          <li><strong>Email:</strong> {member_email}</li>
-          <li><strong>Phone:</strong> {member_phone}</li>
+          <li><strong>Member:</strong> {safe_name}</li>
+          <li><strong>Email:</strong> {safe_email}</li>
+          <li><strong>Phone:</strong> {safe_phone}</li>
         </ul>
         """
-        return self.send(interviewer_email, subject, html)
+        return self.send(interviewer_email, subject, html_body)
 
     def member_cancellation_confirmation(
         self,
@@ -113,9 +119,11 @@ class EmailService:
         rebook_url: str,
     ) -> bool:
         subject = f"Appointment Cancelled — {type_name}"
-        html = f"""
+        safe_name = html.escape(member_name)
+        safe_email = html.escape(member_email)
+        html_body = f"""
         <h2>Appointment Cancelled</h2>
-        <p>Dear {member_name},</p>
+        <p>Dear {safe_name},</p>
         <p>Your appointment has been cancelled:</p>
         <ul>
           <li><strong>Type:</strong> {type_name}</li>
@@ -124,7 +132,7 @@ class EmailService:
         </ul>
         <p><a href="{rebook_url}">Schedule a new appointment</a></p>
         """
-        return self.send(member_email, subject, html)
+        return self.send(safe_email, subject, html_body)
 
     def presidency_cancellation_notice(
         self,
@@ -138,10 +146,12 @@ class EmailService:
         rebook_url: str,
     ) -> bool:
         subject = f"Appointment Cancelled by Presidency — {type_name}"
-        reason_html = f"<p><strong>Reason:</strong> {reason}</p>" if reason else ""
-        html = f"""
+        safe_name = html.escape(member_name)
+        safe_email = html.escape(member_email)
+        reason_html = f"<p><strong>Reason:</strong> {html.escape(reason)}</p>" if reason else ""
+        html_body = f"""
         <h2>Appointment Cancelled</h2>
-        <p>Dear {member_name},</p>
+        <p>Dear {safe_name},</p>
         <p>Your appointment has been cancelled by the Stake Presidency:</p>
         <ul>
           <li><strong>Type:</strong> {type_name}</li>
@@ -151,7 +161,7 @@ class EmailService:
         {reason_html}
         <p><a href="{rebook_url}">Schedule a new appointment</a></p>
         """
-        return self.send(member_email, subject, html)
+        return self.send(safe_email, subject, html_body)
 
 
 email_service = EmailService()

@@ -1,8 +1,9 @@
 import calendar as _cal
 import json
 from datetime import datetime, date as _date, timedelta
+from logging import getLogger
 from typing import List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Field, SQLModel, Session, select
@@ -21,6 +22,8 @@ from ..models import (
 )
 from ..db import get_session
 from ..utils import CallingUser
+
+logger = getLogger(__name__)
 
 router = APIRouter(prefix="/appointment-availability", tags=["appointment-availability"])
 
@@ -118,10 +121,18 @@ def _matches_recurrence(d: _date, rule_str: str, start: Optional[_date] = None) 
         end_count = int(rule.get("end_count", 0))
         count = 0
         cur = anchor
+        MAX_ITER = 3650
+        iterations = 0
         while cur <= d:
+            if iterations > MAX_ITER:
+                logger.error(
+                    "_matches_recurrence: exceeded max iterations for rule %r", rule_str
+                )
+                return False
             if _matches_freq(cur, rule, anchor):
                 count += 1
             cur += timedelta(days=1)
+            iterations += 1
         if count > end_count:
             return False
 
@@ -139,8 +150,15 @@ def _generate_slots(
     if not config:
         return []
 
-    tz = ZoneInfo(config.timezone)
-    now_utc = datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
+    try:
+        tz = ZoneInfo(config.timezone)
+    except ZoneInfoNotFoundError:
+        logger.error(
+            "_generate_slots: invalid timezone %r in TempleRecommendConfig", config.timezone
+        )
+        return []
+
+    now_utc = datetime.now(tz=ZoneInfo("UTC"))
     appt_type = session.get(AppointmentType, appointment_type_id)
     if not appt_type or not appt_type.is_active:
         return []
@@ -233,32 +251,41 @@ def _generate_slots(
             user = session.get(User, user_id)
 
             for window in windows:
-                minute = window.start_minute
-                while minute + duration <= window.end_minute:
-                    slot_end = minute + duration
-                    conflict = any(
-                        not (slot_end <= bs or minute >= be)
-                        for bs, be in booked_intervals
-                    )
-                    if not conflict:
-                        local_dt = datetime(
-                            current_date.year,
-                            current_date.month,
-                            current_date.day,
-                            minute // 60,
-                            minute % 60,
-                            tzinfo=tz,
+                try:
+                    minute = window.start_minute
+                    while minute + duration <= window.end_minute:
+                        slot_end = minute + duration
+                        conflict = any(
+                            not (slot_end <= bs or minute >= be)
+                            for bs, be in booked_intervals
                         )
-                        utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
-                        if utc_dt >= cutoff_dt:
-                            slots.append({
-                                "slot_datetime_utc": utc_dt.isoformat(),
-                                "interviewer_user_id": user_id,
-                                "interviewer_name": (
-                                    f"{user.fname} {user.lname}" if user else "Unknown"
-                                ),
-                            })
-                    minute += duration + buffer
+                        if not conflict:
+                            local_dt = datetime(
+                                current_date.year,
+                                current_date.month,
+                                current_date.day,
+                                minute // 60,
+                                minute % 60,
+                                tzinfo=tz,
+                            )
+                            utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
+                            if utc_dt >= cutoff_dt:
+                                slots.append({
+                                    "slot_datetime_utc": utc_dt.isoformat(),
+                                    "interviewer_user_id": user_id,
+                                    "interviewer_name": (
+                                        f"{user.fname} {user.lname}" if user else "Unknown"
+                                    ),
+                                })
+                        minute += duration + buffer
+                except Exception:
+                    logger.error(
+                        "_generate_slots: error processing window %d for user %d",
+                        window.id,
+                        user_id,
+                        exc_info=True,
+                    )
+                    continue
 
         current_date += timedelta(days=1)
 
@@ -547,6 +574,15 @@ def create_exception(
         raise HTTPException(status_code=422, detail=f"Unsupported recurrence rule: {body.recurrence}")
     if body.recurrence is None and body.date is None:
         raise HTTPException(status_code=422, detail="Either date or recurrence must be provided.")
+
+    if body.recurrence is not None and body.recurrence not in {"first_sunday_monthly"}:
+        try:
+            rule = json.loads(body.recurrence)
+            if rule.get("end_type") == "after":
+                if int(rule.get("end_count", 0)) < 1:
+                    raise HTTPException(status_code=422, detail="end_count must be at least 1.")
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass  # already validated by _validate_recurrence
 
     exc = AvailabilityException(
         date=body.date,

@@ -131,7 +131,7 @@ type ConfigFormData = z.infer<typeof configSchema>;
 function SettingsSubTab() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const { data: config, isLoading } = useQuery<TempleRecommendConfig>({
+  const { data: config, isLoading, isError } = useQuery<TempleRecommendConfig>({
     queryKey: ["/api/temple-config"],
   });
 
@@ -186,12 +186,14 @@ function SettingsSubTab() {
       reset(data);
       setLastSaved(new Date());
     },
-    onError: () => {
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] save settings:", err);
       toast.error("Failed to save settings");
     },
   });
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
+  if (isError) return <p className="text-sm text-destructive py-4 text-center">Failed to load. Please refresh.</p>;
 
   return (
     <form onSubmit={handleSubmit((d) => saveMutation.mutateAsync(d))} className="space-y-4 max-w-3xl">
@@ -290,7 +292,7 @@ function SettingsSubTab() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {lastSaved && (
             <>
-              <CheckCircle2 className="size-4 text-green-500" />
+              <CheckCircle2 className="size-4 text-primary" />
               Last saved at {lastSaved.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </>
           )}
@@ -358,8 +360,8 @@ function SortableRow({ type, onToggleActive, onEdit, onDelete }: SortableRowProp
         <Badge variant="secondary">{type.duration_mins} min</Badge>
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className={cn("text-xs", type.is_active ? "text-green-600 border-green-600" : "text-muted-foreground")}>
-          <span className={cn("size-1.5 rounded-full mr-1.5 inline-block", type.is_active ? "bg-green-500" : "bg-muted-foreground")} />
+        <Badge variant="outline" className={cn("text-xs", type.is_active ? "text-primary border-primary" : "text-muted-foreground")}>
+          <span className={cn("size-1.5 rounded-full mr-1.5 inline-block", type.is_active ? "bg-primary" : "bg-muted-foreground")} />
           {type.is_active ? "Active" : "Hidden"}
         </Badge>
       </TableCell>
@@ -402,7 +404,7 @@ function AppointmentTypesSubTab() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AppointmentType | null>(null);
 
-  const { data: types, isLoading } = useQuery<AppointmentType[]>({
+  const { data: types, isLoading, isError } = useQuery<AppointmentType[]>({
     queryKey: ["/api/appointment-types"],
   });
 
@@ -419,7 +421,10 @@ function AppointmentTypesSubTab() {
         toast.warning(warnings.join(" "));
       }
     },
-    onError: () => toast.error("Failed to update"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] toggle type active:", err);
+      toast.error("Failed to update");
+    },
   });
 
   const reorderMutation = useMutation({
@@ -429,7 +434,10 @@ function AppointmentTypesSubTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointment-types"] });
     },
-    onError: () => toast.error("Reorder failed"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] reorder types:", err);
+      toast.error("Reorder failed");
+    },
   });
 
   const deleteMutation = useMutation({
@@ -442,6 +450,7 @@ function AppointmentTypesSubTab() {
       setDeleteTarget(null);
     },
     onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] delete type:", err);
       const msg = err instanceof Error ? err.message : "";
       if (msg.startsWith("409")) {
         toast.error("Cannot delete a system-defined appointment type.");
@@ -474,6 +483,8 @@ function AppointmentTypesSubTab() {
 
       {isLoading ? (
         <Skeleton className="h-48 w-full" />
+      ) : isError ? (
+        <p className="text-sm text-destructive py-4 text-center">Failed to load. Please refresh.</p>
       ) : (
         <div className="border border-border rounded-md overflow-hidden">
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -601,7 +612,10 @@ function TypeSheet({ open, onOpenChange, existing }: TypeSheetProps) {
       onOpenChange(false);
       reset();
     },
-    onError: () => toast.error("Failed to save"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] create type:", err);
+      toast.error("Failed to save");
+    },
   });
 
   return (
@@ -746,7 +760,7 @@ function getMemberNextDate(memberWindows: AvailabilityWindow[], tz?: string): st
   for (let offset = 0; offset < 7; offset++) {
     const d = new Date(today);
     d.setDate(d.getDate() + offset);
-    if (activeDows.includes(jsDayToOurDay(d.getDay()))) {
+    if (activeDows.includes(jsDayToOurDay(d.getDay()) as 0 | 1 | 2 | 3 | 4 | 5 | 6)) {
       // Format as YYYY-MM-DD from local date components — not UTC via toISOString()
       const yy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -976,11 +990,11 @@ function AvailabilitySubTab() {
   const [addMemberExcOpen, setAddMemberExcOpen] = useState(false);
   const [excTab, setExcTab] = useState<"member" | "shared">("member");
 
-  const { data: windows } = useQuery<AvailabilityWindow[]>({
+  const { data: windows, isError: windowsError } = useQuery<AvailabilityWindow[]>({
     queryKey: ["/api/appointment-availability/windows"],
   });
 
-  const { data: exceptions } = useQuery<AvailabilityException[]>({
+  const { data: exceptions, isError: exceptionsError } = useQuery<AvailabilityException[]>({
     queryKey: ["/api/appointment-availability/exceptions"],
   });
 
@@ -1015,7 +1029,10 @@ function AvailabilitySubTab() {
       toast.success("Window deleted");
       setDeleteWindowId(null);
     },
-    onError: () => toast.error("Delete failed"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] delete window:", err);
+      toast.error("Delete failed");
+    },
   });
 
   const deleteExcMutation = useMutation({
@@ -1027,7 +1044,10 @@ function AvailabilitySubTab() {
       toast.success("Exception removed");
       setDeleteExcId(null);
     },
-    onError: () => toast.error("Delete failed"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] delete exception:", err);
+      toast.error("Delete failed");
+    },
   });
 
   const clearDayMutation = useMutation({
@@ -1043,7 +1063,8 @@ function AvailabilitySubTab() {
       toast.success("Day cleared");
       setDeleteDayTarget(null);
     },
-    onError: () => {
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] clear day windows:", err);
       queryClient.invalidateQueries({ queryKey: ["/api/appointment-availability/windows"] });
       toast.error("Some windows could not be deleted");
       setDeleteDayTarget(null);
@@ -1150,6 +1171,9 @@ function AvailabilitySubTab() {
   const selectedUserName = selectedUser ? `${selectedUser.fname} ${selectedUser.lname}` : null;
   const earliestSunUser = earliestSunWin ? userMap.get(earliestSunWin.user_id) ?? null : null;
 
+  if (windowsError) return <p className="text-sm text-destructive py-4 text-center">Failed to load. Please refresh.</p>;
+  if (exceptionsError) return <p className="text-sm text-destructive py-4 text-center">Failed to load. Please refresh.</p>;
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -1216,7 +1240,7 @@ function AvailabilitySubTab() {
                           {user.fname} {user.lname}
                         </span>
                         {activeDays > 0 && (
-                          <Badge variant="outline" className="text-xs shrink-0 text-green-500 border-green-500">
+                          <Badge variant="outline" className="text-xs shrink-0 text-primary border-primary">
                             Active
                           </Badge>
                         )}
@@ -1439,7 +1463,7 @@ function AvailabilitySubTab() {
             </div>
             <div className="space-y-2.5">
               <SummaryStat
-                icon={<Calendar className="size-4 text-green-500" />}
+                icon={<Calendar className="size-4 text-primary" />}
                 label="Sunday coverage"
                 value={`${membersWithSunday} member${membersWithSunday !== 1 ? "s" : ""} available`}
               />
@@ -1449,7 +1473,7 @@ function AvailabilitySubTab() {
                 value={`${membersWithSunday} of ${presidencyMembers.length}`}
               />
               <SummaryStat
-                icon={<AlertTriangle className="size-4 text-amber-500" />}
+                icon={<AlertTriangle className="size-4 text-destructive" />}
                 label="Members with exceptions"
                 value={`${membersWithPersonalExc} member${membersWithPersonalExc !== 1 ? "s" : ""}`}
               />
@@ -1629,7 +1653,10 @@ function WindowSheet({ open, onOpenChange, existing, users, prefill }: WindowShe
       onOpenChange(false);
       reset();
     },
-    onError: () => toast.error("Failed to save"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] save window:", err);
+      toast.error("Failed to save");
+    },
   });
 
   return (
@@ -1793,8 +1820,11 @@ function ExceptionSheet({
       onOpenChange(false);
       resetForm();
     },
-    onError: (err) => {
-      if ((err as Error).message !== "validation") toast.error("Failed to save");
+    onError: (err: unknown) => {
+      if ((err as Error).message !== "validation") {
+        console.error("[temple-recommend-tab] save exception:", err);
+        toast.error("Failed to save");
+      }
     },
   });
 
@@ -2002,12 +2032,12 @@ function ExceptionSheet({
 // ============================================================
 
 const STATUS_META: Record<BookingStatus, { label: string; className: string }> = {
-  CONFIRMED: { label: "Confirmed", className: "text-green-600 border-green-600 bg-green-500/10" },
-  PENDING_EMAIL_CONFIRM: { label: "Pending Email", className: "text-amber-600 border-amber-600 bg-amber-500/10" },
+  CONFIRMED: { label: "Confirmed", className: "text-primary border-primary bg-primary/10" },
+  PENDING_EMAIL_CONFIRM: { label: "Pending Email", className: "text-destructive border-destructive bg-destructive/10" },
   EXPIRED: { label: "Expired", className: "text-muted-foreground border-border" },
   CANCELLED_BY_MEMBER: { label: "Cancelled (Member)", className: "text-destructive border-destructive bg-destructive/10" },
   CANCELLED_BY_PRESIDENCY: { label: "Cancelled (Admin)", className: "text-destructive border-destructive bg-destructive/10" },
-  COMPLETED: { label: "Completed", className: "text-blue-600 border-blue-600 bg-blue-500/10" },
+  COMPLETED: { label: "Completed", className: "text-secondary-foreground border-secondary bg-secondary/10" },
   NO_SHOW: { label: "No Show", className: "text-muted-foreground border-border" },
 };
 
@@ -2106,7 +2136,10 @@ function BookingsSubTab() {
       setCancelTarget(null);
       setCancelReason("");
     },
-    onError: () => toast.error("Failed to cancel"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] cancel booking:", err);
+      toast.error("Failed to cancel");
+    },
   });
 
   const statusMutation = useMutation({
@@ -2118,7 +2151,10 @@ function BookingsSubTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/appointment-bookings"] });
       toast.success("Status updated");
     },
-    onError: () => toast.error("Failed to update status"),
+    onError: (err: unknown) => {
+      console.error("[temple-recommend-tab] update booking status:", err);
+      toast.error("Failed to update status");
+    },
   });
 
   function BookingTable({ rows }: { rows: BookingRow[] }) {
@@ -2215,9 +2251,9 @@ function BookingsSubTab() {
       {/* Status summary pills */}
       <div className="flex flex-wrap gap-2">
         {([
-          { key: "CONFIRMED" as const, label: "Confirmed", color: "text-green-600 border-green-600", count: statusCounts.CONFIRMED },
-          { key: "PENDING_EMAIL_CONFIRM" as const, label: "Pending", color: "text-amber-600 border-amber-600", count: statusCounts.PENDING },
-          { key: "COMPLETED" as const, label: "Completed", color: "text-blue-600 border-blue-600", count: statusCounts.COMPLETED },
+          { key: "CONFIRMED" as const, label: "Confirmed", color: "text-primary border-primary", count: statusCounts.CONFIRMED },
+          { key: "PENDING_EMAIL_CONFIRM" as const, label: "Pending", color: "text-destructive border-destructive", count: statusCounts.PENDING },
+          { key: "COMPLETED" as const, label: "Completed", color: "text-secondary-foreground border-secondary", count: statusCounts.COMPLETED },
           { key: "CANCELLED" as const, label: "Cancelled", color: "text-destructive border-destructive", count: statusCounts.CANCELLED },
         ] as const).map(({ key, label, color, count }) => (
           <button

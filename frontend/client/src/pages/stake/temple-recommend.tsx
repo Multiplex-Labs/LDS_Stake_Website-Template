@@ -44,14 +44,14 @@ export default function TempleRecommend() {
             {/* LEFT — No Appointment Needed */}
             <div className="bg-card border border-border rounded-xl p-6 space-y-5">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center flex-shrink-0">
-                  <Users className="size-6 text-green-600 dark:text-green-400" />
+                <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                  <Users className="size-6 text-primary" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-foreground leading-snug">
                     No Appointment Needed
                   </h2>
-                  <p className="text-sm font-medium text-green-500 mt-0.5">
+                  <p className="text-sm font-medium text-primary mt-0.5">
                     Temple Recommend Renewals and Ecclesiastical Endorsements
                   </p>
                 </div>
@@ -72,7 +72,7 @@ export default function TempleRecommend() {
               {/* Mini info boxes */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-muted/30 border border-border rounded-lg p-4 flex items-start gap-3">
-                  <Clock className="size-5 text-green-400 mt-0.5 flex-shrink-0" />
+                  <Clock className="size-5 text-primary mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-foreground">Open Interview Hours</p>
                     <p className="text-sm text-muted-foreground mt-1">Sundays</p>
@@ -80,7 +80,7 @@ export default function TempleRecommend() {
                   </div>
                 </div>
                 <div className="bg-muted/30 border border-border rounded-lg p-4 flex items-start gap-3">
-                  <MapPin className="size-5 text-green-400 mt-0.5 flex-shrink-0" />
+                  <MapPin className="size-5 text-primary mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-foreground">Location</p>
                     {configLoading ? (
@@ -105,12 +105,12 @@ export default function TempleRecommend() {
 
               {/* Exception note */}
               {(configLoading || config?.exception_note) && (
-                <div className="bg-muted/30 border border-green-500/30 rounded-lg p-4 flex items-start gap-3">
-                  <Info className="size-5 text-green-400 mt-0.5 flex-shrink-0" />
+                <div className="bg-muted/30 border border-primary/30 rounded-lg p-4 flex items-start gap-3">
+                  <Info className="size-5 text-primary mt-0.5 flex-shrink-0" />
                   {configLoading ? (
                     <Skeleton className="h-4 w-full" />
                   ) : (
-                    <p className="text-sm text-green-400">{config!.exception_note}</p>
+                    <p className="text-sm text-primary">{config!.exception_note}</p>
                   )}
                 </div>
               )}
@@ -157,10 +157,10 @@ export default function TempleRecommend() {
               </div>
 
               {/* Sealings callout */}
-              <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 flex items-start gap-3">
-                <AlertTriangle className="size-5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div className="border border-destructive/30 bg-destructive/5 rounded-lg p-4 flex items-start gap-3">
+                <AlertTriangle className="size-5 text-destructive mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold uppercase text-amber-500 mb-1">
+                  <p className="text-sm font-semibold uppercase text-destructive mb-1">
                     Sealings
                   </p>
                   <p className="text-sm text-muted-foreground">

@@ -237,7 +237,7 @@ export interface AppointmentType {
 export interface AvailabilityWindow {
   id: number;
   user_id: number;
-  day_of_week: number; // 0=Mon, 6=Sun
+  day_of_week: 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Mon, 6=Sun
   start_minute: number;
   end_minute: number;
   valid_from: string | null;
@@ -245,13 +245,16 @@ export interface AvailabilityWindow {
   is_active: boolean;
 }
 
+/** Named recurrence rules; JSON-encoded custom rules are also valid. */
+export type RecurrenceRule = "first_sunday_monthly" | (string & Record<never, never>);
+
 export interface AvailabilityException {
   id: number;
   date: string | null;     // null for recurring exceptions
   reason: string;
   is_global: boolean;
   user_id: number | null;
-  recurrence: string | null; // "first_sunday_monthly" | null
+  recurrence: RecurrenceRule | null;
 }
 
 export type BookingStatus =
@@ -285,6 +288,9 @@ export interface Booking {
   confirmation_token: string;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+  cancelled_by_user_id: number | null;
   notification_sent_at: string | null;
+  calendar_sync_status: string;
+  calendar_event_id: string | null;
   created_at: string;
 }

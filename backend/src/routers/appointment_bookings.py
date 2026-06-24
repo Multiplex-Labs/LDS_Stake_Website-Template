@@ -3,13 +3,14 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import secrets
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Field, SQLModel, Session, select
 
@@ -28,10 +29,13 @@ from ..models import (
 )
 from ..db import get_session
 from ..utils import CallingUser, email_service
+from .appointment_availability import _matches_recurrence
 
 logger = logging.getLogger("application")
 
 router = APIRouter(prefix="/appointment-bookings", tags=["appointment-bookings"])
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 # ---------------------------------------------------------------------------
@@ -85,13 +89,26 @@ def _find_interviewer_for_slot(
         return None
     duration = appt_type.duration_mins
 
-    # Check global exceptions
+    # Check one-time global exceptions
     global_exc = session.exec(
         select(AvailabilityException).where(
             AvailabilityException.date == local_date,
             AvailabilityException.is_global == True,
+            AvailabilityException.recurrence == None,
         )
     ).first()
+    if not global_exc:
+        # Check recurring global exceptions
+        recurring_global_excs = session.exec(
+            select(AvailabilityException).where(
+                AvailabilityException.is_global == True,
+                AvailabilityException.recurrence != None,
+            )
+        ).all()
+        global_exc = next(
+            (e for e in recurring_global_excs if _matches_recurrence(local_date, e.recurrence, e.date)),
+            None,
+        )
     if global_exc:
         return None
 
@@ -143,24 +160,32 @@ def _format_time_str(minute_of_day: int, timezone: str) -> str:
 def _send_booking_confirmation_email(booking_id: int):
     """Background task: send confirmation email to the member."""
     from ..db.orm import ORM
-    try:
-        with Session(ORM().engine) as session:
-            booking = session.get(Booking, booking_id)
-            if not booking:
-                return
-            appt_type = session.get(AppointmentType, booking.appointment_type_id)
-            config = session.get(TempleRecommendConfig, 1)
-            interviewer = session.get(User, booking.interviewer_user_id)
-            if not (appt_type and config and interviewer):
-                return
+    with Session(ORM().engine) as session:
+        booking = session.get(Booking, booking_id)
+        if not booking:
+            logger.error("_send_booking_confirmation_email: booking %d not found", booking_id)
+            return
+        appt_type = session.get(AppointmentType, booking.appointment_type_id)
+        config = session.get(TempleRecommendConfig, 1)
+        interviewer = session.get(User, booking.interviewer_user_id)
+        if not appt_type:
+            logger.error("_send_booking_confirmation_email: appointment type not found for booking %d", booking_id)
+            return
+        if not config:
+            logger.error("_send_booking_confirmation_email: TempleRecommendConfig not found for booking %d", booking_id)
+            return
+        if not interviewer:
+            logger.error("_send_booking_confirmation_email: interviewer not found for booking %d", booking_id)
+            return
 
-            frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
-            confirm_url = f"{frontend_base}/appointment-bookings/confirm/{booking.confirmation_token}"
-            cancel_url = f"{frontend_base}/appointment-bookings/cancel/{booking.confirmation_token}"
+        api_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+        confirm_url = f"{api_base}/appointment-bookings/confirm/{booking.confirmation_token}"
+        cancel_url = f"{api_base}/appointment-bookings/cancel/{booking.confirmation_token}"
 
-            date_str = booking.booking_date.strftime("%A, %B %d, %Y")
-            time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
+        date_str = booking.booking_date.strftime("%A, %B %d, %Y")
+        time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        try:
             email_service.booking_confirmation(
                 member_email=booking.member_email,
                 member_name=booking.member_name,
@@ -172,31 +197,50 @@ def _send_booking_confirmation_email(booking_id: int):
                 confirm_url=confirm_url,
                 cancel_url=cancel_url,
             )
+        except Exception:
+            logger.error(
+                "_send_booking_confirmation_email: email send failed for booking %d",
+                booking_id,
+                exc_info=True,
+            )
 
+        try:
             booking.notification_sent_at = datetime.utcnow()
             session.add(booking)
             session.commit()
-    except Exception:
-        logger.warning("Failed to send booking confirmation email for booking %d", booking_id, exc_info=True)
+        except Exception:
+            logger.error(
+                "_send_booking_confirmation_email: failed to update notification_sent_at for booking %d",
+                booking_id,
+                exc_info=True,
+            )
 
 
 def _send_interviewer_notification_email(booking_id: int):
     """Background task: notify the interviewer of a new booking."""
     from ..db.orm import ORM
-    try:
-        with Session(ORM().engine) as session:
-            booking = session.get(Booking, booking_id)
-            if not booking:
-                return
-            appt_type = session.get(AppointmentType, booking.appointment_type_id)
-            config = session.get(TempleRecommendConfig, 1)
-            interviewer = session.get(User, booking.interviewer_user_id)
-            if not (appt_type and config and interviewer) or not interviewer.email:
-                return
+    with Session(ORM().engine) as session:
+        booking = session.get(Booking, booking_id)
+        if not booking:
+            logger.error("_send_interviewer_notification_email: booking %d not found", booking_id)
+            return
+        appt_type = session.get(AppointmentType, booking.appointment_type_id)
+        config = session.get(TempleRecommendConfig, 1)
+        interviewer = session.get(User, booking.interviewer_user_id)
+        if not appt_type:
+            logger.error("_send_interviewer_notification_email: appointment type not found for booking %d", booking_id)
+            return
+        if not config:
+            logger.error("_send_interviewer_notification_email: TempleRecommendConfig not found for booking %d", booking_id)
+            return
+        if not interviewer or not interviewer.email:
+            logger.error("_send_interviewer_notification_email: interviewer or interviewer email not found for booking %d", booking_id)
+            return
 
-            date_str = booking.booking_date.strftime("%A, %B %d, %Y")
-            time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
+        date_str = booking.booking_date.strftime("%A, %B %d, %Y")
+        time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        try:
             email_service.interviewer_notification(
                 interviewer_email=interviewer.email,
                 member_name=booking.member_name,
@@ -206,28 +250,37 @@ def _send_interviewer_notification_email(booking_id: int):
                 date_str=date_str,
                 time_str=time_str,
             )
-    except Exception:
-        logger.warning("Failed to send interviewer notification email for booking %d", booking_id, exc_info=True)
+        except Exception:
+            logger.error(
+                "_send_interviewer_notification_email: email send failed for booking %d",
+                booking_id,
+                exc_info=True,
+            )
 
 
 def _send_member_cancellation_email(booking_id: int):
     """Background task: send cancellation confirmation to member."""
     from ..db.orm import ORM
-    try:
-        with Session(ORM().engine) as session:
-            booking = session.get(Booking, booking_id)
-            if not booking:
-                return
-            appt_type = session.get(AppointmentType, booking.appointment_type_id)
-            config = session.get(TempleRecommendConfig, 1)
-            if not (appt_type and config):
-                return
+    with Session(ORM().engine) as session:
+        booking = session.get(Booking, booking_id)
+        if not booking:
+            logger.error("_send_member_cancellation_email: booking %d not found", booking_id)
+            return
+        appt_type = session.get(AppointmentType, booking.appointment_type_id)
+        config = session.get(TempleRecommendConfig, 1)
+        if not appt_type:
+            logger.error("_send_member_cancellation_email: appointment type not found for booking %d", booking_id)
+            return
+        if not config:
+            logger.error("_send_member_cancellation_email: TempleRecommendConfig not found for booking %d", booking_id)
+            return
 
-            frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
-            rebook_url = f"{frontend_base}/stake-info/temple-recommend"
-            date_str = booking.booking_date.strftime("%A, %B %d, %Y")
-            time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
+        frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
+        rebook_url = f"{frontend_base}/stake-info/temple-recommend"
+        date_str = booking.booking_date.strftime("%A, %B %d, %Y")
+        time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        try:
             email_service.member_cancellation_confirmation(
                 member_email=booking.member_email,
                 member_name=booking.member_name,
@@ -236,28 +289,37 @@ def _send_member_cancellation_email(booking_id: int):
                 time_str=time_str,
                 rebook_url=rebook_url,
             )
-    except Exception:
-        logger.warning("Failed to send member cancellation email for booking %d", booking_id, exc_info=True)
+        except Exception:
+            logger.error(
+                "_send_member_cancellation_email: email send failed for booking %d",
+                booking_id,
+                exc_info=True,
+            )
 
 
 def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
     """Background task: send presidency cancellation notice to member."""
     from ..db.orm import ORM
-    try:
-        with Session(ORM().engine) as session:
-            booking = session.get(Booking, booking_id)
-            if not booking:
-                return
-            appt_type = session.get(AppointmentType, booking.appointment_type_id)
-            config = session.get(TempleRecommendConfig, 1)
-            if not (appt_type and config):
-                return
+    with Session(ORM().engine) as session:
+        booking = session.get(Booking, booking_id)
+        if not booking:
+            logger.error("_send_presidency_cancellation_email: booking %d not found", booking_id)
+            return
+        appt_type = session.get(AppointmentType, booking.appointment_type_id)
+        config = session.get(TempleRecommendConfig, 1)
+        if not appt_type:
+            logger.error("_send_presidency_cancellation_email: appointment type not found for booking %d", booking_id)
+            return
+        if not config:
+            logger.error("_send_presidency_cancellation_email: TempleRecommendConfig not found for booking %d", booking_id)
+            return
 
-            frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
-            rebook_url = f"{frontend_base}/stake-info/temple-recommend"
-            date_str = booking.booking_date.strftime("%A, %B %d, %Y")
-            time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
+        frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
+        rebook_url = f"{frontend_base}/stake-info/temple-recommend"
+        date_str = booking.booking_date.strftime("%A, %B %d, %Y")
+        time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        try:
             email_service.presidency_cancellation_notice(
                 member_email=booking.member_email,
                 member_name=booking.member_name,
@@ -267,8 +329,12 @@ def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
                 reason=reason,
                 rebook_url=rebook_url,
             )
-    except Exception:
-        logger.warning("Failed to send presidency cancellation email for booking %d", booking_id, exc_info=True)
+        except Exception:
+            logger.error(
+                "_send_presidency_cancellation_email: email send failed for booking %d",
+                booking_id,
+                exc_info=True,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +382,15 @@ class BookingCreate(SQLModel):
     member_phone: str
     honeypot: str = Field(default="", alias="_honeypot")
 
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not _EMAIL_RE.match(self.member_email):
+            raise ValueError("member_email is not a valid email address")
+
 
 class AdminCancelBody(SQLModel):
     cancellation_reason: Optional[str] = None
@@ -347,7 +422,9 @@ def create_booking(
 
     now_utc = datetime.utcnow()
     cutoff_dt = now_utc + timedelta(hours=config.booking_cutoff_hours)
-    slot_utc = body.slot_datetime_utc.replace(tzinfo=None)  # ensure naive UTC
+    # Normalize to UTC then strip tz to get a naive UTC datetime
+    _raw = body.slot_datetime_utc
+    slot_utc = (_raw.astimezone(timezone.utc) if _raw.tzinfo is not None else _raw).replace(tzinfo=None)
 
     if slot_utc <= cutoff_dt:
         raise HTTPException(
@@ -425,7 +502,7 @@ def create_booking(
 def confirm_booking(
     token: str,
     session: Session = Depends(get_session),
-) -> dict:
+) -> Response:
     """Confirm a booking via token link from the confirmation email. Public endpoint."""
     booking = session.exec(
         select(Booking).where(Booking.confirmation_token == token)
@@ -433,8 +510,13 @@ def confirm_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
+    frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
+
     if booking.status == BookingStatus.CONFIRMED:
-        return {"detail": "Booking already confirmed", "booking_id": booking.id}
+        return RedirectResponse(
+            url=f"{frontend_base}/stake-info/temple-recommend?confirmed=1",
+            status_code=302,
+        )
 
     if booking.status != BookingStatus.PENDING_EMAIL_CONFIRM:
         raise HTTPException(
@@ -449,9 +531,12 @@ def confirm_booking(
         event_type="confirmed",
         actor_user_id=None,
     ))
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=503, detail="Unable to process your request. Please try again.")
 
-    frontend_base = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
     return RedirectResponse(
         url=f"{frontend_base}/stake-info/temple-recommend?confirmed=1",
         status_code=302,
@@ -485,7 +570,11 @@ def cancel_booking_by_token(
         event_type="cancelled_by_member",
         actor_user_id=None,
     ))
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise HTTPException(status_code=503, detail="Unable to process your request. Please try again.")
 
     background_tasks.add_task(_send_member_cancellation_email, booking.id)
 
@@ -509,7 +598,10 @@ def list_bookings(
     if appointment_type_id is not None:
         stmt = stmt.where(Booking.appointment_type_id == appointment_type_id)
     if status:
-        valid_statuses = [BookingStatus(s) for s in status]
+        try:
+            valid_statuses = [BookingStatus(s) for s in status]
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=f"Invalid status value: {e}")
         stmt = stmt.where(Booking.status.in_(valid_statuses))
     if date_from is not None:
         stmt = stmt.where(Booking.booking_date >= date_from)
