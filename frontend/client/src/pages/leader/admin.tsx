@@ -24,7 +24,7 @@ const BASE_TABS = [
   { value: "presidency",     label: "Presidency Assignments",   icon: NotebookTabs },
 ] as const;
 
-const TEMPLE_TAB = { value: "temple-recommend", label: "Temple Recommend", icon: ShieldCheck } as const;
+const TEMPLE_TAB = { value: "temple-recommend", label: "Appointment Manager", icon: ShieldCheck } as const;
 
 type BaseTabValue = (typeof BASE_TABS)[number]["value"];
 type TabValue = BaseTabValue | "temple-recommend";

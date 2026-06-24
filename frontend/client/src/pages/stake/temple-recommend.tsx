@@ -30,17 +30,11 @@ export default function TempleRecommend() {
 
   return (
     <Layout>
-      {/* Hero */}
-      <section className="relative bg-card border-b border-border py-16 overflow-hidden">
+      <div className="bg-muted/30 py-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Temple Recommend Appointments
-          </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl">
-            Information and appointment scheduling with the Stake Presidency.
-          </p>
+          <h1 className="font-serif text-4xl font-bold text-center">Temple Recommend Appointments</h1>
         </div>
-      </section>
+      </div>
 
       {/* Two-column info section */}
       <section className="py-12 bg-background">

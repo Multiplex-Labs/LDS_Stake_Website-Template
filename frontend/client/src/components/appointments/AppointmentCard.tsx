@@ -52,19 +52,21 @@ export function AppointmentCard({ type, config, onBook }: AppointmentCardProps) 
   return (
     <>
       <Card className="flex flex-col h-full bg-card border border-border shadow-sm hover:shadow-md transition-shadow duration-200">
-        <CardContent className="flex flex-col flex-1 p-5 gap-4">
-          {/* Icon + Name + Duration */}
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-primary flex items-center justify-center">
-              <IconComponent className="size-6 text-primary-foreground" />
+        <CardContent className="flex flex-col flex-1 items-center text-center p-6 gap-4">
+          {/* Centered icon */}
+          <div className="w-20 h-20 rounded-full bg-primary/15 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-primary/25 flex items-center justify-center">
+              <IconComponent className="size-7 text-primary" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-base leading-snug text-foreground">{type.name}</h3>
-              <div className="flex items-center gap-1.5 mt-1">
-                <Clock className="size-3.5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">{type.duration_mins} mins</span>
-              </div>
-            </div>
+          </div>
+
+          {/* Name */}
+          <h3 className="font-bold text-base leading-snug text-foreground">{type.name}</h3>
+
+          {/* Duration badge */}
+          <div className="flex items-center gap-1.5 bg-muted/60 border border-border rounded-full px-3 py-1">
+            <Clock className="size-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">{type.duration_mins} min</span>
           </div>
 
           {/* Description */}
@@ -73,35 +75,27 @@ export function AppointmentCard({ type, config, onBook }: AppointmentCardProps) 
           </p>
 
           {/* Actions */}
-          <div className="flex gap-2 mt-auto pt-1">
+          <div className="flex gap-2 w-full mt-auto pt-1">
             <Button
               variant="outline"
-              size="sm"
-              className="flex-1 gap-2"
+              className="flex-1"
               onClick={() => setDetailsOpen(true)}
             >
-              <Info className="size-4" />
               Details
             </Button>
 
             {availLoading ? (
-              <Skeleton className="h-9 flex-1 rounded-md" />
+              <Skeleton className="h-10 flex-1 rounded-md" />
             ) : hasSlots ? (
-              <Button
-                size="sm"
-                className="flex-1 gap-2"
-                onClick={() => onBook(type)}
-              >
-                <Calendar className="size-4" />
-                Book
+              <Button className="flex-1" onClick={() => onBook(type)}>
+                Book Appointment
               </Button>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="flex-1">
-                    <Button size="sm" className="w-full gap-2" disabled>
-                      <Calendar className="size-4" />
-                      Book
+                    <Button className="w-full" disabled>
+                      Book Appointment
                     </Button>
                   </span>
                 </TooltipTrigger>
