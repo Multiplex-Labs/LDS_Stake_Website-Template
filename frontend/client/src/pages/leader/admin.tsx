@@ -8,9 +8,14 @@ import { WardsTab } from "./wards-tab";
 import { SpeakingTab } from "./speaking-tab";
 import { HCAssignmentsTab } from "./hc-assignments-tab";
 import { PresidencyAssignmentsTab } from "./presidency-assignments-tab";
-import { UserCog, UserKey, Building2, Speech, NotebookText, NotebookTabs } from "lucide-react"
+import { TempleRecommendTab } from "./temple-recommend-tab";
+import { useAuthStore } from "@/stores/auth";
+import { UserCog, UserKey, Building2, Speech, NotebookText, NotebookTabs, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const TABS = [
+const MANAGE_APPOINTMENTS = 512;
+
+const BASE_TABS = [
   { value: "users",          label: "Users",                    icon: UserCog      },
   { value: "callings",       label: "Callings",                 icon: UserKey      },
   { value: "wards",          label: "Wards",                    icon: Building2    },
@@ -19,16 +24,36 @@ const TABS = [
   { value: "presidency",     label: "Presidency Assignments",   icon: NotebookTabs },
 ] as const;
 
-type TabValue = (typeof TABS)[number]["value"];
+const TEMPLE_TAB = { value: "temple-recommend", label: "Appointment Manager", icon: ShieldCheck } as const;
+
+type BaseTabValue = (typeof BASE_TABS)[number]["value"];
+type TabValue = BaseTabValue | "temple-recommend";
+
+interface TabDef {
+  value: TabValue;
+  label: string;
+  icon: LucideIcon;
+}
 
 export default function AdminHub() {
   const search = useSearch();
   const [, setLocation] = useLocation();
+  const { user } = useAuthStore();
+
+  const hasAppointmentPerm = (user?.permissions ?? 0) & MANAGE_APPOINTMENTS;
+
+  const tabs: TabDef[] = useMemo(
+    () =>
+      hasAppointmentPerm
+        ? [...BASE_TABS, TEMPLE_TAB]
+        : [...BASE_TABS],
+    [hasAppointmentPerm],
+  );
 
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const rawTab = params.get("tab");
   const activeTab: TabValue =
-    TABS.some((t) => t.value === rawTab) ? (rawTab as TabValue) : "users";
+    tabs.some((t) => t.value === rawTab) ? (rawTab as TabValue) : "users";
 
   const handleTabChange = useCallback(
     (value: string) => setLocation(`/leader/admin?tab=${value}`),
@@ -39,8 +64,8 @@ export default function AdminHub() {
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="mb-6">
-            {TABS.map(({ value, label, icon: Icon }) => (
+          <TabsList className="mb-6 flex-wrap h-auto">
+            {tabs.map(({ value, label, icon: Icon }) => (
               <TabsTrigger key={value} value={value} className="flex items-center gap-2">
                 <Icon className="h-4 w-4" />
                 {label}
@@ -71,6 +96,12 @@ export default function AdminHub() {
           <TabsContent value="presidency">
             <PresidencyAssignmentsTab />
           </TabsContent>
+
+          {hasAppointmentPerm ? (
+            <TabsContent value="temple-recommend">
+              <TempleRecommendTab />
+            </TabsContent>
+          ) : null}
         </Tabs>
       </div>
     </Layout>

@@ -19,6 +19,7 @@ class Permission(IntFlag):
     VIEW_CALLING_PROPOSALS = 64
     DISCORD_BOT = 128  # Special permission for the Discord bot to identify itself
     MANAGE_WARDS = 256
+    MANAGE_APPOINTMENTS = 512
 
 # All assignable flags; DISCORD_BOT excluded so the validator rejects it explicitly.
 MAX_VALID_SCOPES = int(functools.reduce(operator.or_, Permission)) & ~int(Permission.DISCORD_BOT)

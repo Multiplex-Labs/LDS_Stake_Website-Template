@@ -29,6 +29,7 @@ import SustainingPrep from "@/pages/leader/callings/sustainings-prep";
 import ReleasesAndSustainings from "@/pages/leader/sustainings";
 import AdminHub from "@/pages/leader/admin";
 import SiteSettings from "@/pages/leader/site-settings";
+import MyAvailability from "@/pages/leader/my-availability";
 
 import Resources from "@/pages/resources";
 import Login from "@/pages/login";
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/leader/sustainings">{() => <ProtectedRoute><ReleasesAndSustainings /></ProtectedRoute>}</Route>
       <Route path="/leader/admin">{() => <ProtectedRoute><AdminHub /></ProtectedRoute>}</Route>
       <Route path="/leader/site-settings">{() => <ProtectedRoute><SiteSettings /></ProtectedRoute>}</Route>
+      <Route path="/leader/my-availability">{() => <ProtectedRoute><MyAvailability /></ProtectedRoute>}</Route>
       <Route path="/leader/user-admin">{() => <Redirect to="/leader/admin?tab=users" />}</Route>
 
       <Route component={NotFound} />

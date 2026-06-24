@@ -1,6 +1,8 @@
 import secrets
 import os
 import tempfile
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from sqlmodel import SQLModel, Session, select
 from fastapi.testclient import TestClient
 from typing import Tuple
@@ -104,7 +106,7 @@ def admin_fixture(db_session: Session, create_user):
     db_session.refresh(user)
     permFlag = Permission.NONE
     for p in Permission:
-        permFlag |= p 
+        permFlag |= p
     admin_perm = Permissions(foreign_id=str(user.id), is_calling=False, scopes=int(permFlag))
     with Session(ORM().engine) as session:
         session.add(admin_perm)
@@ -153,3 +155,188 @@ def high_councilor_assignment_fixture(db_session: Session, high_councilor_callin
     db_session.delete(assignment)
     db_session.delete(usercalling)
     db_session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Shared appointment-system helpers (used across appointment test modules)
+# ---------------------------------------------------------------------------
+
+def login(client: TestClient, email: str, password: str) -> str:
+    """Login and return the access token."""
+    resp = client.post("/auth/login", data={"username": email, "password": password})
+    assert resp.status_code == 200
+    return resp.json()["access_token"]
+
+
+def auth_headers(token: str) -> dict:
+    """Return Bearer auth header dict."""
+    return {"Authorization": f"Bearer {token}"}
+
+
+def ensure_temple_config(
+    session: Session,
+    booking_cutoff_hours: int = 0,
+    slot_buffer_mins: int = 0,
+    booking_window_days: int = 60,
+    timezone: str = "America/Denver",
+) -> "TempleRecommendConfig":
+    """Ensure a TempleRecommendConfig singleton exists and reset it to known values."""
+    session.expire_all()
+    config = session.get(TempleRecommendConfig, 1)
+    if config is None:
+        config = TempleRecommendConfig(
+            id=1,
+            timezone=timezone,
+            slot_buffer_mins=slot_buffer_mins,
+            booking_window_days=booking_window_days,
+            booking_cutoff_hours=booking_cutoff_hours,
+        )
+        session.add(config)
+        session.commit()
+        session.refresh(config)
+    else:
+        config.booking_cutoff_hours = booking_cutoff_hours
+        config.slot_buffer_mins = slot_buffer_mins
+        config.booking_window_days = booking_window_days
+        config.timezone = timezone
+        session.add(config)
+        session.commit()
+        session.refresh(config)
+    return config
+
+
+def make_appointment_type(
+    session: Session,
+    name: str = "Test Interview",
+    duration_mins: int = 30,
+    is_active: bool = True,
+) -> "AppointmentType":
+    """Get or create an AppointmentType by name."""
+    existing = session.exec(
+        select(AppointmentType).where(AppointmentType.name == name)
+    ).first()
+    if existing:
+        # Update active state if needed
+        if existing.is_active != is_active:
+            existing.is_active = is_active
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+        return existing
+    appt = AppointmentType(
+        name=name,
+        duration_mins=duration_mins,
+        description="Test description",
+        details="",
+        icon_name="Calendar",
+        is_active=is_active,
+        display_order=99,
+        system_defined=False,
+    )
+    session.add(appt)
+    session.commit()
+    session.refresh(appt)
+    return appt
+
+
+def make_interviewer_with_calling(session: Session, user: "User", prefix: str = "Test") -> "Calling":
+    """Give the user a calling that has MANAGE_APPOINTMENTS (512) permission.
+
+    Returns the Calling object so callers can clean up if needed.
+    The calling name is scoped to the user ID to avoid cross-test collisions.
+    """
+    calling_name = f"{prefix} Calling {user.id}"
+    calling = session.exec(
+        select(Calling).where(Calling.name == calling_name)
+    ).first()
+    if calling is None:
+        calling = Calling(name=calling_name, max_slots=1, is_public=False, system_defined=False)
+        session.add(calling)
+        session.commit()
+        session.refresh(calling)
+
+    # Grant MANAGE_APPOINTMENTS (512) to the calling
+    perm = session.exec(
+        select(Permissions).where(
+            Permissions.foreign_id == str(calling.id),
+            Permissions.is_calling == True,
+        )
+    ).first()
+    if perm is None:
+        perm = Permissions(foreign_id=str(calling.id), is_calling=True, scopes=512)
+        session.add(perm)
+    else:
+        perm.scopes = perm.scopes | 512
+        session.add(perm)
+
+    # Assign user to the calling (slot 1)
+    uc = session.exec(
+        select(UserCalling).where(
+            UserCalling.calling_id == calling.id,
+            UserCalling.slot_number == 1,
+        )
+    ).first()
+    if uc is None:
+        uc = UserCalling(calling_id=calling.id, slot_number=1, user_id=user.id)
+        session.add(uc)
+    else:
+        uc.user_id = user.id
+        session.add(uc)
+
+    session.commit()
+    return calling
+
+
+def make_availability_window(
+    session: Session,
+    user_id: int,
+    day_of_week: int,
+    start_minute: int = 540,   # 9:00 AM
+    end_minute: int = 600,     # 10:00 AM
+) -> "AvailabilityWindow":
+    """Create and persist an AvailabilityWindow for the given user and day."""
+    window = AvailabilityWindow(
+        user_id=user_id,
+        day_of_week=day_of_week,
+        start_minute=start_minute,
+        end_minute=end_minute,
+        is_active=True,
+    )
+    session.add(window)
+    session.commit()
+    session.refresh(window)
+    return window
+
+
+def get_next_weekday(day_of_week: int) -> date:
+    """Return the next date matching the given weekday (0=Mon, 6=Sun), never today."""
+    today = date.today()
+    days_ahead = (day_of_week - today.weekday()) % 7
+    if days_ahead == 0:
+        days_ahead = 7
+    return today + timedelta(days=days_ahead)
+
+
+def build_slot_utc(
+    target_date: date,
+    hour: int,
+    minute: int = 0,
+    timezone: str = "America/Denver",
+) -> datetime:
+    """Return a naive UTC datetime for the given local time on target_date."""
+    tz = ZoneInfo(timezone)
+    local_dt = datetime(target_date.year, target_date.month, target_date.day, hour, minute, tzinfo=tz)
+    return local_dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+
+
+def cleanup_booking(session: Session, booking: "Booking") -> None:
+    """Delete BookingAuditLog rows then the Booking itself (respects FK constraints)."""
+    from sqlalchemy import text
+    session.exec(text(f"DELETE FROM bookingauditlog WHERE booking_id = {booking.id}"))
+    session.exec(text(f"DELETE FROM booking WHERE id = {booking.id}"))
+    session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Pytest fixtures built on the shared helpers above
+# ---------------------------------------------------------------------------

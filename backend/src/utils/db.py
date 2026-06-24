@@ -329,6 +329,132 @@ def create_presidency_assignments(session: Optional[Session] = None):
             _ensure_rows(s)
 
 
+CURATED_ICONS = {
+    "Shield", "ShieldCheck", "Rings", "Heart", "Star", "Users", "User",
+    "Calendar", "CalendarCheck", "Clock", "Key", "Home", "Building2",
+    "BookOpen", "Flag", "Landmark", "Crown", "Sparkles", "Award", "Badge",
+    "CheckCircle", "Globe", "MapPin", "Church", "Scroll",
+}
+
+DEFAULT_APPOINTMENT_TYPES = [
+    {
+        "name": "Renew Temple Recommend",
+        "description": "Interview to renew your temple recommend.",
+        "duration_mins": 10,
+        "details": "If you have any questions that haven't yet been answered, please call. Otherwise, we look forward to seeing you for your appointment.",
+        "icon_name": "ShieldCheck",
+        "display_order": 1,
+    },
+    {
+        "name": "Ecclesiastical Endorsement",
+        "description": "Ecclesiastical endorsement interview with the Stake President.",
+        "duration_mins": 10,
+        "details": "If you have any questions that haven't yet been answered, please call. Otherwise, we look forward to seeing you for your appointment.",
+        "icon_name": "Award",
+        "display_order": 2,
+    },
+    {
+        "name": "Sealing (Not Endowed)",
+        "description": "For those being sealed who have not yet been endowed.",
+        "duration_mins": 30,
+        "details": "Sign up for this appointment if you are being Sealed AND 1. you have NOT been endowed OR 2. your fiance IS a member of our stake and is NOT endowed. Otherwise sign up for a \"Sealing (Endowed)\" appointment. You only need to sign up for one appointment for both of you.",
+        "icon_name": "Rings",
+        "display_order": 3,
+    },
+    {
+        "name": "Sealing (Endowed)",
+        "description": "For those being sealed who are already endowed.",
+        "duration_mins": 30,
+        "details": "Sign up for this appointment if you are endowed AND 1. your fiancé is not a member of our stake. OR 2. your fiance is endowed and a member of our stake. Otherwise sign up for a \"Sealing (Not Endowed)\" appointment. You will only need one appointment for both of you. Please bring your Fiancé/Fiancée with you if possible.",
+        "icon_name": "Rings",
+        "display_order": 4,
+    },
+    {
+        "name": "Endowment",
+        "description": "First-time endowment interview.",
+        "duration_mins": 30,
+        "details": "Sign up for this appointment if you are going to the temple for the first time to receive your endowment.",
+        "icon_name": "Landmark",
+        "display_order": 5,
+    },
+    {
+        "name": "Melchizedek Priesthood",
+        "description": "Interview to receive the Melchizedek Priesthood.",
+        "duration_mins": 30,
+        "details": "Sign up for this interview if you have met with the Bishop and are ready to meet with the Stake President to receive the Melchizedek Priesthood.",
+        "icon_name": "Crown",
+        "display_order": 6,
+    },
+    {
+        "name": "Other",
+        "description": "Any other reason to meet with the Stake President.",
+        "duration_mins": 30,
+        "details": "Sign up for this appointment if you need to meet with the Stake President for any reason other than a Temple Recommend, Priesthood Ordination, Mission, or an Ecclesiastical Endorsement.",
+        "icon_name": "Calendar",
+        "display_order": 7,
+    },
+]
+
+
+def upsert_temple_recommend_config():
+    """Creates the singleton TempleRecommendConfig row (id=1) with defaults if it doesn't exist."""
+    from ..models import TempleRecommendConfig
+    orm = ORM()
+    with Session(orm.engine) as session:
+        existing = session.get(TempleRecommendConfig, 1)
+        if existing is None:
+            config = TempleRecommendConfig(id=1)
+            session.add(config)
+            session.commit()
+
+
+def create_default_appointment_types():
+    """Idempotent upsert-by-name of 6 system-defined appointment types."""
+    from ..models import AppointmentType
+    orm = ORM()
+    with Session(orm.engine) as session:
+        for data in DEFAULT_APPOINTMENT_TYPES:
+            existing = session.exec(
+                select(AppointmentType).where(AppointmentType.name == data["name"])
+            ).first()
+            if existing is None:
+                session.add(AppointmentType(**data, system_defined=True))
+        session.commit()
+
+
+def pre_populate_fast_sunday_exceptions():
+    """Idempotently creates global AvailabilityException rows for Fast Sundays (first Sunday of each month)
+    for the current year and next year."""
+    import calendar as cal_module
+    from datetime import date
+    from ..models import AvailabilityException
+    orm = ORM()
+    today = date.today()
+    years = [today.year, today.year + 1]
+    with Session(orm.engine) as session:
+        for year in years:
+            for month in range(1, 13):
+                first_day = date(year, month, 1)
+                day_of_week = first_day.weekday()  # 0=Mon, 6=Sun
+                days_until_sunday = (6 - day_of_week) % 7
+                fast_sunday = date(year, month, 1 + days_until_sunday)
+                existing = session.exec(
+                    select(AvailabilityException).where(
+                        AvailabilityException.date == fast_sunday,
+                        AvailabilityException.is_global == True,
+                        AvailabilityException.reason == "Fast Sunday",
+                    )
+                ).first()
+                if existing is None:
+                    session.add(AvailabilityException(
+                        date=fast_sunday,
+                        reason="Fast Sunday",
+                        is_global=True,
+                        user_id=None,
+                    ))
+        session.commit()
+
+
 def validate_unique_field(
     session: Session,
     model: Type[SQLModel],

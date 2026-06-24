@@ -197,12 +197,100 @@ export interface ApiUserPermissions {
 
 // Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) intentionally excluded.
 export const ASSIGNABLE_PERMISSIONS = [
-  { flag: 1,  label: "Manage Users" },
-  { flag: 2,  label: "Manage Callings" },
-  { flag: 4,  label: "Manage Assignments" },
-  { flag: 8,  label: "Manage Speaking Schedule" },
-  { flag: 16, label: "Submit Calling Proposals" },
+  { flag: 1,   label: "Manage Users" },
+  { flag: 2,   label: "Manage Callings" },
+  { flag: 4,   label: "Manage Assignments" },
+  { flag: 8,   label: "Manage Speaking Schedule" },
+  { flag: 16,  label: "Submit Calling Proposals" },
   { flag: 32,  label: "Manage Calling Proposals" },
   { flag: 64,  label: "View Calling Proposals" },
   { flag: 256, label: "Manage Wards" },
+  { flag: 512, label: "Manage Appointments" },
 ] as const;
+
+// --- Temple Recommend / Appointment types ---
+
+export interface TempleRecommendConfig {
+  id: number;
+  location_name: string;
+  location_address: string;
+  open_hours_text: string;
+  exception_note: string;
+  timezone: string;
+  slot_buffer_mins: number;
+  booking_window_days: number;
+  booking_cutoff_hours: number;
+}
+
+export interface AppointmentType {
+  id: number;
+  name: string;
+  description: string;
+  duration_mins: number;
+  details: string;
+  icon_name: string;
+  is_active: boolean;
+  display_order: number;
+  system_defined: boolean;
+}
+
+export interface AvailabilityWindow {
+  id: number;
+  user_id: number;
+  day_of_week: 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Mon, 6=Sun
+  start_minute: number;
+  end_minute: number;
+  valid_from: string | null;
+  valid_until: string | null;
+  is_active: boolean;
+}
+
+/** Named recurrence rules; JSON-encoded custom rules are also valid. */
+export type RecurrenceRule = "first_sunday_monthly" | (string & Record<never, never>);
+
+export interface AvailabilityException {
+  id: number;
+  date: string | null;     // null for recurring exceptions
+  reason: string;
+  is_global: boolean;
+  user_id: number | null;
+  recurrence: RecurrenceRule | null;
+}
+
+export type BookingStatus =
+  | "PENDING_EMAIL_CONFIRM"
+  | "CONFIRMED"
+  | "EXPIRED"
+  | "CANCELLED_BY_MEMBER"
+  | "CANCELLED_BY_PRESIDENCY"
+  | "COMPLETED"
+  | "NO_SHOW";
+
+export interface AppointmentSlot {
+  slot_datetime_utc: string;
+  interviewer_user_id: number;
+  interviewer_name: string;
+}
+
+export interface Booking {
+  id: number;
+  appointment_type_id: number;
+  interviewer_user_id: number;
+  member_name: string;
+  member_email: string;
+  member_phone: string;
+  booking_date: string;
+  start_minute_of_day: number;
+  end_minute_of_day: number;
+  start_datetime: string;
+  end_datetime: string;
+  status: BookingStatus;
+  confirmation_token: string;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  cancelled_by_user_id: number | null;
+  notification_sent_at: string | null;
+  calendar_sync_status: string;
+  calendar_event_id: string | null;
+  created_at: string;
+}
