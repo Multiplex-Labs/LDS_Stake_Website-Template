@@ -64,6 +64,25 @@ class BookingStatus(str, Enum):
     CANCELLED_BY_PRESIDENCY = "CANCELLED_BY_PRESIDENCY"
     COMPLETED = "COMPLETED"
     NO_SHOW = "NO_SHOW"
+    RESCHEDULED = "RESCHEDULED"
+
+
+class CalendarSyncStatus(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
+    SYNCED = "synced"
+    SYNC_FAILED = "sync_failed"
+
+
+# BookingStatus valid transitions:
+# PENDING_EMAIL_CONFIRM -> CONFIRMED            (email confirmation link clicked)
+# PENDING_EMAIL_CONFIRM -> EXPIRED              (24h expiry loop)
+# CONFIRMED -> CANCELLED_BY_MEMBER              (member cancel token link)
+# CONFIRMED -> CANCELLED_BY_PRESIDENCY          (admin cancel endpoint)
+# CONFIRMED -> RESCHEDULED                      (atomic reschedule: old=RESCHEDULED, new=CONFIRMED)
+# CONFIRMED -> COMPLETED                        (admin status endpoint)
+# CONFIRMED -> NO_SHOW                          (admin status endpoint)
+# RESCHEDULED, EXPIRED, CANCELLED_*, COMPLETED, NO_SHOW — terminal (no further transitions)
 
 
 class Booking(BaseModel, table=True):
@@ -89,6 +108,8 @@ class Booking(BaseModel, table=True):
     notification_sent_at: Optional[datetime] = Field(default=None)
     calendar_sync_status: str = Field(default="not_applicable")
     calendar_event_id: Optional[str] = Field(default=None)
+    reschedule_token: Optional[str] = Field(default=None, index=True)
+    reminder_sent_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 

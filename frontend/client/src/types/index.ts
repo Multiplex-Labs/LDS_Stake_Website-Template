@@ -264,7 +264,8 @@ export type BookingStatus =
   | "CANCELLED_BY_MEMBER"
   | "CANCELLED_BY_PRESIDENCY"
   | "COMPLETED"
-  | "NO_SHOW";
+  | "NO_SHOW"
+  | "RESCHEDULED";
 
 export interface AppointmentSlot {
   slot_datetime_utc: string;
@@ -290,7 +291,9 @@ export interface Booking {
   cancellation_reason: string | null;
   cancelled_by_user_id: number | null;
   notification_sent_at: string | null;
-  calendar_sync_status: string;
+  calendar_sync_status: string | null;
   calendar_event_id: string | null;
+  reschedule_token: string | null;
+  reminder_sent_at: string | null;
   created_at: string;
 }

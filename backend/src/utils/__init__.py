@@ -20,7 +20,20 @@ from .db import (
     CURATED_ICONS,
 )
 
-from .email import email_service
+from .email import (
+    send_email,
+    validate_email_credentials,
+    render_booking_confirmation,
+    render_interviewer_notification,
+    render_member_cancellation_confirmation,
+    render_presidency_cancellation_notice,
+    render_booking_reschedule_success,
+    render_reschedule_interviewer_notification,
+    render_booking_reminder,
+    render_booking_already_confirmed,
+    EmailConfigError,
+    ProviderError,
+)
 
 from .time import format_datetime_http
 
@@ -52,3 +65,5 @@ from .calling_kanban import (
 from .ward import load_wards, get_bishops_ward
 
 from .discord_bot import DiscordBotHandle
+
+from .background import send_appointment_reminders_loop, process_reminders

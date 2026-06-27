@@ -18,6 +18,8 @@ from .utils import (
     upsert_temple_recommend_config,
     create_default_appointment_types,
     pre_populate_fast_sunday_exceptions,
+    validate_email_credentials,
+    send_appointment_reminders_loop,
 )
 import os
 import asyncio
@@ -50,6 +52,8 @@ async def lifespan(app: FastAPI):
     upsert_temple_recommend_config()
     create_default_appointment_types()
     pre_populate_fast_sunday_exceptions()
+    ## Validate email provider credentials at startup
+    validate_email_credentials()
     ## Start background task for session cleanup
     session_cleanup_task = asyncio.create_task(session_cleanup_loop())
     ## Start background task for speaking assignment cleanup
@@ -59,6 +63,8 @@ async def lifespan(app: FastAPI):
     ## Start background task to expire unconfirmed bookings
     from .routers.appointment_bookings import expire_pending_bookings_loop
     expire_bookings_task = asyncio.create_task(expire_pending_bookings_loop())
+    ## Start background task to send 24-hour appointment reminders (separate task from expiry loop)
+    reminders_task = asyncio.create_task(send_appointment_reminders_loop())
     ## Load speaking schedule from csv
     schedule = load_speaking_schedule()
     if schedule:
@@ -78,6 +84,7 @@ async def lifespan(app: FastAPI):
     speaking_assignment_cleanup_task.cancel()
     backup_loop_task.cancel()
     expire_bookings_task.cancel()
+    reminders_task.cancel()
 
 app = FastAPI(title="lds-stake-backend", lifespan=lifespan)
 
@@ -85,7 +92,7 @@ def configure_app(application: FastAPI) -> None:
     # basic middleware
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

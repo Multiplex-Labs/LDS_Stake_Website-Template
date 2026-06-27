@@ -323,6 +323,30 @@ JWT_SECRET_KEY=<required — any random string>
 SSL_ENABLED=false
 SP_APPROVAL_THRESHOLD=2
 HC_APPROVAL_THRESHOLD=3
+
+# Email — Brevo (primary, 300/day free tier)
+BREVO_API_KEY=<Brevo transactional API key>
+BREVO_FROM_EMAIL=noreply@yourdomain.com
+
+# Email — Mailjet (fallback, 200/day free tier)
+MAILJET_API_KEY=<Mailjet API key>
+MAILJET_SECRET_KEY=<Mailjet secret key>
+MAILJET_FROM_EMAIL=noreply@yourdomain.com
+
+# Reply-To address shown to recipients (should be a monitored clerk inbox)
+REPLY_TO_EMAIL=clerk@yourdomain.com
+
+# Google Calendar integration — optional; omit to disable silently
+# GOOGLE_SERVICE_ACCOUNT_FILE must be a filesystem path to a GCP service account JSON file, not raw JSON.
+GOOGLE_SERVICE_ACCOUNT_FILE=/path/to/service-account.json
+GOOGLE_CALENDAR_ID=<calendar-id>@group.calendar.google.com
+
+# CORS — comma-separated allowed frontend origins; defaults to http://localhost:3100
+ALLOWED_ORIGINS=http://localhost:3100
+
+# Base URLs used in redirect responses and email links
+FRONTEND_BASE_URL=http://localhost:3100
+BACKEND_BASE_URL=http://localhost:8000
 ```
 
 **Frontend** — no `.env` needed for dev (proxies to localhost:8000 by default).

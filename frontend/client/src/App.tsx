@@ -13,6 +13,8 @@ import StakeLeadership from "@/pages/stake/leadership";
 import StakeSports from "@/pages/stake/sports";
 import TempleRecommend from "@/pages/stake/temple-recommend";
 import ReserveBuilding from "@/pages/stake/reserve";
+import ReschedulePage from "@/pages/appointments/reschedule";
+import CancelledPage from "@/pages/appointments/cancelled";
 
 import WardMap from "@/pages/ward/map";
 import MeetingTimes from "@/pages/ward/meeting-times";
@@ -50,6 +52,11 @@ function Router() {
       <Route path="/stake-info/sports" component={StakeSports} />
       <Route path="/stake-info/reserve" component={ReserveBuilding} />
       <Route path="/stake-info/temple-recommend" component={TempleRecommend} />
+
+      {/* Appointments (public — email link destinations) */}
+      <Route path="/appointments/reschedule" component={ReschedulePage} />
+      <Route path="/appointments/cancelled" component={CancelledPage} />
+      <Route path="/appointments/confirmed">{() => <Redirect to="/stake-info/temple-recommend?confirmed=1" />}</Route>
 
       {/* Ward Info */}
       <Route path="/ward-info/map" component={WardMap} />
