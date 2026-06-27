@@ -2021,7 +2021,7 @@ const STATUS_META: Record<BookingStatus, { label: string; className: string }> =
   CANCELLED_BY_PRESIDENCY: { label: "Cancelled (Admin)", className: "text-destructive border-destructive bg-destructive/10" },
   COMPLETED: { label: "Completed", className: "text-secondary-foreground border-secondary bg-secondary/10" },
   NO_SHOW: { label: "No Show", className: "text-muted-foreground border-border" },
-  RESCHEDULED: { label: "Rescheduled", className: "text-yellow-700 border-yellow-400 bg-yellow-50 dark:text-yellow-300 dark:border-yellow-700 dark:bg-yellow-950/30" },
+  RESCHEDULED: { label: "Rescheduled", className: "text-muted-foreground border-border bg-muted" },
 };
 
 interface BookingRow extends Booking {
@@ -2284,7 +2284,7 @@ function BookingsSubTab() {
           { key: "PENDING_EMAIL_CONFIRM" as const, label: "Pending", color: "text-destructive border-destructive", count: statusCounts.PENDING },
           { key: "COMPLETED" as const, label: "Completed", color: "text-secondary-foreground border-secondary", count: statusCounts.COMPLETED },
           { key: "CANCELLED" as const, label: "Cancelled", color: "text-destructive border-destructive", count: statusCounts.CANCELLED },
-          { key: "RESCHEDULED" as const, label: "Rescheduled", color: "text-yellow-700 border-yellow-400", count: statusCounts.RESCHEDULED },
+          { key: "RESCHEDULED" as const, label: "Rescheduled", color: "text-muted-foreground border-border", count: statusCounts.RESCHEDULED },
         ] as const).map(({ key, label, color, count }) => (
           <button
             key={key}

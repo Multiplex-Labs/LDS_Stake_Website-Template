@@ -265,3 +265,109 @@ def test_reminder_loop_is_separate_task():
     assert expire_task_lines, (
         "expire_pending_bookings_loop must be wrapped in asyncio.create_task() in app.py"
     )
+
+
+# ---------------------------------------------------------------------------
+# M-9: Exact window-boundary reminder tests
+# ---------------------------------------------------------------------------
+
+
+def test_reminder_at_lower_bound_20h(db_session: Session, userpass):
+    """A CONFIRMED booking just above the 20h lower bound must receive a reminder.
+
+    A 5-second buffer over the nominal 20h boundary absorbs test-execution latency:
+    process_reminders() recomputes utcnow() after the booking is inserted, so
+    window_start is slightly later than the booking's start_datetime would be with
+    an exact timedelta(hours=20). The 5-second pad keeps the booking inside the window
+    without materially changing what the test verifies.
+    """
+    user, _ = userpass
+    ensure_temple_config(db_session)
+    appt = make_appointment_type(db_session, "Reminder Lower Bound 20h")
+    make_interviewer_with_calling(db_session, user, prefix="ReminderLowerBound")
+
+    # Slightly above 20h to absorb the microseconds between booking creation and
+    # the window_start computation inside process_reminders.
+    start_dt = datetime.utcnow() + timedelta(hours=20, seconds=5)
+    booking = _make_reminder_booking(db_session, appt, user, start_dt, "lower-bound-20h")
+
+    with patch("src.utils.email.send_email") as mock_send, \
+         patch("src.utils.email.render_booking_reminder",
+               return_value=("<p>html</p>", "plain")):
+        process_reminders(db_session)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Booking, booking.id)
+    stamp = refreshed.reminder_sent_at if refreshed else None
+    if refreshed:
+        cleanup_booking(db_session, refreshed)
+
+    assert stamp is not None, "reminder_sent_at must be set for a booking at the 20h lower bound"
+    mock_send.assert_called_once()
+
+
+def test_reminder_at_upper_bound_28h(db_session: Session, userpass):
+    """A CONFIRMED booking at exactly the 28h upper bound must receive a reminder.
+
+    A booking created at utcnow() + 28h is strictly inside the window when
+    process_reminders() runs (window_end = that later utcnow() + 28h), so the
+    <=  condition is satisfied without any additional buffer.
+    """
+    user, _ = userpass
+    ensure_temple_config(db_session)
+    appt = make_appointment_type(db_session, "Reminder Upper Bound 28h")
+    make_interviewer_with_calling(db_session, user, prefix="ReminderUpperBound")
+
+    start_dt = datetime.utcnow() + timedelta(hours=28)
+    booking = _make_reminder_booking(db_session, appt, user, start_dt, "upper-bound-28h")
+
+    with patch("src.utils.email.send_email") as mock_send, \
+         patch("src.utils.email.render_booking_reminder",
+               return_value=("<p>html</p>", "plain")):
+        process_reminders(db_session)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Booking, booking.id)
+    stamp = refreshed.reminder_sent_at if refreshed else None
+    if refreshed:
+        cleanup_booking(db_session, refreshed)
+
+    assert stamp is not None, "reminder_sent_at must be set for a booking at the 28h upper bound"
+    mock_send.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# M-11: Non-CONFIRMED booking in reminder window gets no reminder
+# ---------------------------------------------------------------------------
+
+
+def test_reminder_not_sent_for_rescheduled(db_session: Session, userpass):
+    """A RESCHEDULED booking inside the 20-28h window must not receive a reminder.
+
+    process_reminders() filters on status == CONFIRMED, so a RESCHEDULED booking
+    must be excluded even when its start_datetime falls inside the window.
+    """
+    user, _ = userpass
+    ensure_temple_config(db_session)
+    appt = make_appointment_type(db_session, "Reminder Not Sent Rescheduled")
+    make_interviewer_with_calling(db_session, user, prefix="ReminderNotRescheduled")
+
+    start_dt = datetime.utcnow() + timedelta(hours=22)
+    booking = _make_reminder_booking(db_session, appt, user, start_dt, "not-sent-rescheduled")
+
+    # Transition to RESCHEDULED before the reminder loop runs.
+    booking.status = BookingStatus.RESCHEDULED
+    db_session.add(booking)
+    db_session.commit()
+
+    with patch("src.utils.email.send_email") as mock_send:
+        process_reminders(db_session)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Booking, booking.id)
+    stamp = refreshed.reminder_sent_at if refreshed else None
+    if refreshed:
+        cleanup_booking(db_session, refreshed)
+
+    mock_send.assert_not_called()
+    assert stamp is None, "reminder_sent_at must remain None for a RESCHEDULED booking"

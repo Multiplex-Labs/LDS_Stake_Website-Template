@@ -13,8 +13,6 @@ from sqlmodel import Session, select
 
 logger = logging.getLogger("application")
 
-logger.info("[reminders] Appointment reminder loop started (20–28h window, 30-min polling)")
-
 
 def process_reminders(session: Session) -> None:
     """Process all confirmed bookings in the 20-28h reminder window.
@@ -99,6 +97,7 @@ async def send_appointment_reminders_loop() -> None:
 
     The loop body is extracted to process_reminders(session) for testability.
     """
+    logger.info("[reminders] Appointment reminder loop started (20–28h window, 30-min polling)")
     from ..db.orm import ORM
 
     while True:

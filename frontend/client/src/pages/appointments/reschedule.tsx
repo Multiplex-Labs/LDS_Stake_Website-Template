@@ -22,34 +22,35 @@ type ErrorState =
   | null;
 
 function parseErrorState(error: unknown): { state: ErrorState; cutoffDetail: string | null } {
-  if (!(error instanceof Error)) {
-    return { state: "not_found", cutoffDetail: null };
-  }
+  if (!(error instanceof Error)) return { state: "not_found", cutoffDetail: null };
 
   const msg = error.message;
+  const colonIdx = msg.indexOf(":");
+  if (colonIdx === -1) return { state: "not_found", cutoffDetail: null };
 
-  if (msg.startsWith("410")) {
-    return { state: "expired", cutoffDetail: null };
-  }
+  const statusCode = parseInt(msg.slice(0, colonIdx).trim(), 10);
+  const bodyText = msg.slice(colonIdx + 1).trim();
 
-  if (msg.startsWith("404")) {
+  if (statusCode === 403 || statusCode === 404) {
     return { state: "not_found", cutoffDetail: null };
   }
 
-  if (msg.startsWith("409")) {
-    const colonIndex = msg.indexOf(":");
-    const jsonPart = colonIndex !== -1 ? msg.slice(colonIndex + 1).trim() : "";
+  if (statusCode === 409) {
+    let detail = "";
     try {
-      const body = JSON.parse(jsonPart) as { code?: string; detail?: string };
-      if (body.code === "ALREADY_RESCHEDULED") {
-        return { state: "already_rescheduled", cutoffDetail: null };
-      }
-      if (body.code === "WITHIN_CUTOFF") {
-        return { state: "within_cutoff", cutoffDetail: body.detail ?? null };
-      }
+      const parsed = JSON.parse(bodyText);
+      detail = (parsed?.detail as string) ?? "";
     } catch {
-      // Unrecognized 409 body — fall through to not_found
+      detail = bodyText;
     }
+
+    if (detail.toLowerCase().includes("rescheduled")) {
+      return { state: "already_rescheduled", cutoffDetail: null };
+    }
+    if (detail.toLowerCase().includes("cutoff")) {
+      return { state: "within_cutoff", cutoffDetail: detail };
+    }
+    return { state: "not_found", cutoffDetail: null };
   }
 
   return { state: "not_found", cutoffDetail: null };

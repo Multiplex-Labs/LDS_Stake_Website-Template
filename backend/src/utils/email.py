@@ -4,7 +4,7 @@ Public API
 ----------
 send_email(to_email, to_name, subject, html_body, plain_body, reply_to=None) -> None
 validate_email_credentials() -> None
-render_*(...)  -> tuple[str, str]   # (html, plain_text)
+render_*(...)  -> EmailContent       # (html, plain_text)
 
 Cascade rules
 -------------
@@ -18,7 +18,7 @@ import html as html_module
 import logging
 import os
 from datetime import datetime
-from typing import Optional
+from typing import NamedTuple, Optional
 
 logger = logging.getLogger("application")
 
@@ -30,9 +30,22 @@ logger = logging.getLogger("application")
 class EmailConfigError(Exception):
     """HTTP 4xx from a provider — configuration or code bug; do not cascade."""
 
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class ProviderError(Exception):
     """HTTP 5xx or network failure — safe to cascade to the fallback provider."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class EmailContent(NamedTuple):
+    html: str
+    plain: str
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +115,11 @@ def _send_via_brevo(
         api_instance.send_transac_email(send_smtp_email)
     except BrevoApiException as exc:
         if exc.status >= 500:
-            raise ProviderError(f"Brevo {exc.status}: {exc.reason}") from exc
+            raise ProviderError(f"Brevo {exc.status}: {exc.reason}", status_code=exc.status) from exc
         logger.error("[email] Brevo 4xx — config error, not retrying: %s", exc)
-        raise EmailConfigError(f"Brevo {exc.status}: {exc.reason}") from exc
+        raise EmailConfigError(f"Brevo {exc.status}: {exc.reason}", status_code=exc.status) from exc
+    except (AttributeError, TypeError, NameError, KeyError):
+        raise  # programming errors — do not cascade to fallback
     except Exception as exc:
         raise ProviderError(f"Brevo network error: {exc}") from exc
 
@@ -147,14 +162,14 @@ def _send_via_mailjet(
         result = mailjet.send.create(data=data)
         status = result.status_code
         if status >= 500:
-            raise ProviderError(f"Mailjet {status}: {result.text}")
+            raise ProviderError(f"Mailjet {status}: {result.text}", status_code=status)
         if status >= 400:
             logger.error(
                 "[email] Mailjet 4xx — config error, not retrying: %s %s",
                 status,
                 result.text,
             )
-            raise EmailConfigError(f"Mailjet {status}")
+            raise EmailConfigError(f"Mailjet {status}", status_code=status)
     except (ProviderError, EmailConfigError):
         raise
     except Exception as exc:
@@ -207,10 +222,14 @@ def validate_email_credentials() -> None:
         logger.warning(
             "[email] MAILJET_SECRET_KEY not set — email sending will fail at runtime"
         )
+    if not os.getenv("BREVO_FROM_EMAIL"):
+        logger.warning("[email] BREVO_FROM_EMAIL not set — emails will be rejected at send time")
+    if not os.getenv("MAILJET_FROM_EMAIL"):
+        logger.warning("[email] MAILJET_FROM_EMAIL not set — Mailjet fallback will fail at send time")
 
 
 # ---------------------------------------------------------------------------
-# Email templates — all return tuple[str, str] (html, plain_text)
+# Email templates — all return EmailContent (html, plain_text)
 # ---------------------------------------------------------------------------
 
 def render_booking_confirmation(
@@ -223,7 +242,7 @@ def render_booking_confirmation(
     interviewer_name: str,
     confirm_url: str,
     cancel_url: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Pending-confirm email sent immediately after a booking is created."""
     safe_name = _escape(member_name)
     safe_type = _escape(type_name)
@@ -260,7 +279,7 @@ def render_booking_confirmation(
         f"Cancel your appointment:  {cancel_url}\n\n"
         f"Please come dressed as you would for Sacrament Meeting or a temple visit."
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_interviewer_notification(
@@ -271,7 +290,7 @@ def render_interviewer_notification(
     type_name: str,
     date_str: str,
     time_str: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Notification sent to the interviewer when a new booking is received."""
     safe_name = _escape(member_name)
     safe_email = _escape(member_email)
@@ -303,7 +322,7 @@ def render_interviewer_notification(
         f"  Phone:  {member_phone}\n\n"
         f"This appointment is pending member email confirmation."
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_member_cancellation_confirmation(
@@ -313,7 +332,7 @@ def render_member_cancellation_confirmation(
     date_str: str,
     time_str: str,
     rebook_url: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Confirmation sent to the member after they cancel their own booking."""
     safe_name = _escape(member_name)
     safe_type = _escape(type_name)
@@ -339,7 +358,7 @@ def render_member_cancellation_confirmation(
         f"  Time: {time_str}\n\n"
         f"Schedule a new appointment: {rebook_url}"
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_presidency_cancellation_notice(
@@ -350,7 +369,7 @@ def render_presidency_cancellation_notice(
     time_str: str,
     reason: Optional[str],
     rebook_url: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Notice sent to the member when the Stake Presidency cancels their booking."""
     safe_name = _escape(member_name)
     safe_type = _escape(type_name)
@@ -381,7 +400,7 @@ def render_presidency_cancellation_notice(
         f"  Time: {time_str}{reason_plain}\n\n"
         f"Schedule a new appointment: {rebook_url}"
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_booking_reschedule_success(
@@ -391,7 +410,7 @@ def render_booking_reschedule_success(
     appointment_type_name: str,
     interviewer_name: str,
     cancel_link: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Sent to the member after a successful reschedule.
 
     Does NOT include a re-confirm link — the new booking is already CONFIRMED.
@@ -427,7 +446,7 @@ def render_booking_reschedule_success(
         f"Your appointment is confirmed — no further action is needed.\n\n"
         f"If you need to cancel: {cancel_link}"
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_reschedule_interviewer_notification(
@@ -436,7 +455,7 @@ def render_reschedule_interviewer_notification(
     old_datetime: datetime,
     new_datetime: datetime,
     appointment_type_name: str,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Notification sent to the interviewer when a member reschedules."""
     safe_interviewer = _escape(interviewer_name)
     safe_member = _escape(member_name)
@@ -467,7 +486,7 @@ def render_reschedule_interviewer_notification(
         f"  New time:      {new_fmt}\n\n"
         f"Please update your calendar accordingly."
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_booking_reminder(
@@ -476,12 +495,8 @@ def render_booking_reminder(
     appointment_type_name: str,
     interviewer_name: str,
     cancel_link: str,
-) -> tuple[str, str]:
-    """24-hour reminder email sent to the member.
-
-    Does NOT include a confirm link — booking is already CONFIRMED.
-    Does NOT include a reschedule link — the appointment is within the advance-notice window.
-    """
+) -> EmailContent:
+    """Reminder email sent to the member when their appointment is 20–28 hours away."""
     safe_name = _escape(member_name)
     safe_type = _escape(appointment_type_name)
     safe_interviewer = _escape(interviewer_name)
@@ -510,7 +525,7 @@ def render_booking_reminder(
         f"Please come dressed as you would for Sacrament Meeting or a temple visit.\n\n"
         f"If you need to cancel: {cancel_link}"
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)
 
 
 def render_booking_already_confirmed(
@@ -523,7 +538,7 @@ def render_booking_already_confirmed(
     interviewer_name: str,
     cancel_url: str,
     reschedule_url: Optional[str] = None,
-) -> tuple[str, str]:
+) -> EmailContent:
     """Resend email for a booking that is already CONFIRMED.
 
     Omits the email-confirm link. Includes appointment details, cancel link,
@@ -571,4 +586,4 @@ def render_booking_already_confirmed(
         f"Cancel your appointment: {cancel_url}{reschedule_plain}\n\n"
         f"Please come dressed as you would for Sacrament Meeting or a temple visit."
     )
-    return html_body, plain_body
+    return EmailContent(html=html_body, plain=plain_body)

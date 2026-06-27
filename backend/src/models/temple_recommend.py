@@ -67,6 +67,17 @@ class BookingStatus(str, Enum):
     RESCHEDULED = "RESCHEDULED"
 
 
+# BookingStatus valid transitions:
+# PENDING_EMAIL_CONFIRM -> CONFIRMED            (email confirmation link clicked)
+# PENDING_EMAIL_CONFIRM -> EXPIRED              (24h expiry loop)
+# CONFIRMED -> CANCELLED_BY_MEMBER              (member cancel token link)
+# CONFIRMED -> CANCELLED_BY_PRESIDENCY          (admin cancel endpoint)
+# CONFIRMED -> RESCHEDULED                      (atomic reschedule: old=RESCHEDULED, new=CONFIRMED)
+# CONFIRMED -> COMPLETED                        (admin status endpoint)
+# CONFIRMED -> NO_SHOW                          (admin status endpoint)
+# RESCHEDULED, EXPIRED, CANCELLED_*, COMPLETED, NO_SHOW — terminal (no further transitions)
+
+
 class Booking(BaseModel, table=True):
     __table_args__ = (
         UniqueConstraint("start_datetime", "interviewer_user_id", name="uq_booking_slot"),

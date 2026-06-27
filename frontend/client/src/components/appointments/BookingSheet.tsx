@@ -147,16 +147,18 @@ function groupSlots(slots: AppointmentSlot[]): SlotGroup[] {
 }
 
 // --- Main component ---
-interface BookingSheetProps {
+type BookingSheetBaseProps = {
   type: AppointmentType | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   config: TempleRecommendConfig | undefined;
-  mode?: 'book' | 'reschedule';
-  initialMemberInfo?: { member_name: string; member_email: string; member_phone: string; };
+  initialMemberInfo?: { member_name: string; member_email: string; member_phone: string };
   typeId?: number;
-  rescheduleToken?: string;
-}
+};
+
+type BookingSheetProps =
+  | (BookingSheetBaseProps & { mode?: 'book'; rescheduleToken?: never })
+  | (BookingSheetBaseProps & { mode: 'reschedule'; rescheduleToken: string });
 
 export function BookingSheet({
   type,
@@ -222,10 +224,8 @@ export function BookingSheet({
       if (mode === 'reschedule') {
         res = await apiRequest("POST", "/api/appointment-bookings/reschedule", {
           reschedule_token: rescheduleToken,
-          slot_datetime_utc: selectedSlot.slot_datetime_utc,
-          member_name: data.member_name,
-          member_email: data.member_email,
-          member_phone: data.member_phone,
+          new_slot_start: selectedSlot.slot_datetime_utc,
+          appointment_type_id: typeId ?? type?.id,
         });
       } else {
         res = await apiRequest("POST", "/api/appointment-bookings", {
@@ -440,6 +440,7 @@ export function BookingSheet({
                       {...register("member_name")}
                       placeholder="Jane Smith"
                       autoComplete="name"
+                      readOnly={mode === 'reschedule'}
                     />
                     {errors.member_name && (
                       <p className="text-xs text-destructive">{errors.member_name.message}</p>
@@ -454,6 +455,7 @@ export function BookingSheet({
                       {...register("member_email")}
                       placeholder="jane@example.com"
                       autoComplete="email"
+                      readOnly={mode === 'reschedule'}
                     />
                     {errors.member_email && (
                       <p className="text-xs text-destructive">{errors.member_email.message}</p>
@@ -468,6 +470,7 @@ export function BookingSheet({
                       {...register("member_phone")}
                       placeholder="(435) 555-0123"
                       autoComplete="tel"
+                      readOnly={mode === 'reschedule'}
                     />
                     {errors.member_phone && (
                       <p className="text-xs text-destructive">{errors.member_phone.message}</p>

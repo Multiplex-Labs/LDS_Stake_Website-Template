@@ -21,7 +21,7 @@ and the integration is disabled for the session without aborting startup.
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,10 @@ logger = logging.getLogger(__name__)
 _UNINITIALIZED = object()
 _service_cache = _UNINITIALIZED
 _unconfigured_logged = False
+_misconfiguration_error: Optional[str] = None
 
 
-def get_calendar_service():
+def get_calendar_service() -> Optional[Any]:
     """Return a Google Calendar API Resource, or None if not configured.
 
     Builds and caches the service on the first call. Subsequent calls return
@@ -41,7 +42,7 @@ def get_calendar_service():
     GOOGLE_SERVICE_ACCOUNT_FILE is not set. Returns None (with an ERROR log)
     if the credentials file is missing or invalid.
     """
-    global _service_cache, _unconfigured_logged
+    global _service_cache, _unconfigured_logged, _misconfiguration_error
 
     if _service_cache is not _UNINITIALIZED:
         return _service_cache
@@ -76,8 +77,13 @@ def get_calendar_service():
             type(exc).__name__,
             exc,
         )
+        _misconfiguration_error = f"{type(exc).__name__}: {exc}"
         _service_cache = None
         return None
+
+
+def get_misconfiguration_error() -> Optional[str]:
+    return _misconfiguration_error
 
 
 def create_event(booking, appointment_type_name: str) -> Optional[str]:
@@ -117,11 +123,11 @@ def create_event(booking, appointment_type_name: str) -> Optional[str]:
         created = service.events().insert(calendarId=cal_id, body=event).execute()
         return created.get("id")
     except Exception as exc:
-        logger.error("[calendar] create_event failed: %s", exc)
+        logger.error("[calendar] create_event failed: %s", exc, exc_info=True)
         return None
 
 
-def update_event(event_id: str, new_booking, appointment_type_name: str) -> None:
+def update_event(event_id: str, new_booking, appointment_type_name: str) -> bool:
     """Patch an existing Google Calendar event to reflect a rescheduled booking.
 
     Updates only the start time, end time, and description fields so that
@@ -133,11 +139,11 @@ def update_event(event_id: str, new_booking, appointment_type_name: str) -> None
     """
     service = get_calendar_service()
     if service is None:
-        return
+        return False
 
     cal_id = os.getenv("GOOGLE_CALENDAR_ID")
     if not cal_id:
-        return
+        return False
 
     try:
         patch_body = {
@@ -158,8 +164,10 @@ def update_event(event_id: str, new_booking, appointment_type_name: str) -> None
         service.events().patch(
             calendarId=cal_id, eventId=event_id, body=patch_body
         ).execute()
+        return True
     except Exception as exc:
-        logger.error("[calendar] update_event failed: %s", exc)
+        logger.error("[calendar] update_event failed: %s", exc, exc_info=True)
+        return False
 
 
 def delete_event(event_id: str) -> None:
@@ -176,21 +184,16 @@ def delete_event(event_id: str) -> None:
     if not cal_id:
         return
 
+    from googleapiclient.errors import HttpError
     try:
         service.events().delete(calendarId=cal_id, eventId=event_id).execute()
-    except Exception as exc:
-        # Detect 404 "not found" specifically so we warn rather than error.
-        try:
-            from googleapiclient.errors import HttpError
-            if isinstance(exc, HttpError) and int(exc.resp.status) == 404:
-                logger.warning(
-                    "[calendar] delete_event: event %r not found on calendar — skipping",
-                    event_id,
-                )
-                return
-        except Exception:
-            pass
-        logger.error("[calendar] delete_event failed: %s", exc)
+    except HttpError as exc:
+        if int(exc.resp.status) == 404:
+            logger.warning("[calendar] Event %s not found on delete (already removed)", event_id)
+        else:
+            logger.error("[calendar] delete_event failed for %s: HTTP %s", event_id, exc.resp.status, exc_info=True)
+    except Exception:
+        logger.error("[calendar] delete_event unexpected error for %s", event_id, exc_info=True)
 
 
 # ---------------------------------------------------------------------------

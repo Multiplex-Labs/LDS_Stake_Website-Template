@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
+from pydantic import EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Field, SQLModel, Session, select
 
@@ -49,6 +50,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Module-level constant — do not inline os.getenv elsewhere in this file.
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3100")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
 
 # In-memory rate limit for the resend-confirmation endpoint: email -> last request time.
 _resend_rate_limit: dict[str, datetime] = {}
@@ -59,7 +61,9 @@ _resend_rate_limit: dict[str, datetime] = {}
 # ---------------------------------------------------------------------------
 
 def _generate_confirmation_token() -> str:
-    secret = os.getenv("JWT_SECRET_KEY", "default-secret")
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        raise RuntimeError("JWT_SECRET_KEY env var must be set")
     random_part = secrets.token_hex(16)
     payload = f"{random_part}:new"
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
@@ -72,7 +76,9 @@ def _generate_hmac_token(prefix: str, booking_id: int) -> str:
     Prefix namespacing ensures a token issued for one purpose (e.g. cancel) cannot
     be replayed as another (e.g. reschedule), even if the raw value is extracted.
     """
-    secret = os.getenv("JWT_SECRET_KEY", "default-secret")
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        raise RuntimeError("JWT_SECRET_KEY env var must be set")
     return hmac.new(
         secret.encode(), f"{prefix}:{booking_id}".encode(), hashlib.sha256
     ).hexdigest()
@@ -188,24 +194,23 @@ def _send_booking_confirmation_email(booking_id: int):
             logger.error("_send_booking_confirmation_email: interviewer not found for booking %d", booking_id)
             return
 
-        api_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-        confirm_url = f"{api_base}/appointment-bookings/confirm/{booking.confirmation_token}"
-        cancel_url = f"{api_base}/appointment-bookings/cancel/{booking.confirmation_token}"
+        confirm_url = f"{BACKEND_BASE_URL}/appointment-bookings/confirm/{booking.confirmation_token}"
+        cancel_url = f"{BACKEND_BASE_URL}/appointment-bookings/cancel/{booking.confirmation_token}"
 
         date_str = booking.booking_date.strftime("%A, %B %d, %Y")
         time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        html_body, plain_body = render_booking_confirmation(
+            member_name=booking.member_name,
+            type_name=appt_type.name,
+            date_str=date_str,
+            time_str=time_str,
+            location=config.location_name,
+            interviewer_name=f"{interviewer.fname} {interviewer.lname}",
+            confirm_url=confirm_url,
+            cancel_url=cancel_url,
+        )
         try:
-            html_body, plain_body = render_booking_confirmation(
-                member_name=booking.member_name,
-                type_name=appt_type.name,
-                date_str=date_str,
-                time_str=time_str,
-                location=config.location_name,
-                interviewer_name=f"{interviewer.fname} {interviewer.lname}",
-                confirm_url=confirm_url,
-                cancel_url=cancel_url,
-            )
             send_email(
                 to_email=booking.member_email,
                 to_name=booking.member_name,
@@ -256,15 +261,15 @@ def _send_interviewer_notification_email(booking_id: int):
         date_str = booking.booking_date.strftime("%A, %B %d, %Y")
         time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        html_body, plain_body = render_interviewer_notification(
+            member_name=booking.member_name,
+            member_email=booking.member_email,
+            member_phone=booking.member_phone,
+            type_name=appt_type.name,
+            date_str=date_str,
+            time_str=time_str,
+        )
         try:
-            html_body, plain_body = render_interviewer_notification(
-                member_name=booking.member_name,
-                member_email=booking.member_email,
-                member_phone=booking.member_phone,
-                type_name=appt_type.name,
-                date_str=date_str,
-                time_str=time_str,
-            )
             send_email(
                 to_email=interviewer.email,
                 to_name=f"{interviewer.fname} {interviewer.lname}",
@@ -301,14 +306,14 @@ def _send_member_cancellation_email(booking_id: int):
         date_str = booking.booking_date.strftime("%A, %B %d, %Y")
         time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        html_body, plain_body = render_member_cancellation_confirmation(
+            member_name=booking.member_name,
+            type_name=appt_type.name,
+            date_str=date_str,
+            time_str=time_str,
+            rebook_url=rebook_url,
+        )
         try:
-            html_body, plain_body = render_member_cancellation_confirmation(
-                member_name=booking.member_name,
-                type_name=appt_type.name,
-                date_str=date_str,
-                time_str=time_str,
-                rebook_url=rebook_url,
-            )
             send_email(
                 to_email=booking.member_email,
                 to_name=booking.member_name,
@@ -345,15 +350,15 @@ def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
         date_str = booking.booking_date.strftime("%A, %B %d, %Y")
         time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        html_body, plain_body = render_presidency_cancellation_notice(
+            member_name=booking.member_name,
+            type_name=appt_type.name,
+            date_str=date_str,
+            time_str=time_str,
+            reason=reason,
+            rebook_url=rebook_url,
+        )
         try:
-            html_body, plain_body = render_presidency_cancellation_notice(
-                member_name=booking.member_name,
-                type_name=appt_type.name,
-                date_str=date_str,
-                time_str=time_str,
-                reason=reason,
-                rebook_url=rebook_url,
-            )
             send_email(
                 to_email=booking.member_email,
                 to_name=booking.member_name,
@@ -386,8 +391,7 @@ def _send_reschedule_member_email(new_booking_id: int, old_start_datetime: datet
             logger.error("_send_reschedule_member_email: interviewer not found for booking %d", new_booking_id)
             return
 
-        api_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-        cancel_url = f"{api_base}/appointment-bookings/cancel/{new_booking.confirmation_token}"
+        cancel_url = f"{BACKEND_BASE_URL}/appointment-bookings/cancel/{new_booking.confirmation_token}"
 
         try:
             html_body, plain_body = render_booking_reschedule_success(
@@ -453,6 +457,33 @@ def _send_reschedule_interviewer_email(new_booking_id: int, old_start_datetime: 
             )
 
 
+def _create_calendar_event_for_booking(booking_id: int) -> None:
+    from ..utils.google_calendar import create_event
+    from ..db.orm import ORM
+    with Session(ORM().engine) as session:
+        booking = session.get(Booking, booking_id)
+        if not booking:
+            return
+        appt_type = session.get(AppointmentType, booking.appointment_type_id)
+        type_name = appt_type.name if appt_type else "Temple Recommend Interview"
+        event_id = create_event(booking, type_name)
+        if event_id:
+            booking.calendar_event_id = event_id
+            booking.calendar_sync_status = "synced"
+        else:
+            booking.calendar_sync_status = "sync_failed"
+            logger.error("[calendar] Failed to create calendar event for booking %d", booking_id)
+        session.add(booking)
+        session.commit()
+
+
+def _delete_calendar_event_for_booking(event_id: Optional[str]) -> None:
+    if not event_id:
+        return
+    from ..utils.google_calendar import delete_event
+    delete_event(event_id)
+
+
 def _update_calendar_after_reschedule(new_booking_id: int, old_event_id: Optional[str]):
     """Background task: update or create the Google Calendar event after a reschedule.
 
@@ -472,34 +503,23 @@ def _update_calendar_after_reschedule(new_booking_id: int, old_event_id: Optiona
 
         if old_event_id:
             # Patch the existing event — subscribers get an "event updated" notification.
-            update_event(old_event_id, new_booking, type_name)
+            success = update_event(old_event_id, new_booking, type_name)
+            new_booking.calendar_sync_status = "synced" if success else "sync_failed"
             if new_booking.calendar_event_id != old_event_id:
-                try:
-                    new_booking.calendar_event_id = old_event_id
-                    new_booking.calendar_sync_status = "synced"
-                    session.add(new_booking)
-                    session.commit()
-                except Exception:
-                    logger.error(
-                        "_update_calendar_after_reschedule: failed to persist event_id for booking %d",
-                        new_booking_id,
-                        exc_info=True,
-                    )
+                new_booking.calendar_event_id = old_event_id
+            session.add(new_booking)
+            session.commit()
         else:
             # No prior event; create a new one for the new slot.
             event_id = create_event(new_booking, type_name)
             if event_id:
-                try:
-                    new_booking.calendar_event_id = event_id
-                    new_booking.calendar_sync_status = "synced"
-                    session.add(new_booking)
-                    session.commit()
-                except Exception:
-                    logger.error(
-                        "_update_calendar_after_reschedule: failed to save event_id for booking %d",
-                        new_booking_id,
-                        exc_info=True,
-                    )
+                new_booking.calendar_event_id = event_id
+                new_booking.calendar_sync_status = "synced"
+            else:
+                new_booking.calendar_sync_status = "sync_failed"
+                logger.warning("[calendar] Failed to create calendar event for new booking %d", new_booking.id)
+            session.add(new_booking)
+            session.commit()
 
 
 def _send_already_confirmed_email(booking_id: int):
@@ -527,10 +547,9 @@ def _send_already_confirmed_email(booking_id: int):
             logger.error("_send_already_confirmed_email: interviewer not found for booking %d", booking_id)
             return
 
-        api_base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-        cancel_url = f"{api_base}/appointment-bookings/cancel/{booking.confirmation_token}"
+        cancel_url = f"{BACKEND_BASE_URL}/appointment-bookings/cancel/{booking.confirmation_token}"
         reschedule_url: Optional[str] = (
-            f"{api_base}/appointment-bookings/reschedule/{booking.reschedule_token}"
+            f"{BACKEND_BASE_URL}/appointment-bookings/reschedule/{booking.reschedule_token}"
             if booking.reschedule_token else None
         )
 
@@ -629,12 +648,19 @@ class StatusUpdateBody(SQLModel):
 class RescheduleRequest(SQLModel):
     reschedule_token: str
     new_slot_start: datetime
-    new_slot_end: datetime
     appointment_type_id: int
 
 
 class ResendConfirmationRequest(SQLModel):
+    member_email: EmailStr
+
+
+class RescheduleInfoResponse(SQLModel):
+    member_name: str
     member_email: str
+    member_phone: str
+    appointment_type_id: int
+    appointment_type_name: str
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +764,7 @@ def create_booking(
 @router.get("/confirm/{token}")
 def confirm_booking(
     token: str,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> Response:
     """Confirm a booking via token link from the confirmation email. Public endpoint."""
@@ -772,6 +799,8 @@ def confirm_booking(
         session.rollback()
         raise HTTPException(status_code=503, detail="Unable to process your request. Please try again.")
 
+    background_tasks.add_task(_create_calendar_event_for_booking, booking.id)
+
     return RedirectResponse(
         url=f"{FRONTEND_BASE_URL}/stake-info/temple-recommend?confirmed=1",
         status_code=302,
@@ -794,13 +823,9 @@ def cancel_booking_by_token(
     # A RESCHEDULED booking means the member clicked a stale cancel link from their
     # original confirmation email. The new booking has its own cancel link.
     if booking.status == BookingStatus.RESCHEDULED:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "This appointment has already been rescheduled. "
-                "Your old cancellation link is no longer valid. "
-                "Check your reschedule confirmation email for the updated cancel link."
-            ),
+        return RedirectResponse(
+            url=f"{FRONTEND_BASE_URL}/appointments/cancelled?reason=rescheduled",
+            status_code=302,
         )
 
     if booking.status != BookingStatus.CONFIRMED:
@@ -809,6 +834,7 @@ def cancel_booking_by_token(
             detail=f"Only confirmed bookings can be cancelled this way (current status: {booking.status.value}).",
         )
 
+    calendar_event_id = booking.calendar_event_id
     booking.status = BookingStatus.CANCELLED_BY_MEMBER
     booking.cancelled_at = datetime.utcnow()
     session.add(booking)
@@ -824,10 +850,56 @@ def cancel_booking_by_token(
         raise HTTPException(status_code=503, detail="Unable to process your request. Please try again.")
 
     background_tasks.add_task(_send_member_cancellation_email, booking.id)
+    background_tasks.add_task(_delete_calendar_event_for_booking, calendar_event_id)
 
     return RedirectResponse(
         url=f"{FRONTEND_BASE_URL}/appointments/cancelled",
         status_code=302,
+    )
+
+
+@router.get("/reschedule-info", response_model=RescheduleInfoResponse)
+def get_reschedule_info(
+    token: str = Query(...),
+    session: Session = Depends(get_session),
+) -> RescheduleInfoResponse:
+    """Return member and appointment details for a reschedule token. Public endpoint."""
+    booking = session.exec(
+        select(Booking).where(Booking.reschedule_token == token)
+    ).first()
+    if not booking:
+        raise HTTPException(status_code=404)
+
+    expected = _generate_hmac_token("reschedule", booking.id)
+    if not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=404)
+
+    if booking.status == BookingStatus.RESCHEDULED:
+        raise HTTPException(status_code=409, detail="This appointment has already been rescheduled.")
+
+    if booking.status != BookingStatus.CONFIRMED:
+        raise HTTPException(status_code=409, detail="This booking cannot be rescheduled in its current state.")
+
+    config = session.get(TempleRecommendConfig, 1)
+    if not config:
+        raise HTTPException(status_code=500, detail="Temple recommend config not found")
+
+    if booking.start_datetime <= datetime.utcnow() + timedelta(hours=config.booking_cutoff_hours):
+        raise HTTPException(
+            status_code=409,
+            detail="This appointment is within the booking cutoff window and can no longer be rescheduled.",
+        )
+
+    appt_type = session.get(AppointmentType, booking.appointment_type_id)
+    if not appt_type:
+        raise HTTPException(status_code=404)
+
+    return RescheduleInfoResponse(
+        member_name=booking.member_name,
+        member_email=booking.member_email,
+        member_phone=booking.member_phone,
+        appointment_type_id=booking.appointment_type_id,
+        appointment_type_name=appt_type.name,
     )
 
 
@@ -934,7 +1006,7 @@ def reschedule_booking(
         status=BookingStatus.CONFIRMED,
         # confirmation_token doubles as the cancel token in the current model.
         confirmation_token=new_confirmation_token,
-        # Transfer calendar event ownership from old booking (per D5).
+        # Transfer calendar event ownership to the new booking so subscribers receive an "event updated" notification rather than a new invite.
         calendar_event_id=old_calendar_event_id,
         calendar_sync_status="pending" if old_calendar_event_id else "not_applicable",
     )
@@ -1035,9 +1107,6 @@ def resend_confirmation(
     """
     _PRIVACY_SAFE_RESPONSE = {"detail": "If a booking was found, a confirmation email has been sent."}
 
-    if not _EMAIL_RE.match(body.member_email):
-        raise HTTPException(status_code=422, detail="Invalid email address.")
-
     # Simple in-memory rate limit: 60 seconds per email address.
     email_key = body.member_email.lower()
     now = datetime.utcnow()
@@ -1048,6 +1117,9 @@ def resend_confirmation(
             detail="Please wait before requesting another confirmation email.",
         )
     _resend_rate_limit[email_key] = now
+    stale = [k for k, v in list(_resend_rate_limit.items()) if (now - v).total_seconds() > 60]
+    for k in stale:
+        del _resend_rate_limit[k]
 
     # Find the most recent booking in a resendable state.
     booking = session.exec(
@@ -1123,6 +1195,7 @@ def admin_cancel_booking(
             detail=f"Only confirmed bookings can be cancelled (current status: {booking.status.value})",
         )
 
+    calendar_event_id = booking.calendar_event_id
     booking.status = BookingStatus.CANCELLED_BY_PRESIDENCY
     booking.cancelled_at = datetime.utcnow()
     booking.cancelled_by_user_id = current_user.id if current_user else None
@@ -1138,6 +1211,7 @@ def admin_cancel_booking(
     session.refresh(booking)
 
     background_tasks.add_task(_send_presidency_cancellation_email, booking.id, body.cancellation_reason)
+    background_tasks.add_task(_delete_calendar_event_for_booking, calendar_event_id)
 
     return booking
 

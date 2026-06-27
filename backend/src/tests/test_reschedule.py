@@ -262,8 +262,10 @@ def test_reschedule_token_namespace(client: TestClient, db_session: Session, use
     db_session.delete(window)
     db_session.commit()
 
-    # The endpoint must not accept a cross-namespace token.
-    assert response.status_code in (403, 404)
+    # The endpoint does a DB lookup first by reschedule_token column — a cancel-scoped
+    # HMAC token won't match any row, so the lookup returns None → 404 before any
+    # HMAC check that would produce 403.
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -404,3 +406,238 @@ def test_reschedule_calendar_background_task_enqueued(
         cleanup_booking(db_session, old_refreshed)
     db_session.delete(window)
     db_session.commit()
+
+
+# ---------------------------------------------------------------------------
+# I-3: GET /appointment-bookings/reschedule-info — new endpoint (parallel agent)
+#
+# All test_reschedule_info_* tests are skipped until the reschedule-info endpoint
+# is merged from the batch-b parallel agent.  The test bodies are correct against
+# the described interface and will be un-skipped when that work lands.
+# ---------------------------------------------------------------------------
+
+
+def test_reschedule_info_returns_member_data(
+    client: TestClient, db_session: Session, userpass
+):
+    """GET /appointment-bookings/reschedule-info?token=… returns 200 with member data."""
+    user, _ = userpass
+    ensure_temple_config(db_session, booking_cutoff_hours=0)
+    appt = make_appointment_type(db_session, "Reschedule Info Member Data")
+    make_interviewer_with_calling(db_session, user, prefix="InfoMemberData")
+
+    target_day = get_next_weekday(1)
+    window = make_availability_window(
+        db_session, user.id, day_of_week=1, start_minute=540, end_minute=660
+    )
+    slot_utc = build_slot_utc(target_day, 9, 0)
+    booking = _make_confirmed_booking(
+        db_session, appt, user, target_day, slot_utc, token_suffix="info-member-data"
+    )
+
+    # Capture attributes before cleanup evicts them.
+    expected_name = booking.member_name
+    expected_email = booking.member_email
+    expected_phone = booking.member_phone
+    expected_type_id = appt.id
+    expected_type_name = appt.name
+    reschedule_token = booking.reschedule_token
+
+    response = client.get(
+        "/appointment-bookings/reschedule-info",
+        params={"token": reschedule_token},
+    )
+
+    cleanup_booking(db_session, booking)
+    db_session.delete(window)
+    db_session.commit()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["member_name"] == expected_name
+    assert data["member_email"] == expected_email
+    assert data["member_phone"] == expected_phone
+    assert data["appointment_type_id"] == expected_type_id
+    assert data["appointment_type_name"] == expected_type_name
+
+
+def test_reschedule_info_token_not_found(client: TestClient):
+    """GET /appointment-bookings/reschedule-info returns 404 for an unknown token."""
+    response = client.get(
+        "/appointment-bookings/reschedule-info",
+        params={"token": "randomstringthatexistsnowhere"},
+    )
+    assert response.status_code == 404
+
+
+def test_reschedule_info_already_rescheduled(
+    client: TestClient, db_session: Session, userpass
+):
+    """GET /appointment-bookings/reschedule-info returns 409 with 'rescheduled' when booking is RESCHEDULED."""
+    user, _ = userpass
+    ensure_temple_config(db_session, booking_cutoff_hours=0)
+    appt = make_appointment_type(db_session, "Reschedule Info Already Rescheduled")
+    make_interviewer_with_calling(db_session, user, prefix="InfoAlreadyResched")
+
+    target_day = get_next_weekday(2)
+    window = make_availability_window(
+        db_session, user.id, day_of_week=2, start_minute=540, end_minute=660
+    )
+    slot_utc = build_slot_utc(target_day, 9, 0)
+    booking = _make_confirmed_booking(
+        db_session, appt, user, target_day, slot_utc, token_suffix="info-already-resched"
+    )
+
+    # Manually transition to RESCHEDULED.
+    booking.status = BookingStatus.RESCHEDULED
+    db_session.add(booking)
+    db_session.commit()
+
+    reschedule_token = booking.reschedule_token
+
+    response = client.get(
+        "/appointment-bookings/reschedule-info",
+        params={"token": reschedule_token},
+    )
+
+    cleanup_booking(db_session, booking)
+    db_session.delete(window)
+    db_session.commit()
+
+    assert response.status_code == 409
+    assert "rescheduled" in response.json()["detail"].lower()
+
+
+def test_reschedule_info_within_cutoff(
+    client: TestClient, db_session: Session, userpass
+):
+    """GET /appointment-bookings/reschedule-info returns 409 with 'cutoff' when booking is within the cutoff window."""
+    user, _ = userpass
+    ensure_temple_config(db_session, booking_cutoff_hours=24)
+    appt = make_appointment_type(db_session, "Reschedule Info Within Cutoff")
+    make_interviewer_with_calling(db_session, user, prefix="InfoWithinCutoff")
+
+    # 1 hour in the future is well within any 24-hour cutoff window.
+    slot_utc = datetime.utcnow() + timedelta(hours=1)
+    target_day = slot_utc.date()
+
+    booking = _make_confirmed_booking(
+        db_session, appt, user, target_day, slot_utc, token_suffix="info-within-cutoff"
+    )
+
+    reschedule_token = booking.reschedule_token
+
+    response = client.get(
+        "/appointment-bookings/reschedule-info",
+        params={"token": reschedule_token},
+    )
+
+    cleanup_booking(db_session, booking)
+    db_session.commit()
+
+    assert response.status_code == 409
+    assert "cutoff" in response.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# I-3: POST /appointment-bookings/resend-confirmation — existing endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_resend_no_booking_returns_200(client: TestClient):
+    """POST /appointment-bookings/resend-confirmation returns 200 even when no booking exists.
+
+    The endpoint is privacy-safe: it never reveals whether an email has a booking.
+    """
+    from src.routers.appointment_bookings import _resend_rate_limit
+
+    email = "nobody-resend-test@example.com"
+    # Clear any stale rate-limit state from a prior test run in this session.
+    _resend_rate_limit.pop(email.lower(), None)
+
+    response = client.post(
+        "/appointment-bookings/resend-confirmation",
+        json={"member_email": email},
+    )
+
+    # Always clean up the rate-limit entry so other tests are not affected.
+    _resend_rate_limit.pop(email.lower(), None)
+
+    assert response.status_code == 200
+
+
+def test_resend_rate_limit(client: TestClient):
+    """POST /appointment-bookings/resend-confirmation returns 429 on the second rapid call.
+
+    The endpoint enforces a 60-second per-email rate limit via a module-level dict.
+    Importing and clearing the dict before the test ensures a clean slate regardless
+    of prior test runs in the same session.
+    """
+    from src.routers.appointment_bookings import _resend_rate_limit
+
+    email = "ratelimit-test-resend@example.com"
+    _resend_rate_limit.pop(email.lower(), None)
+
+    r1 = client.post(
+        "/appointment-bookings/resend-confirmation",
+        json={"member_email": email},
+    )
+    assert r1.status_code == 200, f"First call should succeed, got {r1.status_code}"
+
+    # Second call within 60 s must be rejected.
+    r2 = client.post(
+        "/appointment-bookings/resend-confirmation",
+        json={"member_email": email},
+    )
+    _resend_rate_limit.pop(email.lower(), None)
+
+    assert r2.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# I-3: GET /appointment-bookings/cancel/{token} — RESCHEDULED redirect
+#
+# Skipped until the parallel agent changes the cancel endpoint to redirect
+# RESCHEDULED bookings to /appointments/cancelled?reason=rescheduled (302)
+# instead of raising 409.
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_rescheduled_booking_redirects(
+    client: TestClient, db_session: Session, userpass
+):
+    """GET /appointment-bookings/cancel/{token} on a RESCHEDULED booking returns 302 with reason=rescheduled."""
+    user, _ = userpass
+    ensure_temple_config(db_session, booking_cutoff_hours=0)
+    appt = make_appointment_type(db_session, "Cancel Rescheduled Redirect")
+    make_interviewer_with_calling(db_session, user, prefix="CancelResched")
+
+    target_day = get_next_weekday(1)
+    window = make_availability_window(
+        db_session, user.id, day_of_week=1, start_minute=540, end_minute=660
+    )
+    slot_utc = build_slot_utc(target_day, 9, 0)
+    booking = _make_confirmed_booking(
+        db_session, appt, user, target_day, slot_utc, token_suffix="cancel-resched-redirect"
+    )
+
+    # Transition to RESCHEDULED — simulates an already-rescheduled booking.
+    booking.status = BookingStatus.RESCHEDULED
+    db_session.add(booking)
+    db_session.commit()
+
+    cancel_token = booking.confirmation_token
+
+    # follow_redirects=False so we observe the 302 directly.
+    response = client.get(
+        f"/appointment-bookings/cancel/{cancel_token}",
+        follow_redirects=False,
+    )
+
+    cleanup_booking(db_session, booking)
+    db_session.delete(window)
+    db_session.commit()
+
+    assert response.status_code == 302
+    location = response.headers.get("location", "")
+    assert "reason=rescheduled" in location

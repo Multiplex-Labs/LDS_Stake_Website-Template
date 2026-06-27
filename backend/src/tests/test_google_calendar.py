@@ -43,17 +43,27 @@ def reset_calendar_cache():
 
     get_calendar_service() caches its result after the first call. Without resetting
     the cache, tests that configure env vars differently would inherit stale state.
+
+    Also resets _misconfiguration_error (added by the batch-b parallel agent for M-10).
+    getattr with a default handles the case where the attribute does not yet exist in
+    the module; Python always allows setting arbitrary attributes on modules, so the
+    assignment is unconditional and safe in both old and new versions of the module.
     """
     original_cache = _gc_module._service_cache
     original_logged = _gc_module._unconfigured_logged
+    # getattr default of None covers the case where the attribute is not yet present.
+    original_misc_error = getattr(_gc_module, '_misconfiguration_error', None)
 
     _gc_module._service_cache = _gc_module._UNINITIALIZED
     _gc_module._unconfigured_logged = False
+    # Setting the attribute is safe even when the module does not yet define it.
+    _gc_module._misconfiguration_error = None
 
     yield
 
     _gc_module._service_cache = original_cache
     _gc_module._unconfigured_logged = original_logged
+    _gc_module._misconfiguration_error = original_misc_error
 
 
 def _make_booking_obj() -> Booking:
@@ -256,3 +266,43 @@ def test_calendar_health_endpoint_unconfigured(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "unconfigured"
+
+
+# ---------------------------------------------------------------------------
+# M-10: Calendar health "error" status
+#
+# Skipped until the batch-b parallel agent:
+#   1. Adds _misconfiguration_error: Optional[str] = None to google_calendar.py
+#   2. Adds get_misconfiguration_error() -> Optional[str] to google_calendar.py
+#   3. Updates the /appointment-availability/calendar-health endpoint to return
+#      {"status": "error", "detail": "..."} when _misconfiguration_error is set.
+# ---------------------------------------------------------------------------
+
+
+def test_calendar_health_returns_error_when_misconfigured(
+    client: TestClient, db_session: Session, admin, monkeypatch
+):
+    """GET /appointment-availability/calendar-health returns status=error when _misconfiguration_error is set.
+
+    Simulates a failed credential load by injecting the error string directly into
+    the module-level _misconfiguration_error variable.  The reset_calendar_cache
+    fixture (autouse) will restore the original value after the test.
+    """
+    # Inject a misconfiguration error — simulates what get_calendar_service() would
+    # set when GOOGLE_SERVICE_ACCOUNT_FILE points to a missing file.
+    _gc_module._misconfiguration_error = "FileNotFoundError: /bad/path/service-account.json"
+    _gc_module._service_cache = None  # ensure service is treated as "not initialized"
+
+    admin_user, admin_password = admin
+    token = login(client, admin_user.email, admin_password)
+
+    response = client.get(
+        "/appointment-availability/calendar-health",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "error"
+    assert "detail" in data
+    assert "FileNotFoundError" in data["detail"]

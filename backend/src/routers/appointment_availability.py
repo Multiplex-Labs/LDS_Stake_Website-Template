@@ -628,12 +628,15 @@ def get_calendar_health(
 
     Requires MANAGE_APPOINTMENTS permission.
     """
-    from ..utils.google_calendar import get_calendar_service
+    from ..utils.google_calendar import get_calendar_service, get_misconfiguration_error
 
     cal_id = os.getenv("GOOGLE_CALENDAR_ID")
 
     service = get_calendar_service()
     if service is None:
+        err = get_misconfiguration_error()
+        if err:
+            return {"status": "error", "detail": err}
         return {"status": "unconfigured"}
 
     try:
