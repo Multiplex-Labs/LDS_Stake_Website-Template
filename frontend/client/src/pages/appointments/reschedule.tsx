@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useSearch } from "wouter";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +15,6 @@ interface RescheduleInfo {
 }
 
 type ErrorState =
-  | "expired"
   | "already_rescheduled"
   | "not_found"
   | "within_cutoff"
@@ -80,8 +79,7 @@ export default function ReschedulePage() {
   const typeIdParam = params.get("type_id");
   const typeId = typeIdParam !== null ? parseInt(typeIdParam, 10) : undefined;
 
-  const [initialMemberInfo, setInitialMemberInfo] = useState<RescheduleInfo | null>(null);
-
+  const initialMemberInfoRef = useRef<RescheduleInfo | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const {
@@ -101,11 +99,9 @@ export default function ReschedulePage() {
     retry: false,
   });
 
-  useEffect(() => {
-    if (data && initialMemberInfo === null) {
-      setInitialMemberInfo(data);
-    }
-  }, [data, initialMemberInfo]);
+  if (data && !initialMemberInfoRef.current) {
+    initialMemberInfoRef.current = data;
+  }
 
   useEffect(() => {
     if (!isLoading && isSuccess) {
@@ -128,14 +124,6 @@ export default function ReschedulePage() {
             <Spinner className="size-8" />
             <p className="text-muted-foreground text-sm">Verifying your link...</p>
           </div>
-        )}
-
-        {/* Error: link has expired (410) */}
-        {resolvedErrorState === "expired" && (
-          <ErrorCard
-            heading="This link has expired"
-            subtext="The original appointment time has already passed."
-          />
         )}
 
         {/* Error: appointment already rescheduled (409 + ALREADY_RESCHEDULED) */}
@@ -166,7 +154,7 @@ export default function ReschedulePage() {
         )}
 
         {/* Success: valid token — show booking sheet */}
-        {isSuccess && initialMemberInfo && (
+        {isSuccess && initialMemberInfoRef.current && (
           <>
             <h1
               ref={headingRef}
@@ -183,7 +171,7 @@ export default function ReschedulePage() {
                 /* non-closeable on this page */
               }}
               config={undefined}
-              initialMemberInfo={initialMemberInfo}
+              initialMemberInfo={initialMemberInfoRef.current}
               typeId={typeId}
               rescheduleToken={token}
             />

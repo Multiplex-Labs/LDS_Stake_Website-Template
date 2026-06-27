@@ -27,6 +27,7 @@ from .temple_recommend import (
     AvailabilityWindow,
     AvailabilityException,
     BookingStatus,
+    CalendarSyncStatus,
     Booking,
     BookingAuditLog,
 )

@@ -36,6 +36,16 @@ from .conftest import (
 # ---------------------------------------------------------------------------
 
 
+def _get_stamp_and_cleanup(session: Session, booking_id: int):
+    """Expire the session cache, read reminder_sent_at, clean up, and return the stamp."""
+    session.expire_all()
+    refreshed = session.get(Booking, booking_id)
+    stamp = refreshed.reminder_sent_at if refreshed else None
+    if refreshed:
+        cleanup_booking(session, refreshed)
+    return stamp
+
+
 def _make_reminder_booking(
     session: Session,
     appt: AppointmentType,
@@ -89,11 +99,7 @@ def test_reminder_sent_in_window(db_session: Session, userpass):
                return_value=("<p>html</p>", "plain")):
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     assert stamp is not None, "reminder_sent_at should have been stamped"
     mock_send.assert_called_once()
@@ -117,11 +123,7 @@ def test_reminder_not_sent_outside_window_early(db_session: Session, userpass):
     with patch("src.utils.email.send_email") as mock_send:
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     assert stamp is None, "reminder_sent_at must remain None outside the window"
     mock_send.assert_not_called()
@@ -145,11 +147,7 @@ def test_reminder_not_sent_outside_window_late(db_session: Session, userpass):
     with patch("src.utils.email.send_email") as mock_send:
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     assert stamp is None
     mock_send.assert_not_called()
@@ -176,11 +174,7 @@ def test_reminder_not_sent_if_already_stamped(db_session: Session, userpass):
     with patch("src.utils.email.send_email") as mock_send:
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    final_stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    final_stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     mock_send.assert_not_called()
     assert final_stamp is not None
@@ -210,11 +204,7 @@ def test_reminder_email_failure_does_not_reset_stamp(db_session: Session, userpa
         # process_reminders must not propagate the exception.
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     # The stamp must be set — it is committed BEFORE send_email is attempted.
     assert stamp is not None, (
@@ -296,11 +286,7 @@ def test_reminder_at_lower_bound_20h(db_session: Session, userpass):
                return_value=("<p>html</p>", "plain")):
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     assert stamp is not None, "reminder_sent_at must be set for a booking at the 20h lower bound"
     mock_send.assert_called_once()
@@ -326,11 +312,7 @@ def test_reminder_at_upper_bound_28h(db_session: Session, userpass):
                return_value=("<p>html</p>", "plain")):
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     assert stamp is not None, "reminder_sent_at must be set for a booking at the 28h upper bound"
     mock_send.assert_called_once()
@@ -363,11 +345,7 @@ def test_reminder_not_sent_for_rescheduled(db_session: Session, userpass):
     with patch("src.utils.email.send_email") as mock_send:
         process_reminders(db_session)
 
-    db_session.expire_all()
-    refreshed = db_session.get(Booking, booking.id)
-    stamp = refreshed.reminder_sent_at if refreshed else None
-    if refreshed:
-        cleanup_booking(db_session, refreshed)
+    stamp = _get_stamp_and_cleanup(db_session, booking.id)
 
     mock_send.assert_not_called()
     assert stamp is None, "reminder_sent_at must remain None for a RESCHEDULED booking"

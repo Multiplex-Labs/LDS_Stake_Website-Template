@@ -24,6 +24,7 @@ from ..models import (
     Booking,
     BookingAuditLog,
     BookingStatus,
+    CalendarSyncStatus,
     Permissions,
     UserCalling,
     User,
@@ -469,9 +470,9 @@ def _create_calendar_event_for_booking(booking_id: int) -> None:
         event_id = create_event(booking, type_name)
         if event_id:
             booking.calendar_event_id = event_id
-            booking.calendar_sync_status = "synced"
+            booking.calendar_sync_status = CalendarSyncStatus.SYNCED
         else:
-            booking.calendar_sync_status = "sync_failed"
+            booking.calendar_sync_status = CalendarSyncStatus.SYNC_FAILED
             logger.error("[calendar] Failed to create calendar event for booking %d", booking_id)
         session.add(booking)
         session.commit()
@@ -504,22 +505,20 @@ def _update_calendar_after_reschedule(new_booking_id: int, old_event_id: Optiona
         if old_event_id:
             # Patch the existing event — subscribers get an "event updated" notification.
             success = update_event(old_event_id, new_booking, type_name)
-            new_booking.calendar_sync_status = "synced" if success else "sync_failed"
+            new_booking.calendar_sync_status = CalendarSyncStatus.SYNCED if success else CalendarSyncStatus.SYNC_FAILED
             if new_booking.calendar_event_id != old_event_id:
                 new_booking.calendar_event_id = old_event_id
-            session.add(new_booking)
-            session.commit()
         else:
             # No prior event; create a new one for the new slot.
             event_id = create_event(new_booking, type_name)
             if event_id:
                 new_booking.calendar_event_id = event_id
-                new_booking.calendar_sync_status = "synced"
+                new_booking.calendar_sync_status = CalendarSyncStatus.SYNCED
             else:
-                new_booking.calendar_sync_status = "sync_failed"
+                new_booking.calendar_sync_status = CalendarSyncStatus.SYNC_FAILED
                 logger.warning("[calendar] Failed to create calendar event for new booking %d", new_booking.id)
-            session.add(new_booking)
-            session.commit()
+        session.add(new_booking)
+        session.commit()
 
 
 def _send_already_confirmed_email(booking_id: int):
@@ -1008,7 +1007,7 @@ def reschedule_booking(
         confirmation_token=new_confirmation_token,
         # Transfer calendar event ownership to the new booking so subscribers receive an "event updated" notification rather than a new invite.
         calendar_event_id=old_calendar_event_id,
-        calendar_sync_status="pending" if old_calendar_event_id else "not_applicable",
+        calendar_sync_status=CalendarSyncStatus.PENDING if old_calendar_event_id else CalendarSyncStatus.NOT_APPLICABLE,
     )
     session.add(new_booking)
 
@@ -1117,9 +1116,10 @@ def resend_confirmation(
             detail="Please wait before requesting another confirmation email.",
         )
     _resend_rate_limit[email_key] = now
-    stale = [k for k, v in list(_resend_rate_limit.items()) if (now - v).total_seconds() > 60]
-    for k in stale:
-        del _resend_rate_limit[k]
+    if len(_resend_rate_limit) > 100:
+        stale = [k for k, v in _resend_rate_limit.items() if (now - v).total_seconds() > 60]
+        for k in stale:
+            del _resend_rate_limit[k]
 
     # Find the most recent booking in a resendable state.
     booking = session.exec(

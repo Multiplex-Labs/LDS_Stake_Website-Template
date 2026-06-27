@@ -635,9 +635,7 @@ def get_calendar_health(
     service = get_calendar_service()
     if service is None:
         err = get_misconfiguration_error()
-        if err:
-            return {"status": "error", "detail": err}
-        return {"status": "unconfigured"}
+        return {"status": "error", "detail": err} if err else {"status": "unconfigured"}
 
     try:
         service.calendarList().get(calendarId=cal_id).execute()

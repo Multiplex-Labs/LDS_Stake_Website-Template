@@ -67,6 +67,13 @@ class BookingStatus(str, Enum):
     RESCHEDULED = "RESCHEDULED"
 
 
+class CalendarSyncStatus(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
+    SYNCED = "synced"
+    SYNC_FAILED = "sync_failed"
+
+
 # BookingStatus valid transitions:
 # PENDING_EMAIL_CONFIRM -> CONFIRMED            (email confirmation link clicked)
 # PENDING_EMAIL_CONFIRM -> EXPIRED              (24h expiry loop)
