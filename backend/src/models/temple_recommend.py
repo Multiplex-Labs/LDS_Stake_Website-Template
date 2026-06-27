@@ -64,6 +64,7 @@ class BookingStatus(str, Enum):
     CANCELLED_BY_PRESIDENCY = "CANCELLED_BY_PRESIDENCY"
     COMPLETED = "COMPLETED"
     NO_SHOW = "NO_SHOW"
+    RESCHEDULED = "RESCHEDULED"
 
 
 class Booking(BaseModel, table=True):
@@ -89,6 +90,8 @@ class Booking(BaseModel, table=True):
     notification_sent_at: Optional[datetime] = Field(default=None)
     calendar_sync_status: str = Field(default="not_applicable")
     calendar_event_id: Optional[str] = Field(default=None)
+    reschedule_token: Optional[str] = Field(default=None, index=True)
+    reminder_sent_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 

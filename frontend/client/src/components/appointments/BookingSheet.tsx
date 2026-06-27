@@ -152,38 +152,54 @@ interface BookingSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   config: TempleRecommendConfig | undefined;
+  mode?: 'book' | 'reschedule';
+  initialMemberInfo?: { member_name: string; member_email: string; member_phone: string; };
+  typeId?: number;
+  rescheduleToken?: string;
 }
 
-export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetProps) {
+export function BookingSheet({
+  type,
+  open,
+  onOpenChange,
+  config,
+  mode = 'book',
+  initialMemberInfo,
+  typeId,
+  rescheduleToken,
+}: BookingSheetProps) {
   const [displayedMonth, setDisplayedMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedSlot, setSelectedSlot] = useState<AppointmentSlot | null>(null);
   const [slotError, setSlotError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
 
+  // Resolve the appointment type ID from either the full type object or the typeId prop
+  const effectiveTypeId = type?.id ?? typeId;
+
   const year = displayedMonth.getFullYear();
   const month = displayedMonth.getMonth() + 1;
 
   const { data: availData, isLoading: availLoading } = useQuery<AvailableDatesResponse>({
-    queryKey: ["/api/appointment-availability/available-dates", type?.id, year, month],
+    queryKey: ["/api/appointment-availability/available-dates", effectiveTypeId, year, month],
     queryFn: () =>
       apiRequest(
         "GET",
-        `/api/appointment-availability/available-dates?type_id=${type!.id}&year=${year}&month=${month}`,
+        `/api/appointment-availability/available-dates?type_id=${effectiveTypeId}&year=${year}&month=${month}`,
       ).then((r) => r.json()),
-    enabled: open && type !== null,
+    enabled: open && effectiveTypeId != null,
   });
 
   const dateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
 
   const { data: slotsData, isLoading: slotsLoading, isError: slotsError } = useQuery<AppointmentSlot[]>({
-    queryKey: ["/api/appointment-availability/slots", type?.id, dateStr],
+    queryKey: ["/api/appointment-availability/slots", effectiveTypeId, dateStr],
     queryFn: () =>
       apiRequest(
         "GET",
-        `/api/appointment-availability/slots?type_id=${type!.id}&date_from=${dateStr}&date_to=${dateStr}`,
+        `/api/appointment-availability/slots?type_id=${effectiveTypeId}&date_from=${dateStr}&date_to=${dateStr}`,
       ).then((r) => r.json()),
-    enabled: open && type !== null && dateStr !== null,
+    enabled: open && effectiveTypeId != null && dateStr !== null,
   });
 
   const {
@@ -193,20 +209,34 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
     formState: { errors, isSubmitting },
   } = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
-    defaultValues: { _honeypot: "" },
+    defaultValues: {
+      _honeypot: "",
+      ...(initialMemberInfo ?? {}),
+    },
   });
 
   const submitMutation = useMutation({
     mutationFn: async (data: BookingFormData) => {
-      if (!type || !selectedSlot) throw new Error("No slot selected");
-      const res = await apiRequest("POST", "/api/appointment-bookings", {
-        appointment_type_id: type.id,
-        slot_datetime_utc: selectedSlot.slot_datetime_utc,
-        member_name: data.member_name,
-        member_email: data.member_email,
-        member_phone: data.member_phone,
-        _honeypot: data._honeypot,
-      });
+      if (!effectiveTypeId || !selectedSlot) throw new Error("No slot selected");
+      let res: Response;
+      if (mode === 'reschedule') {
+        res = await apiRequest("POST", "/api/appointment-bookings/reschedule", {
+          reschedule_token: rescheduleToken,
+          slot_datetime_utc: selectedSlot.slot_datetime_utc,
+          member_name: data.member_name,
+          member_email: data.member_email,
+          member_phone: data.member_phone,
+        });
+      } else {
+        res = await apiRequest("POST", "/api/appointment-bookings", {
+          appointment_type_id: effectiveTypeId,
+          slot_datetime_utc: selectedSlot.slot_datetime_utc,
+          member_name: data.member_name,
+          member_email: data.member_email,
+          member_phone: data.member_phone,
+          _honeypot: data._honeypot,
+        });
+      }
       return (await res.json()) as Booking;
     },
     onSuccess: (data) => {
@@ -221,7 +251,7 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
         );
         setSelectedSlot(null);
         queryClient.invalidateQueries({
-          queryKey: ["/api/appointment-availability/slots", type?.id, dateStr],
+          queryKey: ["/api/appointment-availability/slots", effectiveTypeId, dateStr],
         });
       } else {
         setSlotError("Something went wrong. Please try again.");
@@ -249,22 +279,26 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
   const hasNoAvailability = !availLoading && availableDates.length === 0;
   const slotGroups = slotsData ? groupSlots(slotsData) : [];
 
-  if (!type) return null;
+  if (effectiveTypeId == null) return null;
+
+  const sheetTitle = mode === 'reschedule' ? "Reschedule Appointment" : "Book Appointment";
+  const typeDisplayName = type?.name ?? "";
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="overflow-y-auto w-full sm:max-w-lg">
         <SheetHeader className="mb-4">
-          <SheetTitle>Book Appointment</SheetTitle>
-          <SheetDescription>{type.name}</SheetDescription>
+          <SheetTitle>{sheetTitle}</SheetTitle>
+          {typeDisplayName && <SheetDescription>{typeDisplayName}</SheetDescription>}
         </SheetHeader>
 
         {/* Success state */}
         {booking ? (
           <SuccessView
             booking={booking}
-            typeName={type.name}
+            typeName={typeDisplayName}
             config={config}
+            mode={mode}
           />
         ) : (
           /* Step 1: date + slot + form */
@@ -313,7 +347,7 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
 
             {/* Slot picker */}
             {selectedDate && (
-              <div>
+              <div aria-live="polite" aria-atomic="false">
                 <p className="text-sm font-medium mb-3">
                   Select a time —{" "}
                   {format(selectedDate, "MMMM d, yyyy")}
@@ -446,7 +480,9 @@ export function BookingSheet({ type, open, onOpenChange, config }: BookingSheetP
                   className="w-full"
                   disabled={isSubmitting || submitMutation.isPending}
                 >
-                  {submitMutation.isPending ? "Booking..." : "Confirm Appointment"}
+                  {submitMutation.isPending
+                    ? mode === 'reschedule' ? "Rescheduling..." : "Booking..."
+                    : mode === 'reschedule' ? "Confirm Reschedule" : "Confirm Appointment"}
                 </Button>
               </>
             )}
@@ -462,9 +498,10 @@ interface SuccessViewProps {
   booking: Booking;
   typeName: string;
   config: TempleRecommendConfig | undefined;
+  mode: 'book' | 'reschedule';
 }
 
-function SuccessView({ booking, typeName, config }: SuccessViewProps) {
+function SuccessView({ booking, typeName, config, mode }: SuccessViewProps) {
   const locationAddress = config?.location_address ?? "";
   const locationName = config?.location_name ?? "Stake Center";
 
@@ -474,10 +511,19 @@ function SuccessView({ booking, typeName, config }: SuccessViewProps) {
       <div className="flex items-center gap-3 bg-primary/10 text-primary rounded-lg p-4">
         <CheckCircle className="size-5 flex-shrink-0" />
         <div>
-          <p className="font-medium text-sm">Appointment Requested</p>
-          <p className="text-xs opacity-80">
-            A confirmation email will be sent to {booking.member_email}
-          </p>
+          {mode === 'reschedule' ? (
+            <>
+              <p className="font-medium text-sm">Appointment Rescheduled</p>
+              <p className="text-xs opacity-80">Your appointment has been rescheduled.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-sm">Appointment Requested</p>
+              <p className="text-xs opacity-80">
+                A confirmation email will be sent to {booking.member_email}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -523,6 +569,7 @@ function SuccessView({ booking, typeName, config }: SuccessViewProps) {
               href={buildGoogleCalLink(booking, typeName, locationAddress)}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Add to Google Calendar (opens in new tab)"
             >
               <CalendarCheck className="size-4" />
               Add to Google Calendar
@@ -539,6 +586,7 @@ function SuccessView({ booking, typeName, config }: SuccessViewProps) {
               href={buildOutlookLink(booking, typeName, locationAddress)}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Add to Outlook (opens in new tab)"
             >
               <CalendarCheck className="size-4" />
               Add to Outlook

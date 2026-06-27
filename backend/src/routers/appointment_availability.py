@@ -1,5 +1,6 @@
 import calendar as _cal
 import json
+import os
 from datetime import datetime, date as _date, timedelta
 from logging import getLogger
 from typing import List, Optional
@@ -608,3 +609,36 @@ def delete_exception(
         raise HTTPException(status_code=404, detail="Availability exception not found")
     session.delete(exc)
     session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Admin: Google Calendar health
+# ---------------------------------------------------------------------------
+
+@router.get("/calendar-health")
+def get_calendar_health(
+    _: object = Depends(CallingUser(permissions=[Permission.MANAGE_APPOINTMENTS])),
+) -> dict:
+    """Probe the configured Google Calendar and return its status.
+
+    Returns one of three shapes:
+      {"status": "ok", "calendar_id": "<id>"}       — service is configured and reachable
+      {"status": "unconfigured"}                     — env vars are absent; integration disabled
+      {"status": "error", "detail": "<message>"}    — env vars are set but the API call failed
+
+    Requires MANAGE_APPOINTMENTS permission.
+    """
+    from ..utils.google_calendar import get_calendar_service
+
+    cal_id = os.getenv("GOOGLE_CALENDAR_ID")
+
+    service = get_calendar_service()
+    if service is None:
+        return {"status": "unconfigured"}
+
+    try:
+        service.calendarList().get(calendarId=cal_id).execute()
+        return {"status": "ok", "calendar_id": cal_id}
+    except Exception as exc:
+        logger.error("[calendar-health] probe failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}

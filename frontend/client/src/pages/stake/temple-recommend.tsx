@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Users,
@@ -8,14 +9,20 @@ import {
   AlertTriangle,
   Shirt,
   Info,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { AppointmentCard } from "@/components/appointments/AppointmentCard";
 import { BookingSheet } from "@/components/appointments/BookingSheet";
 import type { TempleRecommendConfig, AppointmentType } from "@/types";
 
 export default function TempleRecommend() {
+  const search = useSearch();
+  const showConfirmed = new URLSearchParams(search).get("confirmed") === "1";
+  const [dismissed, setDismissed] = useState(false);
   const [bookingType, setBookingType] = useState<AppointmentType | null>(null);
 
   const { data: config, isLoading: configLoading } = useQuery<TempleRecommendConfig>({
@@ -30,6 +37,22 @@ export default function TempleRecommend() {
 
   return (
     <Layout>
+      {showConfirmed && !dismissed && (
+        <div role="status" aria-live="polite" className="bg-primary/10 border-b border-primary/30 px-4 py-3">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-5 text-primary shrink-0" />
+              <p className="text-sm font-medium text-primary">
+                Your appointment is confirmed! Check your email for details.
+              </p>
+            </div>
+            <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={() => setDismissed(true)}>
+              <X className="size-4" />
+              <span className="sr-only">Dismiss</span>
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="bg-muted/30 py-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="font-serif text-4xl font-bold text-center">Temple Recommend Appointments</h1>

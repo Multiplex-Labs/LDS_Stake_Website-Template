@@ -75,6 +75,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ICON_MAP, ICON_NAMES } from "@/components/appointments/iconMap";
@@ -2015,6 +2021,7 @@ const STATUS_META: Record<BookingStatus, { label: string; className: string }> =
   CANCELLED_BY_PRESIDENCY: { label: "Cancelled (Admin)", className: "text-destructive border-destructive bg-destructive/10" },
   COMPLETED: { label: "Completed", className: "text-secondary-foreground border-secondary bg-secondary/10" },
   NO_SHOW: { label: "No Show", className: "text-muted-foreground border-border" },
+  RESCHEDULED: { label: "Rescheduled", className: "text-yellow-700 border-yellow-400 bg-yellow-50 dark:text-yellow-300 dark:border-yellow-700 dark:bg-yellow-950/30" },
 };
 
 interface BookingRow extends Booking {
@@ -2078,6 +2085,7 @@ function BookingsSubTab() {
     PENDING: enriched.filter(b => b.status === "PENDING_EMAIL_CONFIRM").length,
     COMPLETED: enriched.filter(b => b.status === "COMPLETED").length,
     CANCELLED: enriched.filter(b => b.status === "CANCELLED_BY_MEMBER" || b.status === "CANCELLED_BY_PRESIDENCY").length,
+    RESCHEDULED: enriched.filter(b => b.status === "RESCHEDULED").length,
   }), [enriched]);
 
   const filtered = useMemo(() => enriched.filter(b => {
@@ -2144,13 +2152,15 @@ function BookingsSubTab() {
               <TableHead>Member</TableHead>
               <TableHead>Interviewer</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Reminder</TableHead>
+              <TableHead>Cal</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   No bookings found.
                 </TableCell>
               </TableRow>
@@ -2187,6 +2197,49 @@ function BookingsSubTab() {
                     <TableCell className="text-sm">{b.interviewer_name ?? `#${b.interviewer_user_id}`}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn("text-xs", meta.className)}>{meta.label}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <TooltipProvider>
+                        {b.reminder_sent_at ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <CheckCircle className="size-4 text-primary" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(b.reminder_sent_at))}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TooltipProvider>
+                    </TableCell>
+                    <TableCell>
+                      <TooltipProvider>
+                        {b.calendar_sync_status === "synced" ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <CheckCircle2 className="size-4 text-primary" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Synced to Google Calendar</TooltipContent>
+                          </Tooltip>
+                        ) : b.calendar_sync_status === "failed" ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <XCircle className="size-4 text-destructive" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Calendar sync failed</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -2231,6 +2284,7 @@ function BookingsSubTab() {
           { key: "PENDING_EMAIL_CONFIRM" as const, label: "Pending", color: "text-destructive border-destructive", count: statusCounts.PENDING },
           { key: "COMPLETED" as const, label: "Completed", color: "text-secondary-foreground border-secondary", count: statusCounts.COMPLETED },
           { key: "CANCELLED" as const, label: "Cancelled", color: "text-destructive border-destructive", count: statusCounts.CANCELLED },
+          { key: "RESCHEDULED" as const, label: "Rescheduled", color: "text-yellow-700 border-yellow-400", count: statusCounts.RESCHEDULED },
         ] as const).map(({ key, label, color, count }) => (
           <button
             key={key}

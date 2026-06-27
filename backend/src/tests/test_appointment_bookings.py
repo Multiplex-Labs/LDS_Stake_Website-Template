@@ -321,7 +321,11 @@ def test_cancel_booking_transitions_to_cancelled(
     target_day = get_next_weekday(3)
     booking = _create_confirmed_booking(db_session, appt, user, target_day, "cancel-token-xyz")
 
-    response = client.get(f"/appointment-bookings/cancel/{booking.confirmation_token}")
+    # The cancel endpoint now redirects to the frontend cancelled page (302).
+    response = client.get(
+        f"/appointment-bookings/cancel/{booking.confirmation_token}",
+        follow_redirects=False,
+    )
 
     db_session.expire_all()
     updated = db_session.get(Booking, booking.id)
@@ -330,7 +334,8 @@ def test_cancel_booking_transitions_to_cancelled(
 
     cleanup_booking(db_session, booking)
 
-    assert response.status_code == 200
+    assert response.status_code == 302
+    assert "/appointments/cancelled" in response.headers["location"]
     assert final_status == BookingStatus.CANCELLED_BY_MEMBER
     assert cancelled_at is not None
 
