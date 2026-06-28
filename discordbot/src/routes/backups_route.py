@@ -1,13 +1,14 @@
 from logging import getLogger
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from ..models import BackupRequest
+from ..utils.auth import require_backend_token
 
 logger = getLogger("application")
 
 
-router = APIRouter(prefix="/backups", tags=["backups"])
+router = APIRouter(prefix="/backups", tags=["backups"], dependencies=[Depends(require_backend_token)])
 
 
 @router.post("/")

@@ -1,13 +1,14 @@
 from logging import getLogger
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from ..models import KanbanUpdateRequest, KanbanApprovalRequest
+from ..utils.auth import require_backend_token
 
 logger = getLogger("application")
 
 
-router = APIRouter(prefix="/kanban", tags=["kanban"])
+router = APIRouter(prefix="/kanban", tags=["kanban"], dependencies=[Depends(require_backend_token)])
 
 
 @router.post("/")
