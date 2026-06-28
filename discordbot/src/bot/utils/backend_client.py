@@ -167,3 +167,11 @@ class BackendClient:
             "approver_email": approver_email
         }
         return await self._post(f"/calling-kanban/proposals/{proposal_id}/approvals/bot?approved={approve}&approver_email={approver_email}", json=data)
+
+    async def approve_reservation(self, reservation_id: int):
+        """Approve a building reservation."""
+        return await self._post(f"/reservations/{reservation_id}/approve")
+
+    async def deny_reservation(self, reservation_id: int, reason: str):
+        """Deny a building reservation with a reason."""
+        return await self._post(f"/reservations/{reservation_id}/deny", json={"reason": reason})
