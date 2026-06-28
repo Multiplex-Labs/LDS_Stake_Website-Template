@@ -1,0 +1,116 @@
+---
+title: "Site Settings"
+description: "Configure the portal's stake name, address, logo, hero image, contact information, and which navigation pages are visible to the public."
+---
+
+## Access and Permissions
+
+Site Settings is located at `/leader/site-settings` in the Leader Portal. Access requires the `MANAGE_SITE_SETTINGS` permission. If you do not see this page in the navigation, contact your portal administrator to have the permission added to your account or calling.
+
+---
+
+## General Tab
+
+The General tab controls the stake identity fields that appear throughout the portal.
+
+| Field | Where it appears |
+|-------|-----------------|
+| Stake Name | Navbar (site title), Footer, and the home page hero heading |
+| Stake Address | Footer |
+
+Update either field and click **Save** to apply the change immediately to all public-facing pages.
+
+---
+
+## Appearance Tab
+
+The Appearance tab controls the visual identity of the home page and the navigation bar.
+
+### Text Fields
+
+| Field | Where it appears |
+|-------|-----------------|
+| Hero Title | Home page hero section — large heading |
+| Hero Subtitle | Home page hero section — subheading below the title |
+
+### Logo Upload
+
+The logo appears in the Navbar on every page of the site.
+
+<Steps>
+  <Step>
+    Click **Upload Logo** (or the existing logo thumbnail to replace it).
+  </Step>
+  <Step>
+    Select a JPEG, PNG, or WebP image. The file must be 5 MB or smaller.
+  </Step>
+  <Step>
+    The preview updates immediately. Click **Save** to apply the change.
+  </Step>
+</Steps>
+
+### Hero Image Upload
+
+The hero image is displayed as the full-width background of the home page hero section.
+
+<Steps>
+  <Step>
+    Click **Upload Hero Image** (or the existing image thumbnail to replace it).
+  </Step>
+  <Step>
+    Select a JPEG, PNG, or WebP image. The file must be 5 MB or smaller.
+  </Step>
+  <Step>
+    The preview updates immediately. Click **Save** to apply the change.
+  </Step>
+</Steps>
+
+<Callout type="note">
+  Accepted image formats: JPEG, PNG, WebP. Maximum file size: 5 MB. For best results, use a wide-format image (at least 1920 × 600 pixels) for the hero background.
+</Callout>
+
+---
+
+## Contact Tab
+
+The Contact tab controls the contact details and sacrament meeting times displayed in the Footer and used in system-generated emails.
+
+| Field | Description | Where it appears |
+|-------|-------------|-----------------|
+| Contact Email | Primary contact address for the stake | Footer |
+| Reply-to Email | The address email recipients can reply to in all system-generated emails | Email headers (not visible on the site) |
+| Sacrament Meeting Times | List of meeting times (format: `10:00am`) | Footer |
+
+<Callout type="note">
+  The **Reply-to Email** field should be set to a monitored inbox — typically the clerk's email address. This is the address that appears when a member hits "Reply" on any notification email the portal sends.
+</Callout>
+
+To add a sacrament meeting time, click **Add Time**, type the time in `10:00am` format, and save. Times are displayed in the Footer in the order they are entered. To remove a time, click the delete icon next to it.
+
+---
+
+## Features Tab
+
+The Features tab lets you control which pages appear in the public navigation bar. Toggling a page off removes it from the Navbar for all visitors; the page itself is not deleted and can be re-enabled at any time.
+
+### Available Feature Toggles
+
+| Feature | Page it controls |
+|---------|-----------------|
+| Resources | `/resources` |
+| Sports | `/stake-info/sports` |
+| Reserve Building | `/stake-info/reserve` |
+| Temple Recommend | `/appointments` |
+| Ward Map | `/ward-info/map` |
+| Bishops | `/ward-info/bishops` |
+| HC Assignments | `/leader/assignments` |
+| Speaking | `/leader/speaking` |
+| Callings | `/leader/calling-system` |
+| Sustainings | `/leader/sustainings` |
+| Presidency | `/leader/presidency` |
+
+<Callout type="note">
+  Disabling a feature only removes it from the navigation bar. Anyone who knows the direct URL can still access the page. If a page contains sensitive information, ensure the underlying route is also protected via the `ProtectedRoute` component or the appropriate permission check on the backend.
+</Callout>
+
+To toggle a feature, click the toggle switch next to the page name. Changes apply immediately after clicking **Save**.

@@ -1,0 +1,93 @@
+---
+title: "Temple Recommend Config"
+description: "Read and update the singleton temple recommend scheduling configuration."
+---
+
+The temple config router manages a single configuration record that controls the Temple Recommend appointment scheduling system — location information shown to members, booking window constraints, and buffer settings.
+
+`GET /temple-config/` is public and used by the booking page to display interview location details. `PATCH /temple-config/` requires the `MANAGE_APPOINTMENTS` permission.
+
+Base path: `/temple-config`
+
+## Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/temple-config/` | None | Return the current temple recommend configuration |
+| `PATCH` | `/temple-config/` | `MANAGE_APPOINTMENTS` | Update one or more configuration fields |
+
+---
+
+## GET /temple-config/
+
+Returns the singleton temple recommend configuration record. This is public so the booking form can display interview location and hours without authentication.
+
+**Response 200:**
+
+```json
+{
+  "location_name": "Provo Utah Temple",
+  "location_address": "2150 N Temple Dr, Provo, UT 84604",
+  "open_hours_text": "Saturdays 9:00 AM – 12:00 PM",
+  "exception_note": "No interviews the Saturday before General Conference.",
+  "timezone": "America/Denver",
+  "slot_buffer_mins": 5,
+  "booking_window_days": 60,
+  "booking_cutoff_hours": 24
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `location_name` | string | Display name of the interview location |
+| `location_address` | string | Street address shown on the booking confirmation |
+| `open_hours_text` | string | Human-readable description of when interviews are held |
+| `exception_note` | string \| null | Optional note about exceptions (e.g., holiday closures) |
+| `timezone` | string | IANA timezone identifier used for slot calculations |
+| `slot_buffer_mins` | integer | Gap added between consecutive slots in minutes |
+| `booking_window_days` | integer | How many days into the future members can book |
+| `booking_cutoff_hours` | integer | How many hours before a slot members can no longer book |
+
+---
+
+## PATCH /temple-config/
+
+Partially updates the temple recommend configuration. Only the fields included in the request body are modified; all other fields retain their current values. Changes take effect immediately and affect slot generation for new bookings.
+
+**Request body (all fields optional):**
+
+```json
+{
+  "location_name": "Provo Utah Temple",
+  "location_address": "2150 N Temple Dr, Provo, UT 84604",
+  "open_hours_text": "Saturdays 9:00 AM – 12:00 PM",
+  "exception_note": "Closed the Saturday before General Conference.",
+  "timezone": "America/Denver",
+  "slot_buffer_mins": 5,
+  "booking_window_days": 60,
+  "booking_cutoff_hours": 24
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `location_name` | string | Display name of the interview location |
+| `location_address` | string | Full street address |
+| `open_hours_text` | string | Human-readable hours text (not parsed — display only) |
+| `exception_note` | string \| null | Set to `null` to clear an existing note |
+| `timezone` | string | Must be a valid IANA timezone (e.g., `"America/Denver"`) |
+| `slot_buffer_mins` | integer | Buffer between slots; use `0` for back-to-back scheduling |
+| `booking_window_days` | integer | Members cannot book further out than this many days |
+| `booking_cutoff_hours` | integer | Members cannot book within this many hours of the slot time |
+
+**Response 200:** The full updated configuration object in the same shape as the `GET` response.
+
+**Response 422:** `timezone` is not a recognized IANA timezone identifier.
+
+<Callout type="info">
+  Changes to `slot_buffer_mins`, `booking_window_days`, and `booking_cutoff_hours` affect slot generation immediately. Existing confirmed bookings are not retroactively changed, but the available slots returned by `/appointment-availability/slots` will reflect the new settings on the next request.
+</Callout>
+
+<Callout type="warning">
+  `open_hours_text` is a free-form display string and is not parsed to generate availability slots. Actual slot generation is controlled by the availability windows configured under `/appointment-availability/windows`. Keep `open_hours_text` in sync with those windows manually.
+</Callout>

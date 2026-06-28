@@ -1,0 +1,156 @@
+---
+title: "Appointments"
+description: "Book, reschedule, and cancel Temple Recommend interviews online. Admins can manage appointment types, interviewer availability windows, and blocked-out dates."
+---
+
+## Member Guide
+
+### Booking an Appointment
+
+The appointment booking page is publicly accessible — you do not need a portal account.
+
+<Steps>
+  <Step>
+    Navigate to `/appointments`.
+  </Step>
+  <Step>
+    Select an **appointment type** from the list (for example, "Temple Recommend" or "Limited Use Recommend"). Each type shows its duration and a brief description.
+  </Step>
+  <Step>
+    A calendar appears showing available days highlighted. Click a highlighted date to load the available time slots for that day.
+  </Step>
+  <Step>
+    Click a time slot to select it.
+  </Step>
+  <Step>
+    Enter your name and email address, then click **Book Appointment**.
+  </Step>
+  <Step>
+    Check your email. You will receive a confirmation message containing a link you must click to finalize the booking. The appointment is not confirmed until you follow this link.
+  </Step>
+</Steps>
+
+<Callout type="note">
+  Days that appear greyed out on the calendar have no available slots — either because the interviewer has no availability configured for that day or all slots are already taken.
+</Callout>
+
+### Rescheduling an Appointment
+
+If you need to change your appointment time, use the rescheduling link included in your confirmation email, or navigate directly to `/appointments/reschedule`.
+
+<Steps>
+  <Step>
+    Open the reschedule link from your confirmation email, or go to `/appointments/reschedule`.
+  </Step>
+  <Step>
+    Enter the email address you used when booking.
+  </Step>
+  <Step>
+    Select a new date and time slot following the same steps as a new booking.
+  </Step>
+  <Step>
+    Confirm the change. Both you and the interviewer will receive an updated notification email.
+  </Step>
+</Steps>
+
+### Cancelling an Appointment
+
+To cancel, use the cancellation link in your confirmation email, or go to `/appointments/cancelled`.
+
+<Steps>
+  <Step>
+    Open the cancellation link from your confirmation email, or navigate to `/appointments/cancelled`.
+  </Step>
+  <Step>
+    Confirm the cancellation when prompted.
+  </Step>
+  <Step>
+    A cancellation notification is sent to both you and the interviewer.
+  </Step>
+</Steps>
+
+<Callout type="note">
+  If you cancel an appointment, you can book a new one at any time by returning to `/appointments`.
+</Callout>
+
+---
+
+## Admin Guide
+
+Admin features require the `MANAGE_APPOINTMENTS` permission and are accessible from the admin panel in the Leader Portal.
+
+### Managing Appointment Types
+
+Appointment types define the categories of interviews members can book (for example, "Temple Recommend" or "Limited Use Recommend").
+
+| Field | Description |
+|-------|-------------|
+| Name | Displayed to members on the booking page |
+| Duration | Length of the appointment in minutes |
+| Icon | Visual indicator shown alongside the type name |
+| Description | Brief explanation shown to members before they select a slot |
+
+To add a type, click **New Appointment Type**, fill in the fields, and save. To edit or remove an existing type, click the type name in the list.
+
+<Callout type="warning">
+  Removing an appointment type does not cancel existing bookings for that type. Review and manually address any outstanding bookings before deleting a type.
+</Callout>
+
+### Setting Availability Windows
+
+Availability windows define when each interviewer is available to take appointments.
+
+<Steps>
+  <Step>
+    In the admin panel, open **Availability Windows**.
+  </Step>
+  <Step>
+    Select the interviewer you want to configure.
+  </Step>
+  <Step>
+    For each day of the week, specify the start and end times during which the interviewer can take appointments.
+  </Step>
+  <Step>
+    Optionally set a **Valid From** and **Valid Until** date range if the availability is temporary (for example, while a counselor is filling in).
+  </Step>
+  <Step>
+    Save the window. Days with no availability window configured will appear greyed out on the member booking calendar.
+  </Step>
+</Steps>
+
+### Managing Availability Exceptions
+
+Exceptions block out specific dates for one interviewer or for all interviewers simultaneously — useful for stake conference, holidays, or personal conflicts.
+
+<Steps>
+  <Step>
+    In the admin panel, open **Availability Exceptions**.
+  </Step>
+  <Step>
+    Click **Add Exception**.
+  </Step>
+  <Step>
+    Choose whether the exception applies to a **specific interviewer** or **all interviewers**.
+  </Step>
+  <Step>
+    Select the date (or date range) to block out.
+  </Step>
+  <Step>
+    Optionally add a note describing the reason. Save the exception.
+  </Step>
+</Steps>
+
+Any date covered by an exception will show as unavailable on the member booking calendar.
+
+### Reviewing Bookings
+
+The **Bookings** view lists all appointment requests. Use the status filter to narrow the list:
+
+| Status | Meaning |
+|--------|---------|
+| Pending Confirmation | Member has booked but has not yet clicked the confirmation link in their email |
+| Confirmed | Member confirmed via email; appointment is scheduled |
+| Cancelled | Member cancelled the appointment |
+| Rescheduled | Appointment was moved to a new date/time |
+
+Click any booking row to see full details, including the member's name, email, selected appointment type, and scheduled time.

@@ -1,0 +1,122 @@
+---
+title: "Discord Bot"
+description: "Discord bot — setup, environment variables, architecture, and current feature state."
+---
+
+The Discord bot is a standalone Python service that runs as **two concurrent processes in the same service**: a Discord.py gateway client that listens for events from Discord, and a FastAPI HTTP server on port 8001 that receives webhook calls from the main backend. Together they allow the portal to push notifications into Discord and expose slash commands for administrative tasks.
+
+<Callout type="info">
+  The main backend must be running before you start the Discord bot. The bot communicates with the backend over HTTP using `BACKEND_URL` and `BACKEND_TOKEN` — if the backend is unreachable, hook initialization will fail at startup.
+</Callout>
+
+---
+
+## Service overview
+
+| Attribute | Value |
+|-----------|-------|
+| Directory | `discordbot/` |
+| Port | 8001 (FastAPI HTTP server) |
+| Stack | discord.py (gateway client) + FastAPI (HTTP server) |
+| Package manager | `uv` |
+| Language | Python 3.13+ |
+
+---
+
+## Required environment variables
+
+Create a `.env` file inside `discordbot/` with the following variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Bot token from the Discord Developer Portal |
+| `BACKEND_URL` | Yes | Base URL of the main FastAPI backend (e.g., `http://localhost:8000`) |
+| `BACKEND_TOKEN` | Yes | Shared secret used to authenticate requests from the backend to the bot |
+| `DATABASE_PATH` | No | Path to the bot's SQLite database. Defaults to `./database.db` |
+| `DEV` | No | Set to `true` to enable debug logging |
+
+<Callout type="warn">
+  Never commit `discordbot/.env` to source control. It contains the bot token and shared backend secret. Verify that `discordbot/.env` is covered by `.gitignore`.
+</Callout>
+
+---
+
+## Starting the bot
+
+<Steps>
+  <Step title="Start the main backend first">
+    ```bash
+    cd backend
+    uv run python main.py
+    ```
+    The Discord bot connects to the backend at startup. The backend must be accepting connections before the bot is started.
+  </Step>
+  <Step title="Install Discord bot dependencies">
+    ```bash
+    cd discordbot
+    uv sync
+    ```
+    The `discordbot/` virtual environment is completely separate from `backend/`. Running `uv sync` here does not affect the backend.
+  </Step>
+  <Step title="Start the Discord bot">
+    ```bash
+    uv run python main.py
+    ```
+    A successful start prints a confirmation that the gateway client has connected and that the FastAPI server is listening on port 8001.
+  </Step>
+</Steps>
+
+---
+
+## Architecture
+
+The bot runs two concurrent processes within the same Python service:
+
+- **Discord.py gateway client** — maintains a persistent WebSocket connection to the Discord API. This is how the bot receives events (messages, slash command invocations, reactions) and sends DMs or channel messages.
+- **FastAPI HTTP server (port 8001)** — exposes internal endpoints that the main backend calls when it needs to trigger a Discord notification (e.g., when a calling proposal advances a stage or a building reservation is submitted).
+
+```
+Main backend (port 8000)
+  └─▶ POST http://localhost:8001/... (BACKEND_TOKEN auth)
+        └─▶ Discord bot FastAPI server
+              └─▶ Discord.py client
+                    └─▶ Discord API ◀▶ Discord users
+```
+
+---
+
+## Feature hooks
+
+The bot's notification logic is organized into three hook modules, each responsible for a single integration area.
+
+### KanbanHook
+
+Sends Discord DMs to relevant leaders when a calling proposal advances through Kanban stages. When the main backend moves a proposal to a new stage (e.g., from `SP_APPROVAL` to `HC_APPROVAL`), it calls the bot's HTTP server. The bot looks up the appropriate Discord user IDs via the `UserMapping` table and delivers a direct message with the proposal details and the new stage name.
+
+### BackupsHook
+
+Exposes a slash command (such as `!backup`) that authorized users can run inside Discord to trigger a database backup of the portal's SQLite database. The bot calls the main backend to initiate the backup and reports success or failure back to the user via DM or channel reply.
+
+### ReservationHook
+
+Sends Discord DMs to approvers when a new building reservation request is submitted through the public reservation form. The main backend calls the bot's HTTP endpoint with the reservation details, and the bot DMs the designated approver(s) so they can review the request promptly without checking the admin portal.
+
+---
+
+## UserMapping table
+
+The bot maintains its own SQLite database (separate from the main portal database) containing a `UserMapping` table. This table links portal user email addresses to Discord user IDs, so the bot knows which Discord account to DM when a portal event involves a specific leader.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Integer | Primary key |
+| `email` | String | Portal user email address (matches `user.email` in the main DB) |
+| `discord_user_id` | String | Discord snowflake ID for the user's Discord account |
+
+Users must be registered in this table before the bot can DM them. The mapping is managed separately from the main portal user records.
+
+---
+
+## Service boundaries
+
+The `discordbot/` service is fully independent of `backend/` and `frontend/`. Its `pyproject.toml` and virtual environment are separate — a `uv sync` in `discordbot/` does not affect `backend/` and vice versa. Run all Discord bot commands from the `discordbot/` directory.

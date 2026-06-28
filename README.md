@@ -6,7 +6,7 @@ A modern, full-stack web application for managing LDS stake operations — calli
 
 ### Frontend
 - **Framework**: [React 19](https://react.dev/) with [Vite](https://vitejs.dev/)
-- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/), [DaisyUI](https://daisyui.com/)
+- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
 - **Components**: [shadcn/ui](https://ui.shadcn.com/) + [Radix UI](https://www.radix-ui.com/)
 - **State & Data**: [TanStack Query](https://tanstack.com/query/latest), [Zustand](https://zustand-demo.pmnd.rs/), [React Hook Form](https://react-hook-form.com/), [Zod](https://zod.dev/)
 - **Routing**: [Wouter](https://github.com/molecula-js/wouter)
@@ -32,12 +32,12 @@ Browser → React SPA
             → /api/* → Express (port 3100) → FastAPI (port 8000)
                       (reverse proxy)
 
-Slack → SlackBot (Socket Mode) → FastAPI (port 8000)
+Discord Bot → Discord API
 ```
 
 - **Frontend**: React SPA served by Express. Express acts as a reverse proxy — all `/api/*` requests are forwarded to FastAPI with the `/api` prefix stripped.
 - **Backend API**: FastAPI handles all business logic, data persistence, and JWT auth.
-- **Slackbot**: Dedicated service for bidirectional Slack communication (calling proposal approvals, notifications).
+- **Discord Bot**: Dedicated service for bidirectional Discord communication (calling proposal approvals, notifications).
 
 ---
 
@@ -67,8 +67,11 @@ Slack → SlackBot (Socket Mode) → FastAPI (port 8000)
 | Review Callings | Live |
 | Manage Callings | Live |
 | Calling Archive | Live |
-| Releases & Sustainings | Coming Soon |
+| Releases & Sustainings | Live |
 | User Administration | Live |
+| Appointment Booking (Temple Recommend) | Live |
+| Building Reservation Admin | Live (admin approval panel) |
+| Site Settings / CMS | Live |
 
 ---
 
@@ -113,10 +116,10 @@ npm run dev
 
 The app will be available at `http://localhost:3100`.
 
-### 3. Slackbot (optional)
+### 3. Discord Bot (optional)
 
 ```bash
-cd slackbot
+cd discordbot
 uv sync
 uv run python main.py
 ```
@@ -137,6 +140,29 @@ JWT_SECRET_KEY=                # Required — set a long random string
 SSL_ENABLED=false
 SP_APPROVAL_THRESHOLD=2
 HC_APPROVAL_THRESHOLD=3
+
+# Email — Brevo (primary, 300/day free tier)
+BREVO_API_KEY=
+BREVO_FROM_EMAIL=noreply@yourdomain.com
+
+# Email — Mailjet (fallback, 200/day free tier)
+MAILJET_API_KEY=
+MAILJET_SECRET_KEY=
+MAILJET_FROM_EMAIL=noreply@yourdomain.com
+
+# Reply-To address shown to recipients (should be a monitored clerk inbox)
+REPLY_TO_EMAIL=clerk@yourdomain.com
+
+# Google Calendar integration — optional; omit to disable silently
+GOOGLE_SERVICE_ACCOUNT_FILE=/path/to/service-account.json
+GOOGLE_CALENDAR_ID=<calendar-id>@group.calendar.google.com
+
+# CORS — comma-separated allowed frontend origins; defaults to http://localhost:3100
+ALLOWED_ORIGINS=http://localhost:3100
+
+# Base URLs used in redirect responses and email links
+FRONTEND_BASE_URL=http://localhost:3100
+BACKEND_BASE_URL=http://localhost:8000
 ```
 
 ### Frontend (`frontend/` — optional overrides)
@@ -199,7 +225,7 @@ uv run pytest src/tests/test_auth.py                             # Single file
 │   │   │   └── ui/              # shadcn components (do not edit manually)
 │   │   ├── lib/
 │   │   │   ├── queryClient.ts   # React Query setup + apiRequest()
-│   │   │   └── hooks.ts         # Shared hooks
+│   │   ├── hooks/               # Custom hooks
 │   │   ├── stores/              # Zustand (auth, theme)
 │   │   └── types/               # Shared TypeScript interfaces
 │   └── server/
@@ -214,7 +240,7 @@ uv run pytest src/tests/test_auth.py                             # Single file
 │   ├── db/                      # ORM singleton, session dependency
 │   └── utils/                   # Auth helpers, background tasks, seeders
 │
-└── slackbot/
+└── discordbot/
     └── main.py
 ```
 

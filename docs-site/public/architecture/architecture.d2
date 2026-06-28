@@ -10,14 +10,13 @@ Docker Composed Application: {
 
   Frontend: React / Node.js
   Backend: FastAPI
-  SlackBot: FastAPI Slack Bot
+  DiscordBot: Discord Bot
   DB: SQLite {
     shape: cylinder
   }
 
   Frontend -> Backend: CRUD
-  Backend -> SlackBot: Request Messages
-  SlackBot -> Backend: Update Database
+  Backend -> DiscordBot: Webhook Notifications
   Backend -> DB
 }
 
@@ -33,14 +32,14 @@ SMTP: SMTP (optional) {
   shape: cloud
 }
 
-Slack API: Slack API {
+Discord API: Discord API {
   shape: cloud
 }
 
 Users.User -> Docker Composed Application.Frontend: Interacts
 
-Docker Composed Application.SlackBot <-> Slack API: Events & Messages
-Slack API <-> Users.User
+Docker Composed Application.DiscordBot <-> Discord API: Events & Messages
+Discord API <-> Users.User
 
 Docker Composed Application.Backend -> SMTP: Email?
 SMTP -> Users.User
