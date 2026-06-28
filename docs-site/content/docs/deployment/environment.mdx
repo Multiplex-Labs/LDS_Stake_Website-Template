@@ -15,7 +15,7 @@ Read by Docker Compose only. Not used by any application service directly.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DOMAIN` | Required | — | Your stake's domain (e.g., `yourstake.org`). Caddy uses this to route traffic and provision Let's Encrypt TLS for `DOMAIN`, `api.DOMAIN`, and `docs.DOMAIN`. DNS A records for all three must point to your server before starting the stack. |
+| `DOMAIN` | Required | — | Your stake's domain (e.g., `yourstake.org`). Caddy uses this to route traffic and provision Let's Encrypt TLS for `DOMAIN`, `www.DOMAIN`, `api.DOMAIN`, and `docs.DOMAIN`. DNS must resolve each hostname to your server before starting the stack — either via three A records or a single A record plus wildcard CNAME (e.g., Cloudflare proxy). See [Docker Deployment](/deployment/docker) for both DNS paths. |
 | `GHCR_REPO` | Required for forks | `rc27122/LDS_Stake_Website-Template-2` | GitHub repository slug used to construct GHCR image names. If you have forked the repository and published images from your fork, set this to your own org/repo slug (e.g., `myorg/my-stake-portal`). Leave unset to use the upstream images. |
 
 ---

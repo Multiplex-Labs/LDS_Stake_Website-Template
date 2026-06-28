@@ -42,10 +42,10 @@ Before you begin a production deployment, confirm the following are in place.
 | Docker Engine | v24+ (includes Docker Compose v2 as `docker compose`) |
 | Open ports | TCP 22 (SSH), 80 (HTTP/ACME), 443 (HTTPS) |
 | Domain name | A registered domain you control |
-| DNS A records | Three records pointing to your server IP: `DOMAIN`, `api.DOMAIN`, `docs.DOMAIN` |
+| DNS records | Either three A records (`DOMAIN`, `api.DOMAIN`, `docs.DOMAIN`) pointing to your server IP, or a single A record for `DOMAIN` plus a wildcard CNAME (`*.DOMAIN`) if using Cloudflare proxy |
 
 <Callout type="info">
-  DNS records must resolve to your server IP before you start the stack for the first time. Caddy uses the HTTP-01 ACME challenge to provision Let's Encrypt certificates, which requires port 80 to be publicly reachable for each hostname. If any record is missing or has not yet propagated, Caddy cannot provision a certificate for that hostname.
+  DNS must resolve to your server before you start the stack for the first time. Caddy provisions Let's Encrypt TLS via HTTP-01 ACME challenge, which requires port 80 to be publicly reachable. Cloudflare proxy is supported — see the [Docker Deployment](/deployment/docker) guide for both DNS paths and the Cloudflare SSL/TLS mode requirement.
 </Callout>
 
 ---
