@@ -1,11 +1,14 @@
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import heroImage from "@assets/temple-hero.jpg";
+import fallbackHeroImage from "@assets/temple-hero.jpg";
 import { motion } from "framer-motion";
 import { Users, Building2, BookOpen, UserCheck } from "lucide-react";
 import { Link } from "wouter";
+import { useSettings } from "@/hooks/useSettings";
 
 export default function Home() {
+  const { data: settings } = useSettings();
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -13,7 +16,7 @@ export default function Home() {
         {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
           <img
-            src={heroImage}
+            src={settings?.hero_image_url ?? fallbackHeroImage}
             alt="Church Exterior"
             className="w-full h-full object-cover"
           />
@@ -28,10 +31,10 @@ export default function Home() {
             transition={{ duration: 0.8 }}
           >
             <h1 className="font-serif text-2xl sm:text-4xl md:text-6xl font-bold tracking-tight mb-4">
-              Welcome to the Logan Married Student 2nd Stake
+              {settings?.hero_title ?? "Welcome to the Logan Married Student 2nd Stake"}
             </h1>
             <p className="text-base md:text-xl text-white/90 max-w-2xl mx-auto font-light">
-              A community dedicated to faith, service, and fellowship. Join us in worship and activities.
+              {settings?.hero_subtitle ?? "A community dedicated to faith, service, and fellowship. Join us in worship and activities."}
             </p>
           </motion.div>
 

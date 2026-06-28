@@ -42,6 +42,7 @@ from ..utils import (
     render_booking_already_confirmed,
 )
 from .appointment_availability import _matches_recurrence, _get_interviewer_user_ids
+from .settings import get_reply_to_email
 
 logger = logging.getLogger("application")
 
@@ -218,6 +219,7 @@ def _send_booking_confirmation_email(booking_id: int):
                 subject=f"Appointment Confirmation — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -277,6 +279,7 @@ def _send_interviewer_notification_email(booking_id: int):
                 subject=f"New Appointment Booking — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -321,6 +324,7 @@ def _send_member_cancellation_email(booking_id: int):
                 subject=f"Appointment Cancelled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -366,6 +370,7 @@ def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
                 subject=f"Appointment Cancelled by Presidency — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -409,6 +414,7 @@ def _send_reschedule_member_email(new_booking_id: int, old_start_datetime: datet
                 subject=f"Appointment Rescheduled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -449,6 +455,7 @@ def _send_reschedule_interviewer_email(new_booking_id: int, old_start_datetime: 
                 subject=f"Appointment Rescheduled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(
@@ -572,6 +579,7 @@ def _send_already_confirmed_email(booking_id: int):
                 subject=f"Your Appointment Details — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
+                reply_to=get_reply_to_email(session),
             )
         except Exception:
             logger.error(

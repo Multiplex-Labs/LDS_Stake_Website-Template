@@ -15,6 +15,7 @@ from .db import (
     speaking_assignment_cleanup_loop,
     create_discord_bot_user,
     upsert_temple_recommend_config,
+    upsert_site_settings,
     create_default_appointment_types,
     pre_populate_fast_sunday_exceptions,
     CURATED_ICONS,

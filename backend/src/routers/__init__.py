@@ -12,3 +12,4 @@ from .appointment_types import router as appointment_types_router
 from .appointment_availability import router as appointment_availability_router
 from .appointment_bookings import router as appointment_bookings_router
 from .building_reservation import router as building_reservation_router
+from .settings import router as settings_router

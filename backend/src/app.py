@@ -16,6 +16,7 @@ from .utils import (
     DiscordBotHandle,
     create_backup_loop,
     upsert_temple_recommend_config,
+    upsert_site_settings,
     create_default_appointment_types,
     pre_populate_fast_sunday_exceptions,
     validate_email_credentials,
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     load_wards()
     ## Temple recommend appointment seeding
     upsert_temple_recommend_config()
+    upsert_site_settings()
     create_default_appointment_types()
     pre_populate_fast_sunday_exceptions()
     ## Validate email provider credentials at startup
@@ -103,6 +105,7 @@ configure_app(app)
 # Ensure a static directory exists and mount it so uploaded assets can be served
 static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
 os.makedirs(os.path.join(static_dir, "profile_images"), exist_ok=True)
+os.makedirs(os.path.join(static_dir, "site_images"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Import and include routers here to avoid import cycles
@@ -121,6 +124,7 @@ from .routers import (
     appointment_availability_router,
     appointment_bookings_router,
     building_reservation_router,
+    settings_router,
 )
 
 app.include_router(health_router)
@@ -137,3 +141,4 @@ app.include_router(appointment_types_router)
 app.include_router(appointment_availability_router)
 app.include_router(appointment_bookings_router)
 app.include_router(building_reservation_router)
+app.include_router(settings_router)

@@ -25,9 +25,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Menu, X, LogOut, User, KeyRound, Camera } from "lucide-react";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
-import logoImage from "@assets/stake-logo.png";
+import fallbackLogoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
 import { hasPermission, Permission } from "@/lib/constants";
+import { useSettings } from "@/hooks/useSettings";
 import { apiRequest, setAccessToken, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
 import { useMutation } from "@tanstack/react-query";
@@ -50,6 +51,9 @@ export function Navbar() {
   const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
   const [, setLocation] = useLocation();
   const { user, setUser } = useAuthStore();
+  const { data: settings } = useSettings();
+  const hidden = new Set(settings?.hidden_pages ?? []);
+  const canManageSite = user ? hasPermission(user.permissions, Permission.MANAGE_SITE_SETTINGS) : false;
   const [mode, setMode] = useState<DialogMode>("form");
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -168,13 +172,14 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <img
-              src={logoImage}
+              src={settings?.logo_url ?? fallbackLogoImage}
               alt="Stake Logo"
               className="h-10 w-10 object-contain"
             />
             <div className="flex flex-col">
-              <span className="font-serif font-bold text-xl leading-none text-primary">Logan Married</span>
-              <span className="text-xs text-muted-foreground tracking-widest uppercase">Student 2nd Stake</span>
+              <span className="font-serif font-bold text-xl leading-none text-primary">
+                {settings?.stake_name ?? "Logan Married Student 2nd Stake"}
+              </span>
             </div>
           </Link>
 
@@ -198,9 +203,9 @@ export function Navbar() {
                   <NavigationMenuTrigger className="bg-transparent font-medium">Stake Info</NavigationMenuTrigger>
                   <NavigationMenuContent>
                     <ul className="grid w-[400px] gap-3 p-4">
-<ListItem href="/stake-info/temple-recommend" title="Temple Recommends" />
-                      <ListItem href="/stake-info/sports" title="Stake Sports" />
-                      <ListItem href="/stake-info/reserve" title="Reserve Building" />
+                      {!hidden.has("temple-recommend") && <ListItem href="/stake-info/temple-recommend" title="Temple Recommends" />}
+                      {!hidden.has("sports") && <ListItem href="/stake-info/sports" title="Stake Sports" />}
+                      {!hidden.has("reserve") && <ListItem href="/stake-info/reserve" title="Reserve Building" />}
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
@@ -209,33 +214,35 @@ export function Navbar() {
                   <NavigationMenuTrigger className="bg-transparent font-medium">Ward Info</NavigationMenuTrigger>
                   <NavigationMenuContent>
                     <ul className="grid w-[400px] gap-3 p-4">
-                      <ListItem href="/ward-info/map" title="Boundary Map" />
+                      {!hidden.has("ward-map") && <ListItem href="/ward-info/map" title="Boundary Map" />}
                       <ListItem href="/ward-info/meeting-times" title="Meeting Times" />
-                      <ListItem href="/ward-info/bishops" title="Meet our Bishops" />
+                      {!hidden.has("bishops") && <ListItem href="/ward-info/bishops" title="Meet our Bishops" />}
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
 
-                <NavigationMenuItem>
-                  <NavigationMenuLink asChild className={cn(navigationMenuTriggerStyle(), "bg-transparent font-medium")}>
-                    <Link href="/resources">Resources</Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
+                {!hidden.has("resources") && (
+                  <NavigationMenuItem>
+                    <NavigationMenuLink asChild className={cn(navigationMenuTriggerStyle(), "bg-transparent font-medium")}>
+                      <Link href="/resources">Resources</Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                )}
 
                 {user && (
                   <NavigationMenuItem>
                     <NavigationMenuTrigger className="bg-transparent font-medium">Leader Portal</NavigationMenuTrigger>
                     <NavigationMenuContent>
                       <ul className="grid w-[400px] gap-3 p-4">
-                        <ListItem href="/leader/assignments" title="High Council Assignments" />
-                        <ListItem href="/leader/speaking" title="Speaking Schedule" />
-                        <ListItem href="/leader/presidency" title="Presidency Assignments" />
-                        <ListItem href="/leader/calling-system" title="Stake Calling System" />
+                        {!hidden.has("hc-assignments") && <ListItem href="/leader/assignments" title="High Council Assignments" />}
+                        {!hidden.has("speaking") && <ListItem href="/leader/speaking" title="Speaking Schedule" />}
+                        {!hidden.has("presidency") && <ListItem href="/leader/presidency" title="Presidency Assignments" />}
+                        {!hidden.has("callings") && <ListItem href="/leader/calling-system" title="Stake Calling System" />}
                         {hasPermission(user.permissions, Permission.APPROVE_BLDG_RESERVATIONS) && (
                           <ListItem href="/leader/reservations" title="Building Reservations" />
                         )}
                         <ListItem href="/leader/admin" title="Administration" />
-                        <ListItem href="/leader/site-settings" title="Site Settings" />
+                        {canManageSite && <ListItem href="/leader/site-settings" title="Site Settings" />}
                       </ul>
                     </NavigationMenuContent>
                   </NavigationMenuItem>
@@ -443,37 +450,39 @@ export function Navbar() {
                 <li className="pt-3 pb-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Stake Info</span>
                 </li>
-<MobileLink href="/stake-info/temple-recommend" onClick={() => setMobileOpen(false)}>Temple Recommends</MobileLink>
-                <MobileLink href="/stake-info/sports" onClick={() => setMobileOpen(false)}>Stake Sports</MobileLink>
-                <MobileLink href="/stake-info/reserve" onClick={() => setMobileOpen(false)}>Reserve Building</MobileLink>
+                {!hidden.has("temple-recommend") && <MobileLink href="/stake-info/temple-recommend" onClick={() => setMobileOpen(false)}>Temple Recommends</MobileLink>}
+                {!hidden.has("sports") && <MobileLink href="/stake-info/sports" onClick={() => setMobileOpen(false)}>Stake Sports</MobileLink>}
+                {!hidden.has("reserve") && <MobileLink href="/stake-info/reserve" onClick={() => setMobileOpen(false)}>Reserve Building</MobileLink>}
 
                 <li className="pt-3 pb-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Ward Info</span>
                 </li>
-                <MobileLink href="/ward-info/map" onClick={() => setMobileOpen(false)}>Boundary Map</MobileLink>
+                {!hidden.has("ward-map") && <MobileLink href="/ward-info/map" onClick={() => setMobileOpen(false)}>Boundary Map</MobileLink>}
                 <MobileLink href="/ward-info/meeting-times" onClick={() => setMobileOpen(false)}>Meeting Times</MobileLink>
-                <MobileLink href="/ward-info/bishops" onClick={() => setMobileOpen(false)}>Meet our Bishops</MobileLink>
+                {!hidden.has("bishops") && <MobileLink href="/ward-info/bishops" onClick={() => setMobileOpen(false)}>Meet our Bishops</MobileLink>}
 
                 {user && (
                   <>
                     <li className="pt-3 pb-1">
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-3">Leader Portal</span>
                     </li>
-                    <MobileLink href="/leader/assignments" onClick={() => setMobileOpen(false)}>High Council Assignments</MobileLink>
-                    <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>
-                    <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
-                    <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
+                    {!hidden.has("hc-assignments") && <MobileLink href="/leader/assignments" onClick={() => setMobileOpen(false)}>High Council Assignments</MobileLink>}
+                    {!hidden.has("speaking") && <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>}
+                    {!hidden.has("presidency") && <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>}
+                    {!hidden.has("callings") && <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>}
                     {hasPermission(user.permissions, Permission.APPROVE_BLDG_RESERVATIONS) && (
                       <MobileLink href="/leader/reservations" onClick={() => setMobileOpen(false)}>Building Reservations</MobileLink>
                     )}
                     <MobileLink href="/leader/admin" onClick={() => setMobileOpen(false)}>Administration</MobileLink>
-                    <MobileLink href="/leader/site-settings" onClick={() => setMobileOpen(false)}>Site Settings</MobileLink>
+                    {canManageSite && <MobileLink href="/leader/site-settings" onClick={() => setMobileOpen(false)}>Site Settings</MobileLink>}
                   </>
                 )}
 
-                <li className="pt-3">
-                  <MobileLink href="/resources" onClick={() => setMobileOpen(false)}>Resources</MobileLink>
-                </li>
+                {!hidden.has("resources") && (
+                  <li className="pt-3">
+                    <MobileLink href="/resources" onClick={() => setMobileOpen(false)}>Resources</MobileLink>
+                  </li>
+                )}
               </ul>
             </nav>
           </div>

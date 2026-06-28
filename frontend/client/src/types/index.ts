@@ -208,7 +208,21 @@ export const ASSIGNABLE_PERMISSIONS = [
   { flag: 512,  label: "Manage Appointments" },
   { flag: 1024, label: "Approve Building Reservations" },
   { flag: 2048, label: "Manage Building Access" },
+  { flag: 4096, label: "Manage Site Settings" },
 ] as const;
+
+export interface SiteSettingsResponse {
+  stake_name: string;
+  stake_address: string;
+  contact_email: string;
+  reply_to_email: string;
+  hero_title: string;
+  hero_subtitle: string;
+  hero_image_url: string | null;
+  logo_url: string | null;
+  sacrament_times: string[];
+  hidden_pages: string[];
+}
 
 // --- Building Reservation types ---
 
