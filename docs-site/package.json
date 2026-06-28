@@ -23,5 +23,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "protobufjs@7.5.9": true,
+    "core-js@3.49.0": true,
+    "esbuild@0.25.12": true,
+    "sharp@0.34.5": true,
+    "vue-demi@0.14.10": true
   }
 }
