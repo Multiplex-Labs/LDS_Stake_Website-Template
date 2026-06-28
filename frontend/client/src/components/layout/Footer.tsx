@@ -1,6 +1,12 @@
 import { Link } from "wouter";
 import { useSettings } from "@/hooks/useSettings";
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, i * size + size)
+  );
+}
+
 export function Footer() {
   const { data: settings } = useSettings();
 
@@ -24,10 +30,12 @@ export function Footer() {
         </div>
         <div className="text-left md:text-right">
            <h4 className="font-semibold mb-4">Sacrament Times</h4>
-           <p className="text-sm text-muted-foreground">
-             Sunday<br />
-             {(settings?.sacrament_times ?? ["8:30am", "10:00am", "11:30am", "1:00pm"]).join(", ")}
-           </p>
+           <p className="text-sm text-muted-foreground mb-1">Sunday</p>
+           <div className="text-sm text-muted-foreground">
+             {chunk(settings?.sacrament_times ?? ["8:30am", "10:00am", "11:30am", "1:00pm"], 2).map((pair, i) => (
+               <div key={i}>{pair.join(", ")}</div>
+             ))}
+           </div>
         </div>
       </div>
       <div className="container mx-auto px-4 mt-12 pt-8 border-t text-center text-xs text-muted-foreground">

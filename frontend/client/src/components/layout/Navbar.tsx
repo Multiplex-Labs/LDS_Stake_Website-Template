@@ -165,6 +165,12 @@ export function Navbar() {
 
   const initials = user ? getInitials(`${user.fname} ${user.lname}`) : "";
 
+  const stakeName = settings?.stake_name ?? "Logan Married Student 2nd Stake";
+  const stakeWords = stakeName.split(" ");
+  const splitAt = Math.floor(stakeWords.length / 2);
+  const stakeTopLine = stakeWords.slice(0, splitAt).join(" ");
+  const stakeBottomLine = stakeWords.slice(splitAt).join(" ");
+
   return (
     <>
       <nav className="border-b bg-card/80 backdrop-blur-md sticky top-0 z-50">
@@ -177,8 +183,11 @@ export function Navbar() {
               className="h-10 w-10 object-contain"
             />
             <div className="flex flex-col">
-              <span className="font-serif font-bold text-xl leading-none text-primary">
-                {settings?.stake_name ?? "Logan Married Student 2nd Stake"}
+              <span className="font-serif font-bold text-xl leading-none text-foreground">
+                {stakeTopLine}
+              </span>
+              <span className="font-semibold text-xs uppercase tracking-widest text-muted-foreground mt-0.5">
+                {stakeBottomLine}
               </span>
             </div>
           </Link>

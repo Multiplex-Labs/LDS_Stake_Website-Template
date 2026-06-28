@@ -129,10 +129,10 @@ def create_default_admin_user():
 
 def create_discord_bot_user() -> Optional[User]:
     """Creates a default discord bot user if it doesn't exist."""
-    discord_bot_password = os.getenv("DISCORD_BOT_PASSWORD", None)
+    discord_bot_password = os.getenv("DISCORD_BOT_TOKEN", None)
     if discord_bot_password is None:
         logger.warning(
-            "DISCORD_BOT_PASSWORD is not set. Cannot create discord bot user.")
+            "DISCORD_BOT_TOKEN is not set. Cannot create discord bot user.")
         return None
     orm = ORM()
     with Session(orm.engine) as db:

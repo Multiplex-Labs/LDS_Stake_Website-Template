@@ -27,9 +27,13 @@ class DiscordBotHandle:
         if not self.url:
             self.logger.warning("DISCORD_BOT_URL environment variable is not set. Discord bot interactions will be disabled.")
             return
-        self.discord_token = os.getenv("DISCORD_BOT_PASSWORD")
+        self.discord_token = os.getenv("DISCORD_BOT_TOKEN")
         if not self.discord_token:
-            self.logger.warning("DISCORD_BOT_PASSWORD environment variable is not set. Discord bot interactions will be disabled.")
+            self.logger.warning(
+                "DISCORD_BOT_TOKEN environment variable is not set "
+                "(previously named DISCORD_BOT_PASSWORD — rename if upgrading). "
+                "Discord bot interactions will be disabled."
+            )
             return
 
         self.user = create_discord_bot_user()
