@@ -120,6 +120,7 @@ from .routers import (
     appointment_types_router,
     appointment_availability_router,
     appointment_bookings_router,
+    building_reservation_router,
 )
 
 app.include_router(health_router)
@@ -135,3 +136,4 @@ app.include_router(temple_config_router)
 app.include_router(appointment_types_router)
 app.include_router(appointment_availability_router)
 app.include_router(appointment_bookings_router)
+app.include_router(building_reservation_router)

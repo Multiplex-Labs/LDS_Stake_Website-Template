@@ -205,8 +205,39 @@ export const ASSIGNABLE_PERMISSIONS = [
   { flag: 32,  label: "Manage Calling Proposals" },
   { flag: 64,  label: "View Calling Proposals" },
   { flag: 256, label: "Manage Wards" },
-  { flag: 512, label: "Manage Appointments" },
+  { flag: 512,  label: "Manage Appointments" },
+  { flag: 1024, label: "Approve Building Reservations" },
+  { flag: 2048, label: "Manage Building Access" },
 ] as const;
+
+// --- Building Reservation types ---
+
+export type ReservationStatus = "PENDING" | "APPROVED" | "DENIED";
+
+export interface BuildingReservation {
+  id: number;
+  event_name: string;
+  event_description: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  setup_time: string;
+  cleanup_time: string;
+  rooms: string[];
+  organizer_name: string;
+  organizer_email: string;
+  organizer_phone: string;
+  organization: string;
+  organization_other: string | null;
+  affiliation: string;
+  needs_access: boolean;
+  status: ReservationStatus;
+  denial_reason: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+  has_conflict: boolean;
+}
 
 // --- Temple Recommend / Appointment types ---
 

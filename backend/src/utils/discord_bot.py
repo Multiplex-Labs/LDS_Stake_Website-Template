@@ -12,7 +12,7 @@ def require_enabled():
             @wraps(func)
             def wrapper(self, *args, **kwargs):
                 if not getattr(self, "enabled", False):
-                    self.logger.debug("DiscordBotHandle disabled; skipping %s", func.__name__)
+                    self.logger.warning("DiscordBotHandle disabled; skipping %s", func.__name__)
                     return
                 return func(self, *args, **kwargs)
             return wrapper
@@ -147,3 +147,51 @@ class DiscordBotHandle:
             "filename": filename,
         }
         return self._post("/backups/", json=body) is not None
+
+    @require_enabled()
+    def notify_reservation_approvers(
+        self,
+        reservation_id: int,
+        event_name: str,
+        date_str: str,
+        start_time: str,
+        end_time: str,
+        rooms: list,
+        organizer_name: str,
+        organizer_phone: str,
+        needs_access: bool,
+        approver_emails: list,
+    ) -> bool:
+        """Notify reservation approvers of a new pending building reservation."""
+        body = {
+            "reservation_id": reservation_id,
+            "event_name": event_name,
+            "date": date_str,
+            "start_time": start_time,
+            "end_time": end_time,
+            "rooms": rooms,
+            "organizer_name": organizer_name,
+            "organizer_phone": organizer_phone,
+            "needs_access": needs_access,
+            "approver_emails": approver_emails,
+        }
+        return self._post("/reservations/notify", json=body) is not None
+
+    @require_enabled()
+    def notify_access_managers(
+        self,
+        reservation_id: int,
+        event_name: str,
+        date_str: str,
+        organizer_name: str,
+        access_manager_emails: list,
+    ) -> bool:
+        """Notify access managers when an approved reservation requires building access."""
+        body = {
+            "reservation_id": reservation_id,
+            "event_name": event_name,
+            "date": date_str,
+            "organizer_name": organizer_name,
+            "access_manager_emails": access_manager_emails,
+        }
+        return self._post("/reservations/access-notify", json=body) is not None
