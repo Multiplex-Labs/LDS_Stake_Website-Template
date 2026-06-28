@@ -42,7 +42,7 @@ class CallingUser:
             self,
             require_fresh:bool = False,
             api_safe:bool = False,
-            permissions:List[Permission] = [],
+            permissions:List[Permission] | Permission = [],
             allow_unchanged_password:bool = False,
             allow_anonymous:bool = False
             ):

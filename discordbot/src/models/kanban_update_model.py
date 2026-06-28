@@ -23,3 +23,15 @@ class KanbanApprovalRequest(BaseModel):
     calling: str
     ward: str
     url: str
+
+class InterviewRequest(BaseModel):
+    """
+    A request body for letting POI know about an interview
+    """
+    proposal_id: int
+    interviewer_email: str
+    person: str
+    calling: str
+    ward: str
+    url: str
+    is_release: bool
