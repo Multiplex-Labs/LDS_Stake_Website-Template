@@ -29,11 +29,13 @@ _KNOWN_BAD_JWT_KEYS = {
     "supersecret",
 }
 
+_MIN_JWT_KEY_LENGTH = 64
+
 def _validate_jwt_secret(key: str) -> None:
-    if key.lower() in _KNOWN_BAD_JWT_KEYS or len(key) < 64:
+    if key.lower() in _KNOWN_BAD_JWT_KEYS or len(key) < _MIN_JWT_KEY_LENGTH:
         raise ValueError(
-            "JWT_SECRET_KEY is too weak or uses a known placeholder value. "
-            "Generate a secure key with: openssl rand -hex 32"
+            f"JWT_SECRET_KEY is too weak or uses a known placeholder value. "
+            f"Generate a secure key with: openssl rand -hex 32 (produces {_MIN_JWT_KEY_LENGTH} characters)"
         )
 
 _validate_jwt_secret(SECRET_KEY)

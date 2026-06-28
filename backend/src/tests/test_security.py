@@ -1,3 +1,5 @@
+import secrets
+
 import pytest
 from src.utils.security import _validate_jwt_secret
 
@@ -22,5 +24,4 @@ def test_boundary_64_chars_passes():
 
 
 def test_openssl_output_passes():
-    import secrets
     _validate_jwt_secret(secrets.token_hex(32))
