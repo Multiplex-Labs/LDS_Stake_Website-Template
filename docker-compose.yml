@@ -1,35 +1,67 @@
 services:
   backend:
     build: ./backend
-    ports:
-      - "8000:8000"
+    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/backend:latest
     env_file:
       - ./backend/.env
     volumes:
-      - ./backend/database.db:/app/database.db
-      - ./backend/wards.csv:/app/wards.csv
+      - backend-data:/app/data
+      - backend-static:/app/static
+      # Uncomment to enable Google Calendar integration:
+      # - ./secrets/google-sa.json:/run/secrets/google-sa.json:ro
+      - ./backend/wards.csv:/app/wards.csv:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
 
   frontend:
     build: ./frontend
-    ports:
-      - "3100:3100"
+    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/frontend:latest
     env_file:
       - ./frontend/.env
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   docs-site:
     build: ./docs-site
-    ports:
-      - "3400:3400"
+    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/docs-site:latest
     environment:
       - NODE_ENV=production
 
-  slackbot:
-    build: ./slackbot
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     env_file:
-      - ./slackbot/.env
+      - .env
     depends_on:
+      - frontend
       - backend
-  profiles:
-      - slackbot
+      - docs-site
+
+  discordbot:
+    build: ./discordbot
+    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/discordbot:latest
+    env_file:
+      - ./discordbot/.env
+    depends_on:
+      backend:
+        condition: service_healthy
+    profiles:
+      - discord
+
+volumes:
+  backend-data:
+  backend-static:
+  caddy-data:
+  caddy-config:

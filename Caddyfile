@@ -1,0 +1,11 @@
+{$DOMAIN} {
+    reverse_proxy frontend:3100
+}
+
+api.{$DOMAIN} {
+    reverse_proxy backend:8000
+}
+
+docs.{$DOMAIN} {
+    reverse_proxy docs-site:3400
+}
