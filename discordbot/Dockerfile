@@ -9,8 +9,8 @@ RUN pip install --no-cache-dir uv
 # Copy dependency manifests
 COPY pyproject.toml uv.lock ./
 
-# Compile a requirements.txt from pyproject.toml for reproducible installs
-RUN uv pip compile pyproject.toml -o requirements.txt --python-version 3.13
+# Export a requirements.txt from the lockfile for reproducible installs
+RUN uv export --frozen --no-dev -o requirements.txt
 
 # Runtime image
 FROM python:3.13-slim
@@ -29,6 +29,11 @@ COPY . .
 
 # Ensure a writable directory exists for the SQLite database
 RUN mkdir -p /app/data
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+RUN chown -R appuser:appgroup /app
+
+USER appuser
 
 # Expose the Discord bot HTTP/service port
 EXPOSE 8001
