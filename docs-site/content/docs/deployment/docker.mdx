@@ -13,13 +13,11 @@ This guide walks through a complete production deployment using pre-built Docker
 
 ## Before You Start: DNS First
 
-Configure DNS before running `docker compose up`. How you set up DNS determines how Caddy handles TLS — pick the path that matches your setup.
+Configure DNS before running `docker compose up`. Caddy provisions Let's Encrypt TLS automatically via the HTTP-01 ACME challenge, which requires your hostnames to resolve to your server.
 
----
+### Without Cloudflare proxy (direct DNS)
 
-### Option A: Direct DNS (no proxy)
-
-Point all three hostnames directly at your server's public IP. Caddy provisions Let's Encrypt TLS automatically using the HTTP-01 challenge, which requires port 80 to be publicly reachable.
+Create three A records pointing to your server's public IP:
 
 | Record | Type | Value |
 |---|---|---|
@@ -27,54 +25,25 @@ Point all three hostnames directly at your server's public IP. Caddy provisions 
 | `api.yourstake.org` | A | `<your-server-IP>` |
 | `docs.yourstake.org` | A | `<your-server-IP>` |
 
-<Callout type="warn">
-  All three records must exist and resolve to your server before you start the stack. If any record is missing or has not propagated, Caddy fails to provision a certificate for that hostname and enters a backoff that can block the other hostnames too.
-</Callout>
+### With Cloudflare proxy (recommended)
 
----
-
-### Option B: Cloudflare Proxy (wildcard CNAME)
-
-If you are using Cloudflare with the orange-cloud proxy enabled, use one A record and a wildcard CNAME instead of three A records:
+One A record plus a wildcard CNAME covers all subdomains — simpler than three separate A records:
 
 | Record | Type | Value | Proxy |
 |---|---|---|---|
 | `yourstake.org` | A | `<your-server-IP>` | Proxied (orange) |
 | `*.yourstake.org` | CNAME | `yourstake.org` | Proxied (orange) |
+| `www.yourstake.org` | CNAME | `yourstake.org` | Proxied (orange) |
 
-The wildcard CNAME covers `api.yourstake.org`, `docs.yourstake.org`, and any other subdomain automatically.
+The wildcard CNAME covers `api.yourstake.org`, `docs.yourstake.org`, and `www.yourstake.org` automatically.
+
+Caddy's HTTP-01 ACME challenge works through Cloudflare proxy. Cloudflare exempts `/.well-known/acme-challenge/` paths from its "Always Use HTTPS" redirect, so the challenge reaches Caddy on port 80. Caddy provisions valid Let's Encrypt certificates for each hostname and serves them on port 443; Cloudflare Full (Strict) validates these against the origin.
+
+**Required Cloudflare SSL/TLS setting:** Go to Cloudflare dashboard → your domain → SSL/TLS → Overview and select **Full (strict)**. This ensures the Cloudflare → origin connection uses your valid Let's Encrypt cert. Do not use Flexible mode (HTTP to origin, insecure) or Full without Strict (accepts any cert including self-signed).
 
 <Callout type="warn">
-  **Caddy's automatic Let's Encrypt provisioning does not work when Cloudflare proxy is enabled.** Cloudflare intercepts port 80 and redirects HTTP → HTTPS before the ACME HTTP-01 challenge reaches your server. You must use a different TLS configuration — see below.
+  DNS must propagate and port 80 must be publicly reachable before you start the stack. Caddy provisions certificates on first startup — if any hostname is unreachable, Caddy logs an error and retries on a backoff schedule. Check with `docker compose logs caddy` if certificate provisioning is slow.
 </Callout>
-
-**With Cloudflare proxy, replace your `Caddyfile` with the following:**
-
-```
-{$DOMAIN} {
-    tls internal
-    reverse_proxy frontend:3100
-}
-
-api.{$DOMAIN} {
-    tls internal
-    reverse_proxy backend:8000
-}
-
-docs.{$DOMAIN} {
-    tls internal
-    reverse_proxy docs-site:3400
-}
-```
-
-`tls internal` tells Caddy to generate a self-signed certificate instead of contacting Let's Encrypt. Cloudflare terminates public-facing TLS; `tls internal` just satisfies the Cloudflare → origin HTTPS leg.
-
-**Required Cloudflare SSL/TLS setting:** Set your domain's SSL/TLS mode to **Full** (not "Flexible", not "Full (Strict)"):
-
-- Go to Cloudflare dashboard → your domain → SSL/TLS → Overview
-- Select **Full**
-
-Flexible mode sends HTTP to your origin (insecure); Full (Strict) requires a CA-trusted cert at origin (which `tls internal` is not). **Full** accepts the self-signed cert and encrypts the Cloudflare → server leg.
 
 ---
 
@@ -506,7 +475,6 @@ docker compose logs caddy
 
 Common causes:
 
-- **Cloudflare proxy is enabled** — if you are behind Cloudflare's orange-cloud proxy, HTTP-01 ACME challenges cannot reach your server (Cloudflare intercepts port 80). Use the Cloudflare-specific Caddyfile with `tls internal` described in [Option B: Cloudflare Proxy](#option-b-cloudflare-proxy-wildcard-cname) above.
 - **DNS not propagated** — the A records do not yet resolve to your server IP. Use `dig yourstake.org` to check. Propagation can take up to 48 hours but is usually under 15 minutes.
 - **Port 80 blocked** — the HTTP-01 ACME challenge requires port 80 to be publicly reachable. Check that your firewall (`ufw status`) and any cloud provider security group allow inbound TCP/80.
 - **Caddy rate-limited** — if you have deleted and recreated the stack multiple times, you may have hit the Let's Encrypt limit of 5 duplicate certificates per domain per week. Wait and retry, or use Let's Encrypt's staging environment for testing.
