@@ -8,7 +8,6 @@ import {
 import { notFound, redirect } from 'next/navigation';
 import { getMDXComponents } from '@/mdx-components';
 import { DOCS_DEFAULT } from '@/lib/constants';
-const components = getMDXComponents({});
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -27,7 +26,7 @@ export default async function Page(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={components} />
+        <MDX components={getMDXComponents({})} />
       </DocsBody>
     </DocsPage>
   );
