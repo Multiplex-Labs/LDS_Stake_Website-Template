@@ -27,6 +27,7 @@ import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import logoImage from "@assets/stake-logo.png";
 import { useAuthStore } from "@/stores/auth";
+import { PERM_APPROVE_BLDG_RESERVATIONS } from "@/types";
 import { apiRequest, setAccessToken, queryClient } from "@/lib/queryClient";
 import { getCroppedImageBlob } from "@/lib/cropImage";
 import { useMutation } from "@tanstack/react-query";
@@ -230,7 +231,7 @@ export function Navbar() {
                         <ListItem href="/leader/speaking" title="Speaking Schedule" />
                         <ListItem href="/leader/presidency" title="Presidency Assignments" />
                         <ListItem href="/leader/calling-system" title="Stake Calling System" />
-                        {(user.permissions & 1024) === 1024 && (
+                        {(user.permissions & PERM_APPROVE_BLDG_RESERVATIONS) === PERM_APPROVE_BLDG_RESERVATIONS && (
                           <ListItem href="/leader/reservations" title="Building Reservations" />
                         )}
                         <ListItem href="/leader/admin" title="Administration" />
@@ -462,7 +463,7 @@ export function Navbar() {
                     <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>
                     <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
                     <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
-                    {(user.permissions & 1024) === 1024 && (
+                    {(user.permissions & PERM_APPROVE_BLDG_RESERVATIONS) === PERM_APPROVE_BLDG_RESERVATIONS && (
                       <MobileLink href="/leader/reservations" onClick={() => setMobileOpen(false)}>Building Reservations</MobileLink>
                     )}
                     <MobileLink href="/leader/admin" onClick={() => setMobileOpen(false)}>Administration</MobileLink>

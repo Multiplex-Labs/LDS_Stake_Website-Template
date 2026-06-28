@@ -112,4 +112,4 @@ class BuildingReservationResponse(SQLModel):
 
 
 class DenyRequest(SQLModel):
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)

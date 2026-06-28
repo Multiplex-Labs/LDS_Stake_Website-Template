@@ -48,9 +48,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest } from "@/lib/queryClient";
-import type { BuildingReservation, ReservationStatus } from "@/types";
-
-const APPROVE_BLDG_RESERVATIONS = 1024;
+import { type BuildingReservation, type ReservationStatus, PERM_APPROVE_BLDG_RESERVATIONS } from "@/types";
 
 function hasPermission(scopes: number, flag: number): boolean {
   return (scopes & flag) === flag;
@@ -59,10 +57,12 @@ function hasPermission(scopes: number, flag: number): boolean {
 function statusColor(status: ReservationStatus): string {
   switch (status) {
     case "PENDING":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      return "bg-warning text-warning-foreground border-warning";
     case "APPROVED":
-      return "bg-green-100 text-green-800 border-green-200";
+      return "bg-success text-success-foreground border-success";
     case "DENIED":
+      return "bg-muted text-muted-foreground border-border";
+    default:
       return "bg-muted text-muted-foreground border-border";
   }
 }
@@ -108,9 +108,9 @@ export default function BuildingReservationsAdmin() {
   const [denyReason, setDenyReason] = useState("");
   const [showDeny, setShowDeny] = useState(false);
 
-  const canAccess = user ? hasPermission(user.permissions, APPROVE_BLDG_RESERVATIONS) : false;
+  const canAccess = user ? hasPermission(user.permissions, PERM_APPROVE_BLDG_RESERVATIONS) : false;
 
-  const { data: reservations = [], isLoading } = useQuery<BuildingReservation[]>({
+  const { data: reservations = [], isLoading, isError, error } = useQuery<BuildingReservation[]>({
     queryKey: ["/api/reservations"],
     queryFn: () => apiRequest("GET", "/api/reservations").then((r) => r.json()),
     enabled: canAccess,
@@ -203,6 +203,17 @@ export default function BuildingReservationsAdmin() {
     );
   }
 
+  if (isError) {
+    console.error("[reservations] Failed to load reservations:", error);
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-12 text-center">
+          <p className="text-destructive">Failed to load reservations. Please refresh the page.</p>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="bg-muted/30 py-12">
@@ -247,11 +258,11 @@ export default function BuildingReservationsAdmin() {
 
             <div className="flex gap-3 mb-4 text-sm">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-yellow-200 border border-yellow-300 inline-block" />
+                <span className="w-3 h-3 rounded bg-warning border border-warning inline-block" />
                 Pending
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-green-200 border border-green-300 inline-block" />
+                <span className="w-3 h-3 rounded bg-success border border-success inline-block" />
                 Approved
               </span>
               <span className="flex items-center gap-1.5">
@@ -475,7 +486,7 @@ export default function BuildingReservationsAdmin() {
                     </div>
                   </div>
                   {selected.needs_access && (
-                    <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-3 py-2 flex items-center gap-2">
+                    <p className="text-sm text-warning-foreground bg-warning border border-warning/80 rounded px-3 py-2 flex items-center gap-2">
                       <AlertTriangle size={14} />
                       Organizer does not have building access (fob/code)
                     </p>

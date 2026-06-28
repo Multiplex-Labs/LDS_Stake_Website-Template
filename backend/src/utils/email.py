@@ -631,25 +631,22 @@ def render_reservation_pending(
 
 
 def send_reservation_pending(reservation) -> None:
-    try:
-        rooms = json.loads(reservation.rooms) if isinstance(reservation.rooms, str) else reservation.rooms
-        content = render_reservation_pending(
-            organizer_name=reservation.organizer_name,
-            event_name=reservation.event_name,
-            date_str=str(reservation.date),
-            start_time=reservation.start_time,
-            end_time=reservation.end_time,
-            rooms=rooms,
-        )
-        send_email(
-            reservation.organizer_email,
-            reservation.organizer_name,
-            f"Reservation Request Received: {reservation.event_name}",
-            content.html,
-            content.plain,
-        )
-    except Exception:
-        logger.exception("[email] Failed to send reservation pending email")
+    rooms = json.loads(reservation.rooms) if isinstance(reservation.rooms, str) else reservation.rooms
+    content = render_reservation_pending(
+        organizer_name=reservation.organizer_name,
+        event_name=reservation.event_name,
+        date_str=str(reservation.date),
+        start_time=reservation.start_time,
+        end_time=reservation.end_time,
+        rooms=rooms,
+    )
+    send_email(
+        reservation.organizer_email,
+        reservation.organizer_name,
+        f"Reservation Request Received: {reservation.event_name}",
+        content.html,
+        content.plain,
+    )
 
 
 def render_reservation_approved(
@@ -701,6 +698,10 @@ def _send_reservation_approved_with_attachment(
     from_name = os.getenv("BREVO_FROM_NAME", "Stake Reservations")
 
     if not api_key or not from_email:
+        logger.warning(
+            "[email] BREVO_API_KEY or BREVO_FROM_EMAIL not configured; "
+            "sending approval email without .ics attachment"
+        )
         send_email(to_email, to_name, subject, html_body, plain_body)
         return
 
@@ -735,7 +736,6 @@ def _send_reservation_approved_with_attachment(
 
 def send_reservation_approved(reservation) -> None:
     try:
-        from .ics import generate_ics
         content = render_reservation_approved(
             organizer_name=reservation.organizer_name,
             event_name=reservation.event_name,
@@ -743,6 +743,13 @@ def send_reservation_approved(reservation) -> None:
             start_time=reservation.start_time,
             end_time=reservation.end_time,
         )
+    except Exception:
+        logger.exception("[email] Failed to render approved email for reservation %s", getattr(reservation, 'id', '?'))
+        return
+
+    ics_bytes = None
+    try:
+        from .ics import generate_ics
         ics_bytes = generate_ics(
             event_name=reservation.event_name,
             event_date=reservation.date,
@@ -750,17 +757,30 @@ def send_reservation_approved(reservation) -> None:
             end_time=reservation.end_time,
             organizer_email=reservation.organizer_email,
         )
-        _send_reservation_approved_with_attachment(
-            reservation.organizer_email,
-            reservation.organizer_name,
-            f"Building Reservation Approved: {reservation.event_name}",
-            content.html,
-            content.plain,
-            ics_bytes,
-            reservation.event_name,
-        )
     except Exception:
-        logger.exception("[email] Failed to send reservation approved email")
+        logger.warning("[email] ICS generation failed for reservation %s; sending approval email without attachment", getattr(reservation, 'id', '?'))
+
+    try:
+        if ics_bytes:
+            _send_reservation_approved_with_attachment(
+                reservation.organizer_email,
+                reservation.organizer_name,
+                f"Building Reservation Approved: {reservation.event_name}",
+                content.html,
+                content.plain,
+                ics_bytes,
+                reservation.event_name,
+            )
+        else:
+            send_email(
+                reservation.organizer_email,
+                reservation.organizer_name,
+                f"Building Reservation Approved: {reservation.event_name}",
+                content.html,
+                content.plain,
+            )
+    except Exception:
+        logger.exception("[email] Failed to send approved email for reservation %s", getattr(reservation, 'id', '?'))
 
 
 def render_reservation_denied(
@@ -790,18 +810,15 @@ def render_reservation_denied(
 
 
 def send_reservation_denied(reservation) -> None:
-    try:
-        content = render_reservation_denied(
-            organizer_name=reservation.organizer_name,
-            event_name=reservation.event_name,
-            denial_reason=reservation.denial_reason or "No reason provided.",
-        )
-        send_email(
-            reservation.organizer_email,
-            reservation.organizer_name,
-            f"Building Reservation Not Approved: {reservation.event_name}",
-            content.html,
-            content.plain,
-        )
-    except Exception:
-        logger.exception("[email] Failed to send reservation denied email")
+    content = render_reservation_denied(
+        organizer_name=reservation.organizer_name,
+        event_name=reservation.event_name,
+        denial_reason=reservation.denial_reason or "No reason provided.",
+    )
+    send_email(
+        reservation.organizer_email,
+        reservation.organizer_name,
+        f"Building Reservation Not Approved: {reservation.event_name}",
+        content.html,
+        content.plain,
+    )

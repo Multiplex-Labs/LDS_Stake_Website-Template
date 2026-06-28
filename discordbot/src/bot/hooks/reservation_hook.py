@@ -28,7 +28,7 @@ class DenyModal(Modal, title="Reason for Denial"):
         try:
             await self.bot.backend_client.deny_reservation(self.reservation_id, self.reason.value)
             await interaction.response.send_message("Reservation denied.", ephemeral=True)
-        except RuntimeError as exc:
+        except Exception as exc:
             if "409" in str(exc):
                 await interaction.response.send_message(
                     "This reservation has already been reviewed.", ephemeral=True
@@ -51,7 +51,7 @@ class ApprovalView(View):
         try:
             await self.bot.backend_client.approve_reservation(self.reservation_id)
             await interaction.response.send_message("Reservation approved!", ephemeral=True)
-        except RuntimeError as exc:
+        except Exception as exc:
             if "409" in str(exc):
                 await interaction.response.send_message(
                     "This reservation has already been reviewed.", ephemeral=True

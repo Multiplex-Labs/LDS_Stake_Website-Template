@@ -32,7 +32,11 @@ def _check_conflict(
     event_date,
     rooms_list: list[str],
 ) -> bool:
-    """Return True if any other PENDING/APPROVED reservation shares date and ≥1 room."""
+    """Return True if any other PENDING/APPROVED reservation on the same date shares ≥1 room.
+
+    Note: only date and room name are compared — time-range overlap is not checked.
+    Same-day reservations for the same room at non-overlapping times will also return True.
+    """
     existing = session.exec(
         select(BuildingReservation).where(
             BuildingReservation.date == event_date,
@@ -42,13 +46,20 @@ def _check_conflict(
     ).all()
     rooms_set = set(rooms_list)
     for r in existing:
-        if rooms_set & set(json.loads(r.rooms)):
+        try:
+            existing_rooms = set(json.loads(r.rooms))
+        except (json.JSONDecodeError, TypeError):
+            logger.error("[reservations] Reservation %s has malformed rooms JSON; skipping conflict check", r.id)
+            continue
+        if rooms_set & existing_rooms:
             return True
     return False
 
 
 # ---------------------------------------------------------------------------
-# Background task helpers — lazy imports prevent circular import issues
+# Background task helpers — imports are deferred to avoid eagerly initialising
+# services (DiscordBotHandle, email) at module load time, and because background
+# tasks run outside the request session and open their own resources.
 # ---------------------------------------------------------------------------
 
 def _bg_send_pending(reservation: BuildingReservation) -> None:
@@ -97,9 +108,20 @@ def _bg_notify_approvers(
 ) -> None:
     try:
         from ..utils.discord_bot import DiscordBotHandle
-        from ..models import Permission
         approver_emails = _get_emails_with_permission(Permission.APPROVE_BLDG_RESERVATIONS)
         bot = DiscordBotHandle()
+        if not bot.enabled:
+            logger.warning(
+                "[reservations] Discord bot disabled — reservation %s has no approver notification channel",
+                reservation_id,
+            )
+            return
+        if not approver_emails:
+            logger.warning(
+                "[reservations] No users have APPROVE_BLDG_RESERVATIONS permission; "
+                "reservation %s will have no approver notifications", reservation_id
+            )
+            return
         bot.notify_reservation_approvers(
             reservation_id=reservation_id,
             event_name=event_name,
@@ -132,7 +154,6 @@ def _bg_notify_access(
 ) -> None:
     try:
         from ..utils.discord_bot import DiscordBotHandle
-        from ..models import Permission
         access_emails = _get_emails_with_permission(Permission.MANAGE_ACCESS)
         bot = DiscordBotHandle()
         bot.notify_access_managers(
@@ -208,7 +229,7 @@ def create_reservation(
 
 @router.get("/", response_model=list[BuildingReservationResponse])
 def list_reservations(
-    status: Optional[str] = None,
+    status: Optional[ReservationStatus] = None,
     date: Optional[str] = None,
     session: Session = Depends(get_session),
     _current_user: ResponseSafeUser = Depends(
@@ -224,7 +245,7 @@ def list_reservations(
     return [
         BuildingReservationResponse.from_orm_with_conflict(
             r,
-            _check_conflict(session, r.id, r.date, json.loads(r.rooms)),
+            _check_conflict(session, r.id, r.date, r.rooms_list()),
         )
         for r in reservations
     ]

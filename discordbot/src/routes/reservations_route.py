@@ -48,8 +48,12 @@ class AccessNotifyRequest(BaseModel):
 @router.post("/notify")
 async def notify_approvers(payload: ReservationNotifyRequest, request: Request):
     logger.info("Received reservation notify request for id: %s", payload.reservation_id)
+    if not payload.approver_emails:
+        logger.warning(
+            "No approver emails in notify payload for reservation %s", payload.reservation_id
+        )
     await request.app.state.bot.reservation_hook.send_approval_dms(payload)
-    return {"message": "Reservation notification sent"}
+    return {"message": "Reservation notification dispatched", "approver_count": len(payload.approver_emails)}
 
 
 @router.post("/access-notify")

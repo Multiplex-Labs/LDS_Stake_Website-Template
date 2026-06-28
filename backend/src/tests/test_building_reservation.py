@@ -336,3 +336,266 @@ def test_denied_reservation_does_not_cause_conflict(client: TestClient, userpass
     # so the reviewed_by FK doesn't block userpass teardown
     client.delete(f"/reservations/{r1['id']}", headers=auth_headers(token))
     client.delete(f"/reservations/{r2['id']}", headers=auth_headers(token))
+
+
+# ---------------------------------------------------------------------------
+# Group A — Auth tests for mutating endpoints
+# ---------------------------------------------------------------------------
+
+def test_approve_reservation_unauthenticated_returns_401(client: TestClient):
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.post(f"/reservations/{created['id']}/approve")
+    assert resp.status_code == 401
+
+
+def test_approve_reservation_no_permission_returns_403(client: TestClient, userpass):
+    user, password = userpass
+    token = login(client, user.email, password)
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.post(f"/reservations/{created['id']}/approve", headers=auth_headers(token))
+    assert resp.status_code == 403
+
+
+def test_deny_reservation_unauthenticated_returns_401(client: TestClient):
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.post(f"/reservations/{created['id']}/deny", json={"reason": "test"})
+    assert resp.status_code == 401
+
+
+def test_deny_reservation_no_permission_returns_403(client: TestClient, userpass):
+    user, password = userpass
+    token = login(client, user.email, password)
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.post(
+        f"/reservations/{created['id']}/deny",
+        json={"reason": "test"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 403
+
+
+def test_delete_reservation_unauthenticated_returns_401(client: TestClient):
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.delete(f"/reservations/{created['id']}")
+    assert resp.status_code == 401
+
+
+def test_delete_reservation_no_permission_returns_403(client: TestClient, userpass):
+    user, password = userpass
+    token = login(client, user.email, password)
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.delete(f"/reservations/{created['id']}", headers=auth_headers(token))
+    assert resp.status_code == 403
+
+
+def test_get_reservation_detail_unauthenticated_returns_401(client: TestClient):
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    resp = client.get(f"/reservations/{created['id']}")
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Group B — Cross-status 409
+# ---------------------------------------------------------------------------
+
+def test_deny_already_approved_reservation_returns_409(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    reservation_id = created["id"]
+
+    client.post(f"/reservations/{reservation_id}/approve", headers=auth_headers(token))
+    resp = client.post(
+        f"/reservations/{reservation_id}/deny",
+        json={"reason": "Changed my mind"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 409
+    client.delete(f"/reservations/{reservation_id}", headers=auth_headers(token))
+
+
+def test_approve_already_denied_reservation_returns_409(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    created = client.post("/reservations", json=VALID_PAYLOAD).json()
+    reservation_id = created["id"]
+
+    client.post(
+        f"/reservations/{reservation_id}/deny",
+        json={"reason": "Not suitable"},
+        headers=auth_headers(token),
+    )
+    resp = client.post(f"/reservations/{reservation_id}/approve", headers=auth_headers(token))
+    assert resp.status_code == 409
+    client.delete(f"/reservations/{reservation_id}", headers=auth_headers(token))
+
+
+# ---------------------------------------------------------------------------
+# Group C — 404 on approve/deny non-existent
+# ---------------------------------------------------------------------------
+
+def test_approve_nonexistent_reservation_returns_404(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    resp = client.post("/reservations/99999/approve", headers=auth_headers(token))
+    assert resp.status_code == 404
+
+
+def test_deny_nonexistent_reservation_returns_404(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    resp = client.post(
+        "/reservations/99999/deny",
+        json={"reason": "Does not exist"},
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Group D — List filter params
+# ---------------------------------------------------------------------------
+
+def test_list_reservations_filter_by_status(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    r1 = client.post("/reservations", json={**VALID_PAYLOAD, "date": "2028-01-10"}).json()
+    r2 = client.post(
+        "/reservations",
+        json={**VALID_PAYLOAD, "date": "2028-01-11", "event_name": "Second Event"},
+    ).json()
+
+    client.post(f"/reservations/{r1['id']}/approve", headers=auth_headers(token))
+
+    pending = client.get("/reservations?status=PENDING", headers=auth_headers(token)).json()
+    approved = client.get("/reservations?status=APPROVED", headers=auth_headers(token)).json()
+
+    assert all(r["status"] == "PENDING" for r in pending)
+    assert all(r["status"] == "APPROVED" for r in approved)
+    assert any(r["id"] == r2["id"] for r in pending)
+    assert any(r["id"] == r1["id"] for r in approved)
+
+    client.delete(f"/reservations/{r1['id']}", headers=auth_headers(token))
+    client.delete(f"/reservations/{r2['id']}", headers=auth_headers(token))
+
+
+def test_list_reservations_filter_by_date(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    target_date = "2028-02-15"
+    r1 = client.post("/reservations", json={**VALID_PAYLOAD, "date": target_date}).json()
+    r2 = client.post(
+        "/reservations",
+        json={**VALID_PAYLOAD, "date": "2028-02-16", "event_name": "Other"},
+    ).json()
+
+    filtered = client.get(f"/reservations?date={target_date}", headers=auth_headers(token)).json()
+
+    assert all(r["date"] == target_date for r in filtered)
+    assert any(r["id"] == r1["id"] for r in filtered)
+    assert all(r["id"] != r2["id"] for r in filtered)
+
+    client.delete(f"/reservations/{r1['id']}", headers=auth_headers(token))
+    client.delete(f"/reservations/{r2['id']}", headers=auth_headers(token))
+
+
+# ---------------------------------------------------------------------------
+# Group E — ICS utility coverage
+# ---------------------------------------------------------------------------
+
+def test_generate_ics_returns_valid_calendar():
+    """generate_ics returns parseable iCalendar bytes with one VEVENT."""
+    from datetime import date as date_type
+    from src.utils.ics import generate_ics
+    from icalendar import Calendar
+
+    ics_bytes = generate_ics(
+        event_name="Test Event",
+        event_date=date_type(2027, 6, 15),
+        start_time="18:00",
+        end_time="21:00",
+        organizer_email="test@example.com",
+    )
+
+    assert isinstance(ics_bytes, bytes)
+    cal = Calendar.from_ical(ics_bytes)
+    events = [c for c in cal.walk() if c.name == "VEVENT"]
+    assert len(events) == 1
+
+
+def test_generate_ics_correct_dtstart_dtend():
+    """DTSTART and DTEND match the provided date and times."""
+    from datetime import date as date_type, datetime
+    from src.utils.ics import generate_ics
+    from icalendar import Calendar
+
+    ics_bytes = generate_ics(
+        event_name="Party",
+        event_date=date_type(2027, 1, 15),
+        start_time="18:00",
+        end_time="21:00",
+        organizer_email="org@example.com",
+    )
+
+    cal = Calendar.from_ical(ics_bytes)
+    event = next(c for c in cal.walk() if c.name == "VEVENT")
+    dtstart = event.get("DTSTART").dt
+    dtend = event.get("DTEND").dt
+
+    assert dtstart == datetime(2027, 1, 15, 18, 0)
+    assert dtend == datetime(2027, 1, 15, 21, 0)
+
+
+# ---------------------------------------------------------------------------
+# Group F — APPROVED reservation triggers conflict flag
+# ---------------------------------------------------------------------------
+
+def test_approved_reservation_triggers_conflict_flag(client: TestClient, userpass, db_session):
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    payload1 = {**VALID_PAYLOAD, "date": "2028-03-20"}
+    r1 = client.post("/reservations", json=payload1).json()
+    client.post(f"/reservations/{r1['id']}/approve", headers=auth_headers(token))
+
+    payload2 = {**VALID_PAYLOAD, "date": "2028-03-20", "event_name": "Conflicting Event"}
+    r2 = client.post("/reservations", json=payload2).json()
+    assert r2["has_conflict"] is True
+
+    client.delete(f"/reservations/{r1['id']}", headers=auth_headers(token))
+    client.delete(f"/reservations/{r2['id']}", headers=auth_headers(token))
+
+
+# ---------------------------------------------------------------------------
+# Group G — needs_access=True approved triggers access notify branch
+# ---------------------------------------------------------------------------
+
+def test_approve_with_needs_access_succeeds(client: TestClient, userpass, db_session):
+    """Approving a needs_access=True reservation completes successfully (notify path exercised)."""
+    user, password = userpass
+    _grant_reservation_approval_perm(db_session, user)
+    token = login(client, user.email, password)
+
+    payload = {**VALID_PAYLOAD, "needs_access": True}
+    created = client.post("/reservations", json=payload).json()
+    assert created["needs_access"] is True
+
+    resp = client.post(f"/reservations/{created['id']}/approve", headers=auth_headers(token))
+    assert resp.status_code == 200
+
+    detail = client.get(f"/reservations/{created['id']}", headers=auth_headers(token)).json()
+    assert detail["status"] == "APPROVED"
+    client.delete(f"/reservations/{created['id']}", headers=auth_headers(token))
