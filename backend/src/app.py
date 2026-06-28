@@ -28,6 +28,16 @@ import asyncio
 logger = getLogger("application")
 
 
+def validate_cors_origins() -> None:
+    origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")]
+    if any("localhost" in o for o in origins) and os.getenv("DEV", "false").lower() != "true":
+        logger.warning(
+            "ALLOWED_ORIGINS contains 'localhost' but DEV is not 'true'. "
+            "This is likely a production misconfiguration. "
+            "Set ALLOWED_ORIGINS to your production domain."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup code can go here
@@ -81,13 +91,7 @@ async def lifespan(app: FastAPI):
                        "please set SSL_ENABLED=false in your .env file. "
                        "Otherwise, refresh tokens will not work.")
     ## Check for production CORS misconfiguration
-    _origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")]
-    if any("localhost" in o for o in _origins) and os.getenv("DEV", "false").lower() != "true":
-        logger.warning(
-            "ALLOWED_ORIGINS contains 'localhost' but DEV is not 'true'. "
-            "This is likely a production misconfiguration. "
-            "Set ALLOWED_ORIGINS to your production domain."
-        )
+    validate_cors_origins()
     yield
     # shutdown code can go here
     session_cleanup_task.cancel()

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from typing import Tuple
 
 # Set necessary env variables for app initialization
-os.environ["JWT_SECRET_KEY"] = secrets.token_urlsafe(32)
+os.environ["JWT_SECRET_KEY"] = secrets.token_hex(32)
 os.environ["SSL_ENABLED"] = "false"
 os.environ["DEBUG"] = "true"
 

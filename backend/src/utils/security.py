@@ -28,11 +28,15 @@ _KNOWN_BAD_JWT_KEYS = {
     "jwt-secret",
     "supersecret",
 }
-if SECRET_KEY.lower() in _KNOWN_BAD_JWT_KEYS or len(SECRET_KEY) < 32:
-    raise ValueError(
-        "JWT_SECRET_KEY is too weak or uses a known placeholder value. "
-        "Generate a secure key with: openssl rand -hex 32"
-    )
+
+def _validate_jwt_secret(key: str) -> None:
+    if key.lower() in _KNOWN_BAD_JWT_KEYS or len(key) < 64:
+        raise ValueError(
+            "JWT_SECRET_KEY is too weak or uses a known placeholder value. "
+            "Generate a secure key with: openssl rand -hex 32"
+        )
+
+_validate_jwt_secret(SECRET_KEY)
 
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(
