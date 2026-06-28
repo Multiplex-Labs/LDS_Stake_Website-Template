@@ -1,122 +1,537 @@
 ---
-title: "Docker Compose Deployment"
-description: "Deploy all three Stake Portal services with a single Docker Compose command."
+title: "Docker Deployment"
+description: "Complete guide to deploying the LDS Stake Portal in production using pre-built container images from GHCR."
 ---
 
-Docker Compose is the recommended deployment method. It starts the frontend/proxy, backend, and (optionally) the Slackbot as isolated containers with a single command.
+This guide walks through a complete production deployment using pre-built Docker images published to GitHub Container Registry (GHCR). You do not need to clone the source repository. All application code runs inside the containers. The host only needs Docker and a handful of configuration files.
 
-## Step 1: Clone the Repository
+<Callout type="warn">
+  This is the production path. For local development or contributing to the project, see [Manual Deployment](/deployment/manual) instead.
+</Callout>
 
-```bash
-git clone <your-repo-url>
-cd LDS_Stake_Website-Template-2
+---
+
+## Before You Start: DNS First
+
+Configure DNS before running `docker compose up`. How you set up DNS determines how Caddy handles TLS — pick the path that matches your setup.
+
+---
+
+### Option A: Direct DNS (no proxy)
+
+Point all three hostnames directly at your server's public IP. Caddy provisions Let's Encrypt TLS automatically using the HTTP-01 challenge, which requires port 80 to be publicly reachable.
+
+| Record | Type | Value |
+|---|---|---|
+| `yourstake.org` | A | `<your-server-IP>` |
+| `api.yourstake.org` | A | `<your-server-IP>` |
+| `docs.yourstake.org` | A | `<your-server-IP>` |
+
+<Callout type="warn">
+  All three records must exist and resolve to your server before you start the stack. If any record is missing or has not propagated, Caddy fails to provision a certificate for that hostname and enters a backoff that can block the other hostnames too.
+</Callout>
+
+---
+
+### Option B: Cloudflare Proxy (wildcard CNAME)
+
+If you are using Cloudflare with the orange-cloud proxy enabled, use one A record and a wildcard CNAME instead of three A records:
+
+| Record | Type | Value | Proxy |
+|---|---|---|---|
+| `yourstake.org` | A | `<your-server-IP>` | Proxied (orange) |
+| `*.yourstake.org` | CNAME | `yourstake.org` | Proxied (orange) |
+
+The wildcard CNAME covers `api.yourstake.org`, `docs.yourstake.org`, and any other subdomain automatically.
+
+<Callout type="warn">
+  **Caddy's automatic Let's Encrypt provisioning does not work when Cloudflare proxy is enabled.** Cloudflare intercepts port 80 and redirects HTTP → HTTPS before the ACME HTTP-01 challenge reaches your server. You must use a different TLS configuration — see below.
+</Callout>
+
+**With Cloudflare proxy, replace your `Caddyfile` with the following:**
+
+```
+{$DOMAIN} {
+    tls internal
+    reverse_proxy frontend:3100
+}
+
+api.{$DOMAIN} {
+    tls internal
+    reverse_proxy backend:8000
+}
+
+docs.{$DOMAIN} {
+    tls internal
+    reverse_proxy docs-site:3400
+}
 ```
 
-## Step 2: Create the Backend Environment File
+`tls internal` tells Caddy to generate a self-signed certificate instead of contacting Let's Encrypt. Cloudflare terminates public-facing TLS; `tls internal` just satisfies the Cloudflare → origin HTTPS leg.
 
-Create `backend/.env` with the following variables:
+**Required Cloudflare SSL/TLS setting:** Set your domain's SSL/TLS mode to **Full** (not "Flexible", not "Full (Strict)"):
+
+- Go to Cloudflare dashboard → your domain → SSL/TLS → Overview
+- Select **Full**
+
+Flexible mode sends HTTP to your origin (insecure); Full (Strict) requires a CA-trusted cert at origin (which `tls internal` is not). **Full** accepts the self-signed cert and encrypts the Cloudflare → server leg.
+
+---
+
+## Step 1: Prepare the Server
+
+Install Docker on a fresh Linux server (Ubuntu 22.04 LTS or later recommended).
 
 ```bash
-# backend/.env
+# Update the system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker (official script)
+curl -fsSL https://get.docker.com | sudo sh
+
+# Add your user to the docker group (log out and back in after this)
+sudo usermod -aG docker $USER
+
+# Open required ports
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
+
+Verify Docker is running:
+
+```bash
+docker --version
+docker compose version
+```
+
+You do not need Node.js, Python, or uv on the host. All application runtimes are inside the containers.
+
+---
+
+## Step 2: Create the Deployment Directory
+
+Create a dedicated directory for all configuration files. Only configuration lives here — no source code.
+
+```bash
+sudo mkdir -p /opt/lds-stake-portal/backend
+sudo mkdir -p /opt/lds-stake-portal/frontend
+sudo chown -R $USER:$USER /opt/lds-stake-portal
+cd /opt/lds-stake-portal
+```
+
+Your final directory structure will look like this:
+
+```
+/opt/lds-stake-portal/
+├── docker-compose.yml
+├── Caddyfile
+├── .env                    # DOMAIN (and optionally GHCR_REPO)
+├── backend/
+│   ├── .env
+│   └── wards.csv
+├── frontend/
+│   └── .env
+└── discordbot/             # optional, only if using the Discord bot profile
+    └── .env
+```
+
+---
+
+## Step 3: Download the Compose and Caddy Files
+
+Copy `docker-compose.yml` and `Caddyfile` from the repository to your deployment directory. You can download them directly from GitHub without cloning:
+
+```bash
+cd /opt/lds-stake-portal
+
+# Replace rc27122/LDS_Stake_Website-Template-2 with your fork if applicable
+REPO="rc27122/LDS_Stake_Website-Template-2"
+
+curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/docker-compose.yml" -o docker-compose.yml
+curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/Caddyfile" -o Caddyfile
+```
+
+Alternatively, copy them from a local checkout if you have one.
+
+---
+
+## Step 4: Create Environment Files
+
+### Root `.env` (Caddy domain + optional GHCR override)
+
+```bash
+# /opt/lds-stake-portal/.env
+
+# Your stake's domain. Caddy provisions TLS for DOMAIN, api.DOMAIN, and docs.DOMAIN.
+DOMAIN=yourstake.org
+
+# Only needed if you have forked the repository and pushed images to your own GHCR namespace.
+# If using the upstream images, leave this commented out.
+# GHCR_REPO=your-github-org/your-fork-repo-name
+```
+
+### `backend/.env`
+
+```bash
+# /opt/lds-stake-portal/backend/.env
+
 DEV=false
 PORT=8000
+
+# Database
 DB_ENGINE=sqlite
-DATABASE_PATH=./database.db
-INITIAL_ADMIN_PASSWORD=change-me-on-first-run
-JWT_SECRET_KEY=replace-with-a-long-random-string
-SSL_ENABLED=false
+SQLALCHEMY_ECHO=false
+# Must use this path — it maps to the backend-data named volume inside the container.
+DATABASE_PATH=/app/data/database.db
+
+# Required on FIRST BOOT ONLY when the database is empty.
+# The backend creates admin@admin.com with this password.
+# After first login and password change, this variable is no longer read.
+INITIAL_ADMIN_PASSWORD=choose-a-strong-temporary-password
+
+# Required — must be at least 64 characters.
+# Generate with: openssl rand -hex 32
+JWT_SECRET_KEY=
+
+# Required in production — marks the refresh_token cookie as Secure.
+# Even though Caddy handles TLS termination externally, the backend must still
+# set the Secure flag on session cookies to prevent interception. Always true in production.
+SSL_ENABLED=true
+
+# Calling proposal approval thresholds
 SP_APPROVAL_THRESHOLD=2
 HC_APPROVAL_THRESHOLD=3
+
+# CORS — set to your public frontend URL
+ALLOWED_ORIGINS=https://yourstake.org
+
+# Base URLs used in email links. Both default to localhost when unset,
+# which makes all emailed links non-functional in production.
+FRONTEND_BASE_URL=https://yourstake.org
+BACKEND_BASE_URL=https://api.yourstake.org
+
+# Email — Brevo (primary, 300 emails/day on the free tier)
+BREVO_API_KEY=
+BREVO_FROM_EMAIL=noreply@yourstake.org
+
+# Email — Mailjet (fallback when Brevo fails, 200 emails/day on the free tier)
+MAILJET_API_KEY=
+MAILJET_SECRET_KEY=
+MAILJET_FROM_EMAIL=noreply@yourstake.org
+
+# Reply-to address shown to email recipients — use a monitored clerk inbox
+REPLY_TO_EMAIL=clerk@yourstake.org
+
+# Google Calendar integration (optional — omit to disable silently)
+# Path inside the container where the service account JSON is mounted.
+GOOGLE_SERVICE_ACCOUNT_FILE=/run/secrets/google-sa.json
+GOOGLE_CALENDAR_ID=your-calendar-id@group.calendar.google.com
+
+# Discord bot integration (optional — omit both to disable silently)
+# Must match BACKEND_TOKEN in discordbot/.env exactly.
+DISCORD_BOT_TOKEN=
+DISCORD_BOT_URL=http://discordbot:8001
 ```
 
 <Callout type="warn">
-  `JWT_SECRET_KEY` must be a long, random string in production. Anyone who knows this value can forge authentication tokens. Generate one with `openssl rand -hex 32`.
+  `JWT_SECRET_KEY` must be at least 64 characters. The backend refuses to start if it is shorter or matches a known weak placeholder such as `secret`, `changeme`, or `supersecret`. Generate a valid key with `openssl rand -hex 32` (produces exactly 64 hex characters). Do not use `openssl rand -base64 32` — that produces only 44 characters and will fail the length check.
 </Callout>
 
-See [Environment Variables](/deployment/environment) for a full description of each setting.
+<Callout type="warn">
+  `SSL_ENABLED=true` is required in all production deployments. Caddy handles TLS externally, but the backend uses this flag to mark the `refresh_token` cookie as `Secure`. A cookie without the `Secure` flag can be transmitted over non-HTTPS connections and intercepted. The container's default is `false` — always override it in `backend/.env`.
+</Callout>
 
-## Step 3: Create the Frontend Environment File
-
-Create `frontend/.env`:
+### `frontend/.env`
 
 ```bash
-# frontend/.env
+# /opt/lds-stake-portal/frontend/.env
+
+# Internal Docker Compose service name — do not use localhost.
+BACKEND_URL=http://backend:8000
 PORT=3100
 NODE_ENV=production
-BACKEND_URL=http://backend:8000
 ```
 
 <Callout type="info">
-  In Docker Compose, the frontend proxy reaches the backend via the internal service name `backend`, not `localhost`. If you rename the service in your `docker-compose.yml`, update `BACKEND_URL` to match.
+  `BACKEND_URL` is read once when the Express server starts. Changing this value requires a full container restart — reloading the process inside the container has no effect.
 </Callout>
 
-## Step 4: Create the Slackbot Environment File (Optional)
+---
 
-If you want the Slackbot service to run, create `slackbot/.env`:
+## Step 5: Create `backend/wards.csv`
 
-```bash
-# slackbot/.env
-SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_APP_TOKEN=xapp-your-app-level-token
+The backend bind-mounts `./backend/wards.csv` into the container at `/app/wards.csv`. This file must exist before you run `docker compose up`, or the backend will start with no wards and `/api/wards` will return empty.
+
+Create the file with your stake's wards. The format is `name,start_hour` where `start_hour` is a decimal representing the meeting start time (9.0 = 9:00 AM, 13.5 = 1:30 PM):
+
+```
+name,start_hour
+Riverside Ward,9.0
+Eastside Ward,11.0
+Westview Ward,13.5
+Singles Ward,9.0
 ```
 
-If you do not need the Slackbot, you can comment out or remove the `slackbot` service from `docker-compose.yml` before starting.
+Add a row for every ward in your stake. Wards are inserted on first boot and on every subsequent restart for any rows not yet in the database. Existing rows are never overwritten, so it is safe to add new wards to this file without affecting existing records.
 
-## Step 5: Start All Services
+---
+
+## Step 6: Discord Bot (Optional)
+
+The Discord bot runs under the `discord` Compose profile and does not start by default. To enable it, create `discordbot/.env`:
 
 ```bash
+sudo mkdir -p /opt/lds-stake-portal/discordbot
+```
+
+```bash
+# /opt/lds-stake-portal/discordbot/.env
+
+DISCORD_TOKEN=your-discord-bot-token
+BACKEND_URL=http://backend:8000
+# Must match DISCORD_BOT_TOKEN in backend/.env exactly.
+BACKEND_TOKEN=your-shared-secret
+```
+
+<Callout type="warn">
+  `BACKEND_TOKEN` in `discordbot/.env` and `DISCORD_BOT_TOKEN` in `backend/.env` must be set to the same value. The backend uses `DISCORD_BOT_TOKEN` for three purposes: (1) it creates a `discord-bot@localhost` system user with this value as the password, (2) it sends `Authorization: Bearer {DISCORD_BOT_TOKEN}` on all outbound HTTP calls to the Discord bot, and (3) the Discord bot verifies incoming requests by checking the Bearer token against `BACKEND_TOKEN`. A mismatch between the two env files causes all backend-to-bot calls to fail with 401 errors.
+</Callout>
+
+<Callout type="warn">
+  **Discord bot data is not persisted.** The `docker-compose.yml` defines no named volume for the Discord bot service. Its SQLite database — which stores Discord user-to-portal account mappings — lives in the container's writable layer and is destroyed every time the container is recreated. After any `docker compose down` followed by `docker compose up --profile discord`, all users must re-link their Discord accounts. As a workaround, add a `discordbot-data` volume entry in `docker-compose.yml`:
+
+  ```yaml
+  discordbot:
+    volumes:
+      - discordbot-data:/app/data
+
+  volumes:
+    discordbot-data:
+  ```
+</Callout>
+
+---
+
+## Step 7: Authenticate to GHCR (If Packages Are Private)
+
+GHCR package visibility defaults to match the repository visibility. If the repository or its packages are private, `docker compose pull` fails with an authentication error.
+
+Check visibility at `https://github.com/rc27122/LDS_Stake_Website-Template-2/packages`. If the packages are marked Private:
+
+1. Create a GitHub personal access token with the `read:packages` scope at `https://github.com/settings/tokens`.
+2. Authenticate Docker:
+
+```bash
+export CR_PAT=your-github-pat
+echo "$CR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+You only need to do this once per server. The credentials are cached in `~/.docker/config.json`.
+
+---
+
+## Step 8: Pull Images and Start the Stack
+
+```bash
+cd /opt/lds-stake-portal
+
+# Pull all images from GHCR
+docker compose pull
+
+# Start all services in the background
 docker compose up -d
+
+# To also start the Discord bot:
+# docker compose --profile discord up -d
 ```
 
-This starts:
+<Callout type="warn">
+  Always run `docker compose pull` before `docker compose up -d`. The `docker-compose.yml` contains both `build:` and `image:` directives (so the same file works for development builds too). If you skip the pull step and no local image is cached, Compose falls back to building from source — which requires the full repository checkout and all build dependencies on the host.
+</Callout>
 
-| Container | Description | Port |
-|---|---|---|
-| `frontend` | React SPA + Express proxy | 3100 |
-| `backend` | FastAPI REST API | 8000 (internal) |
-| `slackbot` | Slack Bolt (Socket Mode) | None (outbound only) |
-
-## Step 6: Verify the Deployment
+Check that all containers came up:
 
 ```bash
-curl http://localhost:3100/api/health
+docker compose ps
 ```
 
-A healthy response looks like:
+Expected output — all services should show `running` or `healthy`:
+
+```
+NAME          IMAGE                                           STATUS
+caddy         caddy:2-alpine                                  running
+backend       ghcr.io/.../backend:latest                      healthy
+frontend      ghcr.io/.../frontend:latest                     healthy
+docs-site     ghcr.io/.../docs-site:latest                    running
+```
+
+---
+
+## Step 9: Verify the Deployment
+
+View backend startup logs (look for "Application startup complete"):
+
+```bash
+docker compose logs -f backend
+```
+
+Check the backend health endpoint directly:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected response:
 
 ```json
 {"status": "ok"}
 ```
 
-The portal UI is available at [http://localhost:3100](http://localhost:3100).
+<Callout type="info">
+  The health endpoint is `/health`, not `/api/health`. The `/api/health` path does not exist. Use `http://localhost:8000/health` for a direct check (bypasses Caddy) or `https://api.yourstake.org/health` once DNS and TLS are provisioned.
+</Callout>
 
-## First Login
+Once Caddy has provisioned TLS certificates (watch `docker compose logs caddy` for "certificate obtained"), verify end-to-end:
+
+```bash
+# Frontend via Caddy
+curl -I https://yourstake.org
+
+# Backend via Caddy
+curl https://api.yourstake.org/health
+
+# Docs site via Caddy
+curl -I https://docs.yourstake.org
+```
+
+Then open `https://yourstake.org/login` in a browser and log in with `admin@admin.com` and your `INITIAL_ADMIN_PASSWORD`. See [First Run and Bootstrap](/deployment/first-run) for what to do after first login.
+
+---
+
+## Container Images
+
+Images are published to GHCR and are lowercase-normalised:
+
+| Service | Image |
+|---|---|
+| backend | `ghcr.io/rc27122/lds_stake_website-template-2/backend:latest` |
+| frontend | `ghcr.io/rc27122/lds_stake_website-template-2/frontend:latest` |
+| docs-site | `ghcr.io/rc27122/lds_stake_website-template-2/docs-site:latest` |
+| discordbot | `ghcr.io/rc27122/lds_stake_website-template-2/discordbot:latest` |
+
+Each build also produces an immutable SHA tag in the format `sha-<7-char-commit-sha>` (for example, `sha-f371827`). The SHA tag lets you pin to a specific build for rollback. See [Upgrading](/deployment/upgrading) for how to use SHA tags.
 
 <Callout type="info">
-  Before logging in for the first time, read [First Run & Bootstrap](/deployment/first-run). The admin account is created automatically on first start, and you will be required to change the password on first login.
+  **CI builds are manual.** The GitHub Actions workflow (`build-push.yml`) uses `workflow_dispatch` and is triggered manually — not automatically on every commit or push. After merging changes, go to the Actions tab in GitHub, select the "Build and Push Docker Images" workflow, and click "Run workflow" to build new images.
 </Callout>
+
+---
+
+## Named Volumes and Data Persistence
+
+| Volume | Contains | Criticality |
+|---|---|---|
+| `backend-data` | SQLite database (`database.db`) | Critical — back this up |
+| `backend-static` | Uploaded profile images and site images | Important — back this up |
+| `caddy-data` | Let's Encrypt account keys and TLS certificates | Important — see warning below |
+| `caddy-config` | Caddy auto-generated config cache | Safe to recreate |
+
+<Callout type="warn">
+  **Never run `docker compose down -v` in production.** The `-v` flag deletes all named volumes, including the database (`backend-data`), all uploaded images (`backend-static`), and Let's Encrypt account keys and certificates (`caddy-data`). Deleting `caddy-data` forces Caddy to re-provision certificates from scratch. Let's Encrypt enforces a rate limit of 5 duplicate certificates per registered domain per week — if you hit this limit, your site will be unreachable via HTTPS for up to a week.
+
+  Use `docker compose down` (without `-v`) when stopping services. Only use `-v` if you are intentionally wiping all data for a completely fresh start.
+</Callout>
+
+---
 
 ## Viewing Logs
 
 ```bash
-# All services
+# Tail all services
 docker compose logs -f
 
 # Backend only
 docker compose logs -f backend
 
-# Frontend only
-docker compose logs -f frontend
+# Caddy (shows TLS certificate activity)
+docker compose logs -f caddy
 ```
+
+---
 
 ## Stopping Services
 
 ```bash
+# Stop and remove containers (data in named volumes is preserved)
 docker compose down
-```
 
-To also remove named volumes (database, etc.):
-
-```bash
+# Stop and remove containers AND delete all named volumes (destroys database and certificates)
+# WARNING: do not use in production unless you intend to wipe all data
 docker compose down -v
 ```
+
+---
+
+## Troubleshooting
+
+### Backend container exits before becoming healthy
+
+Check the logs:
+
+```bash
+docker compose logs backend
+```
+
+Common causes:
+
+- **`JWT_SECRET_KEY` missing or too short** — the backend exits immediately at startup with a `ValueError`. The key must be at least 64 characters. Generate one with `openssl rand -hex 32`.
+- **`JWT_SECRET_KEY` is a known weak placeholder** — values like `secret`, `changeme`, or `supersecret` are rejected at startup even if they are long enough.
+- **`DATABASE_PATH` points outside the volume** — if `DATABASE_PATH=./database.db`, the database is created in the container's writable layer and lost on recreation. Use `DATABASE_PATH=/app/data/database.db`.
+
+### Wards are not loading, `/api/wards` returns empty
+
+- Verify `backend/wards.csv` exists at `/opt/lds-stake-portal/backend/wards.csv`.
+- Check the bind mount by running: `docker compose exec backend cat /app/wards.csv`
+- If the file was missing when the container started, create it and restart: `docker compose restart backend`
+
+### Caddy cannot provision TLS certificates
+
+Check Caddy logs:
+
+```bash
+docker compose logs caddy
+```
+
+Common causes:
+
+- **Cloudflare proxy is enabled** — if you are behind Cloudflare's orange-cloud proxy, HTTP-01 ACME challenges cannot reach your server (Cloudflare intercepts port 80). Use the Cloudflare-specific Caddyfile with `tls internal` described in [Option B: Cloudflare Proxy](#option-b-cloudflare-proxy-wildcard-cname) above.
+- **DNS not propagated** — the A records do not yet resolve to your server IP. Use `dig yourstake.org` to check. Propagation can take up to 48 hours but is usually under 15 minutes.
+- **Port 80 blocked** — the HTTP-01 ACME challenge requires port 80 to be publicly reachable. Check that your firewall (`ufw status`) and any cloud provider security group allow inbound TCP/80.
+- **Caddy rate-limited** — if you have deleted and recreated the stack multiple times, you may have hit the Let's Encrypt limit of 5 duplicate certificates per domain per week. Wait and retry, or use Let's Encrypt's staging environment for testing.
+
+### Frontend returns 502 Bad Gateway
+
+The frontend container is healthy but the backend is not responding. Check:
+
+```bash
+docker compose ps        # Is backend showing "healthy"?
+docker compose logs backend
+```
+
+### `docker compose pull` fails with authentication error
+
+The GHCR packages for this repository are private. Follow Step 7 to authenticate with a GitHub PAT before pulling.
+
+### Discord bot fails to start
+
+```bash
+docker compose logs discordbot
+```
+
+Common causes:
+
+- `DISCORD_TOKEN` is missing or invalid.
+- `BACKEND_TOKEN` in `discordbot/.env` does not match `DISCORD_BOT_TOKEN` in `backend/.env`.
+- The backend container is not yet healthy when the Discord bot starts (it depends on `backend: condition: service_healthy`).

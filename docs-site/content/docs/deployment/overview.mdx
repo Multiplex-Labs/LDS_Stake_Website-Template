@@ -1,53 +1,75 @@
 ---
 title: "Deployment Overview"
-description: "Choose between Docker Compose and manual deployment for the LDS Stake Portal."
+description: "Choose between production image-based deployment and local source-based development for the LDS Stake Portal."
 ---
 
-The Stake Portal consists of three independent services that must be running together for the application to function:
+The Stake Portal is made up of five independent services. In production, all five run as Docker containers managed by a single Docker Compose file and fronted by Caddy, which handles TLS automatically via Let's Encrypt.
 
-- **Frontend** — React 19 SPA served by an Express proxy (port 3100)
-- **Backend** — FastAPI REST API managed with `uv` (port 8000)
-- **Slackbot** — Slack Bolt app running in Socket Mode (optional)
-
-Two deployment modes are supported. Choose the one that fits your environment.
-
-## Prerequisites
-
-Regardless of deployment mode, ensure the following are available on your host:
-
-| Requirement | Version | Notes |
+| Service | Role | Port |
 |---|---|---|
-| Node.js | 18+ | Required for the frontend/proxy service |
-| Python | 3.11+ | Required for backend and slackbot |
-| uv | Latest | Python package manager — [install here](https://docs.astral.sh/uv/) |
-| Docker + Docker Compose | Any recent version | Required for Docker mode only |
+| `backend` | FastAPI REST API | 8000 (internal) |
+| `frontend` | React SPA + Express proxy | 3100 (internal) |
+| `docs-site` | Fumadocs documentation site | 3400 (internal) |
+| `caddy` | Reverse proxy + TLS termination | 80, 443 (public) |
+| `discordbot` | Discord bot — optional profile | 8001 (internal) |
 
-<Callout type="info">
-  `uv` replaces `pip`, `venv`, and `conda` entirely. Never call `python` or `pip` directly — always use `uv run` and `uv sync`.
-</Callout>
+---
 
-## Deployment Modes
+## Choose Your Path
 
 <Cards>
-  <Card title="Docker Compose" icon="docker" href="/deployment/docker">
-    The recommended path for most deployments. All three services are containerized and started with a single command. Ideal for servers, VMs, and any environment where Docker is available.
+  <Card title="Production: Pre-Built Images" href="/deployment/docker">
+    Pull tested, pre-built container images from GHCR and run them with Docker Compose. No source code, no Node.js or Python required on the host. This is the recommended path for any server or VPS deployment.
   </Card>
-  <Card title="Manual Deployment" icon="terminal" href="/deployment/manual">
-    Run each service directly on the host without containers. Best for local development, constrained environments, or when you need fine-grained control over each process.
+  <Card title="Development: Build from Source" href="/deployment/manual">
+    Clone the repository and run each service directly on your machine. Requires Node.js, Python 3.11+, and uv. Best for local development or contributing to the project.
   </Card>
 </Cards>
 
-## What Happens at First Launch
+<Callout type="warn">
+  Do not use the development path in production. Running services directly from source without containerization means you are responsible for process supervision, restarts on failure, and keeping Node.js and Python versions consistent.
+</Callout>
 
-On the very first run (when the database is empty), the backend automatically:
+---
 
-1. Creates the `admin@admin.com` account using `INITIAL_ADMIN_PASSWORD`
-2. Creates system callings (High Councilor, Stake Presidency, Bishop)
-3. Loads wards from `backend/wards.csv`
+## Production Prerequisites
 
-See [First Run & Bootstrap](/deployment/first-run) for the full walkthrough.
+Before you begin a production deployment, confirm the following are in place.
+
+| Requirement | Details |
+|---|---|
+| Linux server | Ubuntu 22.04 LTS or later recommended |
+| Docker Engine | v24+ (includes Docker Compose v2 as `docker compose`) |
+| Open ports | TCP 22 (SSH), 80 (HTTP/ACME), 443 (HTTPS) |
+| Domain name | A registered domain you control |
+| DNS A records | Three records pointing to your server IP: `DOMAIN`, `api.DOMAIN`, `docs.DOMAIN` |
+
+<Callout type="info">
+  DNS records must resolve to your server IP before you start the stack for the first time. Caddy uses the HTTP-01 ACME challenge to provision Let's Encrypt certificates, which requires port 80 to be publicly reachable for each hostname. If any record is missing or has not yet propagated, Caddy cannot provision a certificate for that hostname.
+</Callout>
+
+---
+
+## Development Prerequisites
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 18 or later | Required for the frontend |
+| Python | 3.11 or later | Required for backend and Discord bot |
+| uv | Latest | Python package manager — [install here](https://docs.astral.sh/uv/) |
+
+---
+
+## What Happens on First Boot
+
+When the backend starts against an empty database it automatically bootstraps the portal. No manual SQL or seed scripts are required. See [First Run and Bootstrap](/deployment/first-run) for the full walkthrough, including how to configure your wards and complete the initial admin login.
+
+---
 
 ## Further Reading
 
-- [Environment Variables](/deployment/environment) — complete reference for all configuration values
-- [Upgrading](/deployment/upgrading) — how to apply migrations and restart services safely
+- [Docker Deployment](/deployment/docker) — complete production guide
+- [Manual Deployment](/deployment/manual) — development and source-based guide
+- [Environment Variables](/deployment/environment) — full reference for all configuration values
+- [First Run and Bootstrap](/deployment/first-run) — initial setup after the backend starts
+- [Upgrading](/deployment/upgrading) — how to pull updated images and restart safely

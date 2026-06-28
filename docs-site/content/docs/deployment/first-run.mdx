@@ -1,36 +1,31 @@
 ---
-title: "First Run & Bootstrap"
+title: "First Run and Bootstrap"
 description: "What happens when the Stake Portal starts for the first time and how to complete the initial setup."
 ---
 
 The first time the backend starts against an empty database, it automatically bootstraps everything needed to make the portal usable. No manual SQL or seed scripts are required.
 
+This page assumes you have already completed the [Docker Deployment](/deployment/docker) guide and your containers are running.
+
+---
+
 ## Before You Start
 
-Set `INITIAL_ADMIN_PASSWORD` in `backend/.env` before launching the backend for the first time:
+Two things must be in place before the first boot:
+
+**1. `INITIAL_ADMIN_PASSWORD` must be set in `backend/.env`**
 
 ```bash
-# backend/.env
-INITIAL_ADMIN_PASSWORD=your-secure-password
+INITIAL_ADMIN_PASSWORD=choose-a-strong-temporary-password
 ```
 
-<Callout type="warn">
-  If `INITIAL_ADMIN_PASSWORD` is not set and the database is empty, the backend will fail to start. After the first successful start, this variable is no longer read — the admin account is not recreated or overwritten on subsequent launches.
-</Callout>
+If this variable is unset and the database is empty, the backend exits immediately at startup with a `ValueError`. After the first successful boot (once at least one user exists in the database), this variable is ignored on all subsequent starts.
 
-## What Happens on First Launch
+**2. `backend/wards.csv` must exist**
 
-When the backend detects an empty database, it runs the following bootstrap steps in order:
+The `docker-compose.yml` bind-mounts `./backend/wards.csv` into the container at `/app/wards.csv`. If the file is missing when the container starts, the backend boots but loads no wards, and `/api/wards` returns empty.
 
-1. **Admin account created** — `admin@admin.com` is created with the password from `INITIAL_ADMIN_PASSWORD` and the `force_password_reset` flag set to `true`.
-2. **System callings created** — Three callings are inserted: High Councilor, Stake Presidency, and Bishop. These are system-defined and cannot be deleted through the UI.
-3. **Wards loaded** — Rows are created for every ward defined in `backend/wards.csv`.
-
-On every subsequent startup (not just the first), the backend re-reads `wards.csv` and creates any rows that do not yet exist. Existing ward rows are not modified, so it is safe to edit ward names directly in the database after initial load.
-
-## Configuring Wards (wards.csv)
-
-The ward roster is driven by `backend/wards.csv`. The format is:
+Create the file before starting the stack:
 
 ```
 name,start_hour
@@ -41,13 +36,99 @@ Singles Ward,9.0
 ```
 
 - `name` — the display name of the ward
-- `start_hour` — meeting start time as a decimal hour (e.g., `9.0` = 9:00 AM, `13.5` = 1:30 PM)
+- `start_hour` — meeting start time as a decimal hour (9.0 = 9:00 AM, 13.5 = 1:30 PM)
 
-Edit this file before the first launch to match your stake's ward structure. Add new rows at any time — they will be picked up on the next backend restart.
+Add a row for every ward in your stake. See [Configuring Wards](#configuring-wards) below for more details.
+
+---
+
+## What Happens on First Boot
+
+When the backend detects an empty database (zero users), it runs the following bootstrap steps in order:
+
+<Steps>
+<Step>
+**Admin account created** — `admin@admin.com` is created with the password from `INITIAL_ADMIN_PASSWORD` and the `force_password_reset` flag set to `true`.
+</Step>
+<Step>
+**System callings created** — Three callings are inserted: High Councilor, Stake Presidency, and Bishop. These are system-defined and cannot be deleted through the UI.
+</Step>
+<Step>
+**Wards loaded** — Rows are created for every ward defined in `wards.csv`. The file is read from the path in `WARD_DEFINITION_FILE` (default: `/app/wards.csv` in Docker).
+</Step>
+</Steps>
+
+The following steps run on **every** startup, not just the first. They are idempotent — they only create rows if they do not already exist:
+
+4. Temple recommend config seeded (singleton row with default values)
+5. Site settings seeded (singleton row: stake name, hero text, contact info)
+6. Default appointment types created (Temple Recommend, Limited Use Recommend, etc.)
+7. Fast Sunday exceptions pre-populated for upcoming Fast Sundays
+
+On every startup the backend also re-reads `wards.csv` and creates any new rows that do not yet exist in the database. Existing ward rows are never overwritten, so editing ward names directly in the database after first boot is safe.
+
+---
+
+## Configuring Wards
+
+The ward roster is driven by `backend/wards.csv`. Edit this file before the first boot to match your stake's ward structure.
+
+```
+name,start_hour
+Riverside Ward,9.0
+Eastside Ward,11.0
+Westview Ward,13.5
+Singles Ward,9.0
+```
+
+Adding new rows at any time is safe — they are picked up on the next backend restart. The backend does not modify or delete existing `Ward` rows based on changes to the CSV. If you need to rename or remove a ward after first boot, edit the database directly (via SQLite browser or the admin UI when available).
+
+<Callout type="info">
+  In Docker, verify the bind mount is working after the container starts:
+
+  ```bash
+  docker compose exec backend cat /app/wards.csv
+  ```
+
+  If this returns an error or empty output, the file was missing or the bind mount was not applied. Create or fix the file and restart:
+
+  ```bash
+  docker compose restart backend
+  ```
+</Callout>
+
+---
+
+## Verifying Bootstrap in the Logs
+
+After `docker compose up -d`, tail the backend logs to confirm bootstrap completed:
+
+```bash
+docker compose logs -f backend
+```
+
+Look for lines like:
+
+```
+INFO:     Application startup complete.
+```
+
+If you see a `ValueError` instead, the most common causes are:
+
+- `JWT_SECRET_KEY` is missing, under 64 characters, or a known weak placeholder
+- `INITIAL_ADMIN_PASSWORD` is unset and the database is empty
+
+---
 
 ## First Login
 
-Once the backend is running, open the portal in your browser:
+Once the backend is healthy, open the portal in your browser at your configured domain:
+
+```
+https://yourstake.org/login
+```
+
+Or locally during development:
 
 ```
 http://localhost:3100/login
@@ -58,18 +139,35 @@ Log in with:
 - **Email:** `admin@admin.com`
 - **Password:** the value you set for `INITIAL_ADMIN_PASSWORD`
 
+---
+
 ## Forced Password Change
 
-Because the admin account is created with `force_password_reset=true`, the portal will immediately redirect you to `/change-password` after login. You must set a new password before you can access any other page.
+The admin account is created with `force_password_reset=true`. After login, the portal immediately redirects to `/change-password`. You must set a new password before accessing any other page.
 
 <Callout type="info">
-  This redirect applies to any user account that has `force_password_reset` enabled — not just the admin. Administrators can set this flag when creating new user accounts so that users are required to choose their own password on first login.
+  This forced-reset behaviour applies to any user account with `force_password_reset` enabled — not just the admin. When creating accounts for stake leaders, administrators can enable this flag so users choose their own password on first login.
 </Callout>
 
-After setting a new password you will be taken to the home page and have full access to the Leader Portal.
+After setting a new password, you are taken to the home page with full access to the Leader Portal.
+
+---
+
+## Confirming Wards Loaded
+
+After logging in, verify that your wards loaded correctly:
+
+1. Navigate to `/ward-info/meeting-times` — you should see your ward list with meeting times
+2. Or visit `/api/wards` directly (while authenticated) — returns a JSON array of ward objects
+
+If the list is empty, check that `backend/wards.csv` is correctly formatted and restart the backend: `docker compose restart backend`.
+
+---
 
 ## Next Steps
 
 - Visit `/leader/user-admin` to create accounts for stake leaders
-- Confirm that your wards loaded correctly at `/ward-info/meeting-times`
-- Review permissions for each user via the user admin page
+- Confirm wards loaded at `/ward-info/meeting-times`
+- Review calling permissions for each user
+- Visit the site settings page to configure the stake name, logo, and contact details
+- Remove or blank out `INITIAL_ADMIN_PASSWORD` in `backend/.env` — it is no longer needed
