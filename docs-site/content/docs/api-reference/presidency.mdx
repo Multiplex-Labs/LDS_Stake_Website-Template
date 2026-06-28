@@ -1,0 +1,110 @@
+---
+title: "Presidency Assignments"
+description: "Read and update stake presidency ward assignment rows."
+---
+
+The presidency assignments router manages the three stake presidency member rows — each representing a counselor's or president's set of ward responsibilities. Assignments are read-accessible to any authenticated user and writable only by users with the `MANAGE_ASSIGNMENTS` permission.
+
+Base path: `/presidency-assignments`
+
+## Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/presidency-assignments/` | Authenticated | Return all three presidency assignment rows |
+| `PUT` | `/presidency-assignments/{calling_id}` | `MANAGE_ASSIGNMENTS` | Update responsibilities and ward assignments for a calling |
+
+---
+
+## GET /presidency-assignments/
+
+Returns the three presidency assignment rows. Each row corresponds to a stake presidency calling (e.g., Stake President, First Counselor, Second Counselor) and lists the wards and responsibilities assigned to that leader.
+
+**Response 200:**
+
+```json
+[
+  {
+    "calling_id": 1,
+    "calling_name": "Stake President",
+    "user_id": 5,
+    "user_name": "President Adams",
+    "responsibilities": [
+      "Oversee all stake operations",
+      "Preside at stake conference"
+    ],
+    "ward_ids": [1, 2, 3, 4, 5, 6]
+  },
+  {
+    "calling_id": 2,
+    "calling_name": "First Counselor",
+    "user_id": 8,
+    "user_name": "Brother Lee",
+    "responsibilities": [
+      "Oversee Elders Quorum activities",
+      "Coordinate ward leadership visits"
+    ],
+    "ward_ids": [1, 2, 3]
+  },
+  {
+    "calling_id": 3,
+    "calling_name": "Second Counselor",
+    "user_id": 11,
+    "user_name": "Brother Kim",
+    "responsibilities": [
+      "Oversee Relief Society",
+      "Youth program coordination"
+    ],
+    "ward_ids": [4, 5, 6]
+  }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `calling_id` | integer | ID of the calling (used as the path parameter for `PUT`) |
+| `calling_name` | string | Display name of the calling |
+| `user_id` | integer \| null | ID of the currently called user, or `null` if vacant |
+| `user_name` | string \| null | Display name of the current holder, or `null` if vacant |
+| `responsibilities` | list[string] | Bullet-point responsibilities shown on the leadership page |
+| `ward_ids` | list[integer] | IDs of the wards this leader is assigned to oversee |
+
+---
+
+## PUT /presidency-assignments/{calling_id}
+
+Updates the responsibilities list and/or ward assignments for a single presidency calling. Both fields are optional — omitting a field leaves it unchanged.
+
+**Path parameter:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `calling_id` | integer | The calling ID from the `GET` response |
+
+**Request body:**
+
+```json
+{
+  "responsibilities": [
+    "Oversee Elders Quorum activities",
+    "Coordinate ward leadership visits",
+    "Chair stake welfare committee"
+  ],
+  "ward_ids": [1, 2, 3]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `responsibilities` | list[string] | No | Full replacement list of responsibility strings |
+| `ward_ids` | list[integer] | Yes | Ward IDs this calling is assigned to (must exist) |
+
+**Response 200:** The updated assignment row in the same shape as the `GET` response.
+
+**Response 404:** The specified `calling_id` does not correspond to a presidency assignment.
+
+**Response 422:** One or more `ward_ids` do not exist.
+
+<Callout type="info">
+  The `PUT` endpoint does a full replacement of `ward_ids` — it does not append. To add a ward to an existing assignment, include all current ward IDs plus the new one in the request body.
+</Callout>
