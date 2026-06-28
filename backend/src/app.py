@@ -16,6 +16,7 @@ from .utils import (
     DiscordBotHandle,
     create_backup_loop,
     upsert_temple_recommend_config,
+    upsert_site_settings,
     create_default_appointment_types,
     pre_populate_fast_sunday_exceptions,
     validate_email_credentials,
@@ -25,6 +26,18 @@ import os
 import asyncio
 
 logger = getLogger("application")
+
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")]
+
+
+def validate_cors_origins(origins: list[str] | None = None) -> None:
+    checked = origins if origins is not None else _ALLOWED_ORIGINS
+    if any("localhost" in o for o in checked) and os.getenv("DEV", "false").lower() != "true":
+        logger.warning(
+            "ALLOWED_ORIGINS contains 'localhost' but DEV is not 'true'. "
+            "This is likely a production misconfiguration. "
+            "Set ALLOWED_ORIGINS to your production domain."
+        )
 
 
 @asynccontextmanager
@@ -50,6 +63,7 @@ async def lifespan(app: FastAPI):
     load_wards()
     ## Temple recommend appointment seeding
     upsert_temple_recommend_config()
+    upsert_site_settings()
     create_default_appointment_types()
     pre_populate_fast_sunday_exceptions()
     ## Validate email provider credentials at startup
@@ -78,6 +92,8 @@ async def lifespan(app: FastAPI):
                        "If you are running in a development environment without SSL, "
                        "please set SSL_ENABLED=false in your .env file. "
                        "Otherwise, refresh tokens will not work.")
+    ## Check for production CORS misconfiguration
+    validate_cors_origins()
     yield
     # shutdown code can go here
     session_cleanup_task.cancel()
@@ -92,7 +108,7 @@ def configure_app(application: FastAPI) -> None:
     # basic middleware
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")],
+        allow_origins=_ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -103,6 +119,7 @@ configure_app(app)
 # Ensure a static directory exists and mount it so uploaded assets can be served
 static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
 os.makedirs(os.path.join(static_dir, "profile_images"), exist_ok=True)
+os.makedirs(os.path.join(static_dir, "site_images"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Import and include routers here to avoid import cycles
@@ -120,6 +137,8 @@ from .routers import (
     appointment_types_router,
     appointment_availability_router,
     appointment_bookings_router,
+    building_reservation_router,
+    settings_router,
 )
 
 app.include_router(health_router)
@@ -135,3 +154,5 @@ app.include_router(temple_config_router)
 app.include_router(appointment_types_router)
 app.include_router(appointment_availability_router)
 app.include_router(appointment_bookings_router)
+app.include_router(building_reservation_router)
+app.include_router(settings_router)

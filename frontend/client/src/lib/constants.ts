@@ -45,6 +45,9 @@ export const Permission = {
   SUBMIT_CALLING_PROPOSALS: 16,
   MANAGE_CALLING_PROPOSALS: 32,
   VIEW_CALLING_PROPOSALS: 64,
+  APPROVE_BLDG_RESERVATIONS: 1024,
+  MANAGE_ACCESS: 2048,
+  MANAGE_SITE_SETTINGS: 4096,
 } as const;
 
 type PermissionFlag = typeof Permission[keyof typeof Permission];
@@ -52,3 +55,19 @@ type PermissionFlag = typeof Permission[keyof typeof Permission];
 export function hasPermission(perms: number, flag: PermissionFlag): boolean {
   return (perms & flag) !== 0;
 }
+
+export const HIDEABLE_PAGES = [
+  { key: "resources",        label: "Resources",              href: "/resources" },
+  { key: "sports",           label: "Stake Sports",           href: "/stake-info/sports" },
+  { key: "reserve",          label: "Reserve Building",       href: "/stake-info/reserve" },
+  { key: "temple-recommend", label: "Temple Recommends",      href: "/stake-info/temple-recommend" },
+  { key: "ward-map",         label: "Boundary Map",           href: "/ward-info/map" },
+  { key: "bishops",          label: "Meet our Bishops",       href: "/ward-info/bishops" },
+  { key: "hc-assignments",   label: "HC Assignments",         href: "/leader/assignments" },
+  { key: "speaking",         label: "Speaking Schedule",      href: "/leader/speaking" },
+  { key: "callings",         label: "Calling System",         href: "/leader/calling-system" },
+  { key: "sustainings",      label: "Sustainings",            href: "/leader/sustainings" },
+  { key: "presidency",       label: "Presidency Assignments", href: "/leader/presidency" },
+] as const;
+
+export type HideablePageKey = typeof HIDEABLE_PAGES[number]["key"];

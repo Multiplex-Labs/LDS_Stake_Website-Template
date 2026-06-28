@@ -17,6 +17,29 @@ pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if SECRET_KEY is None:
     raise ValueError("JWT_SECRET_KEY environment variable must be set for security purposes.")
+
+_KNOWN_BAD_JWT_KEYS = {
+    "your_secret_key_here",
+    "your-secret-key",
+    "secret",
+    "changeme",
+    "password",
+    "jwt_secret",
+    "jwt-secret",
+    "supersecret",
+}
+
+_MIN_JWT_KEY_LENGTH = 64
+
+def _validate_jwt_secret(key: str) -> None:
+    if key.lower() in _KNOWN_BAD_JWT_KEYS or len(key) < _MIN_JWT_KEY_LENGTH:
+        raise ValueError(
+            f"JWT_SECRET_KEY is too weak or uses a known placeholder value. "
+            f"Generate a secure key with: openssl rand -hex 32 (produces {_MIN_JWT_KEY_LENGTH} characters)"
+        )
+
+_validate_jwt_secret(SECRET_KEY)
+
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="auth/login", 

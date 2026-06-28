@@ -15,10 +15,11 @@ Cascade rules
 """
 
 import html as html_module
+import json
 import logging
 import os
 from datetime import datetime
-from typing import NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
 logger = logging.getLogger("application")
 
@@ -587,3 +588,238 @@ def render_booking_already_confirmed(
         f"Please come dressed as you would for Sacrament Meeting or a temple visit."
     )
     return EmailContent(html=html_body, plain=plain_body)
+
+
+# ---------------------------------------------------------------------------
+# Building reservation email templates
+# ---------------------------------------------------------------------------
+
+def render_reservation_pending(
+    *,
+    organizer_name: str,
+    event_name: str,
+    date_str: str,
+    start_time: str,
+    end_time: str,
+    rooms: list,
+) -> EmailContent:
+    safe_name = _escape(organizer_name)
+    safe_event = _escape(event_name)
+    rooms_html = "".join(f"<li>{_escape(r)}</li>" for r in rooms)
+    rooms_plain = ", ".join(rooms)
+    html_body = f"""<html><body>
+<h2>Building Reservation Request Received</h2>
+<p>Dear {safe_name},</p>
+<p>Your reservation request for <strong>{safe_event}</strong> has been received and is pending approval.</p>
+<ul>
+  <li><strong>Date:</strong> {date_str}</li>
+  <li><strong>Time:</strong> {start_time} – {end_time}</li>
+  <li><strong>Rooms:</strong><ul>{rooms_html}</ul></li>
+</ul>
+<p>You will receive another email once your request has been reviewed.</p>
+</body></html>"""
+    plain_body = (
+        f"Building Reservation Request Received\n\n"
+        f"Dear {organizer_name},\n\n"
+        f"Your reservation request for {event_name} has been received and is pending approval.\n\n"
+        f"  Date:  {date_str}\n"
+        f"  Time:  {start_time} – {end_time}\n"
+        f"  Rooms: {rooms_plain}\n\n"
+        f"You will receive another email once your request has been reviewed."
+    )
+    return EmailContent(html=html_body, plain=plain_body)
+
+
+def _send_reservation_email(
+    reservation: Any,
+    content: Any,
+    subject_prefix: str,
+) -> None:
+    send_email(
+        reservation.organizer_email,
+        reservation.organizer_name,
+        f"{subject_prefix}: {reservation.event_name}",
+        content.html,
+        content.plain,
+    )
+
+
+def send_reservation_pending(reservation) -> None:
+    content = render_reservation_pending(
+        organizer_name=reservation.organizer_name,
+        event_name=reservation.event_name,
+        date_str=str(reservation.date),
+        start_time=reservation.start_time,
+        end_time=reservation.end_time,
+        rooms=reservation.rooms_list(),
+    )
+    _send_reservation_email(reservation, content, "Building Reservation Pending Approval")
+
+
+def render_reservation_approved(
+    *,
+    organizer_name: str,
+    event_name: str,
+    date_str: str,
+    start_time: str,
+    end_time: str,
+) -> EmailContent:
+    safe_name = _escape(organizer_name)
+    safe_event = _escape(event_name)
+    html_body = f"""<html><body>
+<h2>Building Reservation Approved</h2>
+<p>Dear {safe_name},</p>
+<p>Your reservation request for <strong>{safe_event}</strong> has been approved.</p>
+<ul>
+  <li><strong>Date:</strong> {date_str}</li>
+  <li><strong>Time:</strong> {start_time} – {end_time}</li>
+</ul>
+<p>A calendar file is attached. Please add it to your calendar.</p>
+</body></html>"""
+    plain_body = (
+        f"Building Reservation Approved\n\n"
+        f"Dear {organizer_name},\n\n"
+        f"Your reservation for {event_name} has been approved.\n\n"
+        f"  Date: {date_str}\n"
+        f"  Time: {start_time} – {end_time}\n\n"
+        f"A calendar file is attached."
+    )
+    return EmailContent(html=html_body, plain=plain_body)
+
+
+def _send_reservation_approved_with_attachment(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    html_body: str,
+    plain_body: str,
+    ics_bytes: bytes,
+    event_name: str,
+) -> None:
+    import base64
+    import sib_api_v3_sdk
+    from sib_api_v3_sdk.rest import ApiException as BrevoApiException
+
+    api_key = os.getenv("BREVO_API_KEY", "")
+    from_email = os.getenv("BREVO_FROM_EMAIL", "")
+    from_name = os.getenv("BREVO_FROM_NAME", "Stake Reservations")
+
+    if not api_key or not from_email:
+        logger.warning(
+            "[email] BREVO_API_KEY or BREVO_FROM_EMAIL not configured; "
+            "sending approval email without .ics attachment"
+        )
+        send_email(to_email, to_name, subject, html_body, plain_body)
+        return
+
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key["api-key"] = api_key
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+        sib_api_v3_sdk.ApiClient(configuration)
+    )
+    attachment = [
+        sib_api_v3_sdk.SendSmtpEmailAttachment(
+            content=base64.b64encode(ics_bytes).decode(),
+            name="reservation.ics",
+        )
+    ]
+    send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+        to=[sib_api_v3_sdk.SendSmtpEmailTo(email=to_email, name=to_name)],
+        sender=sib_api_v3_sdk.SendSmtpEmailSender(email=from_email, name=from_name),
+        subject=subject,
+        html_content=html_body,
+        text_content=plain_body,
+        attachment=attachment,
+    )
+    try:
+        api_instance.send_transac_email(send_smtp_email)
+    except BrevoApiException as exc:
+        logger.warning("[email] Brevo attachment send failed (%s), falling back to plain", exc)
+        send_email(to_email, to_name, subject, html_body, plain_body)
+    except Exception:
+        logger.exception("[email] Unexpected error sending reservation approval with attachment")
+        send_email(to_email, to_name, subject, html_body, plain_body)
+
+
+def send_reservation_approved(reservation) -> None:
+    try:
+        content = render_reservation_approved(
+            organizer_name=reservation.organizer_name,
+            event_name=reservation.event_name,
+            date_str=str(reservation.date),
+            start_time=reservation.start_time,
+            end_time=reservation.end_time,
+        )
+    except Exception:
+        logger.exception("[email] Failed to render approved email for reservation %s", getattr(reservation, 'id', '?'))
+        return
+
+    ics_bytes = None
+    try:
+        from .ics import generate_ics
+        ics_bytes = generate_ics(
+            event_name=reservation.event_name,
+            event_date=reservation.date,
+            start_time=reservation.start_time,
+            end_time=reservation.end_time,
+            organizer_email=reservation.organizer_email,
+        )
+    except Exception:
+        logger.warning("[email] ICS generation failed for reservation %s; sending approval email without attachment", getattr(reservation, 'id', '?'))
+
+    try:
+        if ics_bytes:
+            _send_reservation_approved_with_attachment(
+                reservation.organizer_email,
+                reservation.organizer_name,
+                f"Building Reservation Approved: {reservation.event_name}",
+                content.html,
+                content.plain,
+                ics_bytes,
+                reservation.event_name,
+            )
+        else:
+            send_email(
+                reservation.organizer_email,
+                reservation.organizer_name,
+                f"Building Reservation Approved: {reservation.event_name}",
+                content.html,
+                content.plain,
+            )
+    except Exception:
+        logger.exception("[email] Failed to send approved email for reservation %s", getattr(reservation, 'id', '?'))
+
+
+def render_reservation_denied(
+    *,
+    organizer_name: str,
+    event_name: str,
+    denial_reason: str,
+) -> EmailContent:
+    safe_name = _escape(organizer_name)
+    safe_event = _escape(event_name)
+    safe_reason = _escape(denial_reason)
+    html_body = f"""<html><body>
+<h2>Building Reservation Not Approved</h2>
+<p>Dear {safe_name},</p>
+<p>Your reservation request for <strong>{safe_event}</strong> was not approved.</p>
+<p><strong>Reason:</strong> {safe_reason}</p>
+<p>If you have questions, please contact the Stake Executive Secretary.</p>
+</body></html>"""
+    plain_body = (
+        f"Building Reservation Not Approved\n\n"
+        f"Dear {organizer_name},\n\n"
+        f"Your reservation request for {event_name} was not approved.\n\n"
+        f"Reason: {denial_reason}\n\n"
+        f"If you have questions, please contact the Stake Executive Secretary."
+    )
+    return EmailContent(html=html_body, plain=plain_body)
+
+
+def send_reservation_denied(reservation) -> None:
+    content = render_reservation_denied(
+        organizer_name=reservation.organizer_name,
+        event_name=reservation.event_name,
+        denial_reason=reservation.denial_reason or "",
+    )
+    _send_reservation_email(reservation, content, "Building Reservation Denied")

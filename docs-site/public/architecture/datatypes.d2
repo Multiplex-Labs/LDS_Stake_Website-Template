@@ -165,3 +165,112 @@ CallingApproval.approver_id -> User.id : "references"
 CallingInterview.proposal_id -> CallingProposal.id : "references"
 CallingInterview.interviewer_id -> User.id : "references"
 CallingProposal.submitter -> User.id : "references"
+
+SiteSettings: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  stake_name: str
+  stake_address: str
+  contact_email: str
+  reply_to_email: str
+  hero_title: str
+  hero_subtitle: str
+  hero_image_url: str {constraint: nullable}
+  logo_url: str {constraint: nullable}
+  sacrament_times: str {constraint: json array}
+  hidden_pages: str {constraint: json array}
+}
+
+AppointmentType: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  name: str {constraint: unique}
+  description: str
+  duration_mins: int
+  details: str
+  icon_name: str
+  is_active: bool
+  display_order: int
+  system_defined: bool
+}
+
+AvailabilityWindow: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  user_id: int {constraint: foreign_key}
+  day_of_week: int
+  start_minute: int
+  end_minute: int
+  valid_from: date {constraint: nullable}
+  valid_until: date {constraint: nullable}
+  is_active: bool
+}
+
+AvailabilityException: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  date: date {constraint: nullable}
+  reason: str
+  is_global: bool
+  user_id: int {constraint: nullable, foreign_key}
+  recurrence: str {constraint: nullable}
+}
+
+Booking: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  appointment_type_id: int {constraint: foreign_key}
+  interviewer_user_id: int {constraint: foreign_key}
+  first_name: str
+  last_name: str
+  email: str
+  phone: str
+  booking_date: date
+  start_minute_of_day: int
+  end_minute_of_day: int
+  status: str
+  notes: str {constraint: nullable}
+  confirmation_token: str {constraint: nullable}
+}
+
+BuildingReservation: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  event_name: str
+  event_description: str
+  date: date
+  start_time: str
+  end_time: str
+  rooms: str {constraint: json array}
+  organizer_name: str
+  organizer_email: str
+  organizer_phone: str
+  organization: str
+  affiliation: str
+  needs_access: bool
+  status: str
+  submitted_at: datetime
+  reviewed_at: datetime {constraint: nullable}
+  reviewed_by: int {constraint: nullable, foreign_key}
+  denial_reason: str {constraint: nullable}
+}
+
+TempleRecommendConfig: {
+  shape: sql_table
+  id: int {constraint: primary_key}
+  location_name: str
+  location_address: str
+  open_hours_text: str
+  exception_note: str {constraint: nullable}
+  timezone: str
+  slot_buffer_mins: int
+  booking_window_days: int
+  booking_cutoff_hours: int
+}
+
+# Foreign key relationships for new tables
+AvailabilityWindow.user_id -> User.id
+AvailabilityException.user_id -> User.id
+Booking.appointment_type_id -> AppointmentType.id
+Booking.interviewer_user_id -> User.id
+BuildingReservation.reviewed_by -> User.id

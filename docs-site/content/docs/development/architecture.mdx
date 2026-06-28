@@ -9,7 +9,7 @@ The portal is composed of three independent services. Each runs in its own proce
 |---------|-------|------|
 | Frontend | React 19 SPA + Express proxy | 3100 |
 | Backend | FastAPI REST API | 8000 |
-| Slackbot | Slack Bolt (Socket Mode) | — |
+| Discord bot | discord.py + FastAPI (HTTP server) | 8001 |
 
 ---
 
@@ -20,7 +20,7 @@ Browser
   └─▶ React SPA (port 3100)
         └─▶ /api/* ▶ Express proxy ▶ FastAPI (port 8000)
 
-Slack ▶ SlackBot [Socket Mode]   [future: ▶ FastAPI]
+Discord API ◀▶ Discord bot (port 8001) ◀▶ FastAPI (port 8000)
 ```
 
 <img src="/architecture/architecture.svg" alt="Architecture diagram" />
@@ -37,9 +37,9 @@ The Express server is a **pure proxy**. It does no session management, no authen
 
 FastAPI owns all business logic, authentication, and database access. It exposes a REST API on port 8000. In production the proxy forwards requests to it; in development it can also be accessed directly at `http://localhost:8000/docs` for Swagger UI exploration.
 
-### Slackbot
+### Discord bot
 
-The Slackbot connects outbound to Slack via a persistent WebSocket (Socket Mode). No inbound webhook URL is required. The bot currently runs fully standalone — FastAPI integration is planned but not yet implemented.
+The Discord bot runs as two concurrent processes in the same service: a Discord.py gateway client (receiving events from Discord) and a FastAPI HTTP server on port 8001 (receiving webhook calls from the main backend). The bot notifies approvers via Discord DM when calling proposals advance stages, handles building reservation notifications, and exposes slash commands for database backups. It communicates with the main backend via HTTP using the `BACKEND_URL` and `BACKEND_TOKEN` environment variables.
 
 ---
 
@@ -62,12 +62,13 @@ Start services in this order to avoid connection errors:
     ```
     Opens the React SPA and Express proxy on port 3100.
   </Step>
-  <Step title="Start the slackbot (optional)">
+  <Step title="Start the Discord bot (optional)">
     ```bash
-    cd slackbot
+    cd discordbot
+    uv sync
     uv run python main.py
     ```
-    Only needed when working on Slack-related features.
+    Only needed when working on Discord bot features. The main backend must be running first.
   </Step>
 </Steps>
 
@@ -79,8 +80,8 @@ Each service has its own dependency management and is started independently:
 
 - **Frontend** uses `npm` (Node.js). Run all frontend commands from `frontend/`.
 - **Backend** uses `uv` (Python). Run all backend commands from `backend/`. Never use `python`, `pip`, `venv`, or `conda` directly.
-- **Slackbot** uses `uv` (Python). Run all slackbot commands from `slackbot/`.
+- **Discord bot** uses `uv` (Python). Run all Discord bot commands from `discordbot/`. The virtual environment is separate from `backend/` — a `uv sync` in one does not affect the other.
 
 <Callout type="warn">
-  The backend and slackbot both use `uv` (Python), but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `slackbot/` and vice versa.
+  The backend and discordbot both use `uv` (Python), but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `discordbot/` and vice versa.
 </Callout>

@@ -2,7 +2,7 @@ from .base import BaseModel
 from .user import User, ResponseSafeUser, RequestSafeUser, UserMeResponse
 from .calling import Calling, UserCalling
 from .user_session import UserSession, APISafeUserSession
-from .permissions import Permission, Permissions, PermissionsResponse, PermissionsUpdateRequest
+from .permissions import Permission, Permissions, PermissionsResponse, PermissionsUpdateRequest, MAX_VALID_SCOPES
 from .assignment import Assignment
 from .speaking_assignment import (
     SpeakingAssignment, 
@@ -31,3 +31,5 @@ from .temple_recommend import (
     Booking,
     BookingAuditLog,
 )
+from .building_reservation import BuildingReservation, ReservationStatus, BuildingReservationCreate, BuildingReservationResponse, DenyRequest
+from .site_settings import SiteSettings

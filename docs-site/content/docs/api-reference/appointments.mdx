@@ -1,0 +1,287 @@
+---
+title: "Appointments"
+description: "Appointment types, availability, and booking endpoints."
+---
+
+The appointments system is composed of three routers: appointment types (configuration), availability (scheduling windows and exceptions), and bookings (member-facing and admin operations). Together they support the Temple Recommend scheduling workflow.
+
+## Appointment Types
+
+Base path: `/appointment-types`
+
+Appointment types are the named categories of appointments (e.g., "Temple Recommend Interview"). They are publicly readable so the booking form can display options without authentication.
+
+### Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/appointment-types/` | None | List all active appointment types |
+| `POST` | `/appointment-types/` | `MANAGE_APPOINTMENTS` | Create a new appointment type |
+| `PATCH` | `/appointment-types/{type_id}` | `MANAGE_APPOINTMENTS` | Update an existing type |
+| `DELETE` | `/appointment-types/{type_id}` | `MANAGE_APPOINTMENTS` | Delete a type (fails if system-defined) |
+| `POST` | `/appointment-types/reorder` | `MANAGE_APPOINTMENTS` | Bulk reorder types by display order |
+
+### AppointmentType schema
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | integer | Auto-assigned |
+| `name` | string | Display name shown to members |
+| `description` | string | Short description for the booking form |
+| `duration_mins` | integer | Length of each appointment slot in minutes |
+| `details` | string | Additional instructions or notes |
+| `icon_name` | string | Lucide icon identifier |
+| `is_active` | boolean | Only active types appear in the public list |
+| `display_order` | integer | Sort order in the booking UI |
+| `system_defined` | boolean | System types cannot be deleted |
+
+### GET /appointment-types/
+
+Returns all active appointment types sorted by `display_order`. No authentication required.
+
+**Response 200:**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Temple Recommend Interview",
+    "description": "Schedule your annual temple recommend interview.",
+    "duration_mins": 20,
+    "details": "Please bring your current recommend if you have one.",
+    "icon_name": "church",
+    "is_active": true,
+    "display_order": 1,
+    "system_defined": true
+  }
+]
+```
+
+### POST /appointment-types/
+
+Creates a new appointment type. All fields except `id` and `system_defined` are accepted in the request body.
+
+**Request body:**
+
+```json
+{
+  "name": "Tithing Settlement",
+  "description": "Annual tithing declaration meeting.",
+  "duration_mins": 15,
+  "details": "Bring your donation record if available.",
+  "icon_name": "coins",
+  "is_active": true,
+  "display_order": 2
+}
+```
+
+**Response 201:** The created `AppointmentType` object.
+
+### PATCH /appointment-types/{type_id}
+
+Updates one or more fields on an existing type. Returns the updated type and any warnings (e.g., if existing bookings are affected by a duration change).
+
+**Response 200:**
+
+```json
+{
+  "type": { ... },
+  "warnings": ["Changing duration may affect 3 upcoming bookings."]
+}
+```
+
+### DELETE /appointment-types/{type_id}
+
+Returns `409 Conflict` if `system_defined` is `true`.
+
+### POST /appointment-types/reorder
+
+Accepts an array of `{ id, display_order }` pairs and applies them in bulk.
+
+**Request body:**
+
+```json
+[
+  { "id": 1, "display_order": 2 },
+  { "id": 2, "display_order": 1 }
+]
+```
+
+**Response 200:** The full updated list of appointment types.
+
+---
+
+## Appointment Availability
+
+Base path: `/appointment-availability`
+
+Availability is built from two layers: recurring weekly **windows** (e.g., "Saturdays 9am–12pm") and one-off **exceptions** (e.g., a blocked date). The public `/slots` and `/available-dates` endpoints combine these to produce concrete bookable time slots.
+
+### Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/appointment-availability/slots` | None | Available slots for a type in a date range |
+| `GET` | `/appointment-availability/available-dates` | None | Dates with at least one open slot |
+| `GET` | `/appointment-availability/health` | `MANAGE_APPOINTMENTS` | Per-type next-available slot summary |
+| `GET` | `/appointment-availability/windows` | `MANAGE_APPOINTMENTS` | List availability windows |
+| `POST` | `/appointment-availability/windows` | `MANAGE_APPOINTMENTS` | Create an availability window |
+| `PATCH` | `/appointment-availability/windows/{window_id}` | `MANAGE_APPOINTMENTS` | Update a window |
+| `DELETE` | `/appointment-availability/windows/{window_id}` | `MANAGE_APPOINTMENTS` | Delete a window |
+| `GET` | `/appointment-availability/exceptions` | `MANAGE_APPOINTMENTS` | List availability exceptions |
+| `POST` | `/appointment-availability/exceptions` | `MANAGE_APPOINTMENTS` | Create an exception |
+| `DELETE` | `/appointment-availability/exceptions/{exception_id}` | `MANAGE_APPOINTMENTS` | Delete an exception |
+| `GET` | `/appointment-availability/calendar-health` | `MANAGE_APPOINTMENTS` | Probe Google Calendar connectivity |
+
+### GET /appointment-availability/slots
+
+Returns all bookable slots for a given appointment type over a date range. The range is capped at **7 days**.
+
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type_id` | integer | Yes | Appointment type to query |
+| `date_from` | date (ISO 8601) | Yes | Start of the range (inclusive) |
+| `date_to` | date (ISO 8601) | Yes | End of the range (inclusive, max 7 days from `date_from`) |
+
+**Response 200:**
+
+```json
+[
+  {
+    "slot_datetime_utc": "2026-07-05T15:00:00Z",
+    "interviewer_user_id": 3,
+    "interviewer_name": "Bishop Smith"
+  }
+]
+```
+
+### GET /appointment-availability/available-dates
+
+Returns a list of calendar dates within a given month that have at least one open slot.
+
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type_id` | integer | Yes | Appointment type |
+| `year` | integer | Yes | Calendar year |
+| `month` | integer | Yes | Calendar month (1–12) |
+
+**Response 200:**
+
+```json
+["2026-07-05", "2026-07-12", "2026-07-19"]
+```
+
+### Availability window schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `user_id` | integer | Yes | Interviewer user ID |
+| `day_of_week` | integer | Yes | 0 = Monday, 6 = Sunday |
+| `start_minute` | integer | Yes | Minutes since midnight for window start |
+| `end_minute` | integer | Yes | Minutes since midnight for window end |
+| `valid_from` | date | No | Window is inactive before this date |
+| `valid_until` | date | No | Window is inactive after this date |
+| `is_active` | boolean | No | Defaults to `true` |
+
+### Exception schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `date` | date | No | Specific date to block (omit for recurring) |
+| `reason` | string | Yes | Description of the exception |
+| `is_global` | boolean | Yes | If `true`, blocks all interviewers for that date |
+| `user_id` | integer | No | Blocks only a specific interviewer when provided |
+| `recurrence` | string | No | Recurrence rule (e.g., annual holidays) |
+
+---
+
+## Appointment Bookings
+
+Base path: `/appointment-bookings`
+
+Bookings are created by members without authentication. Post-creation actions (confirm, cancel, reschedule) support both token-based links (from confirmation emails) and admin endpoints requiring `MANAGE_APPOINTMENTS`.
+
+### Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/appointment-bookings/` | None | Create a booking |
+| `GET` | `/appointment-bookings/confirm` | None (token) | Confirm booking via email link |
+| `GET` | `/appointment-bookings/` | `MANAGE_APPOINTMENTS` | List bookings with optional filters |
+| `GET` | `/appointment-bookings/{booking_id}` | `MANAGE_APPOINTMENTS` | Get a single booking |
+| `POST` | `/appointment-bookings/{booking_id}/cancel` | `MANAGE_APPOINTMENTS` | Cancel a booking (admin) |
+| `POST` | `/appointment-bookings/cancel-token` | None (token) | Cancel via email link token |
+| `POST` | `/appointment-bookings/{booking_id}/reschedule` | `MANAGE_APPOINTMENTS` | Reschedule a booking (admin) |
+| `POST` | `/appointment-bookings/reschedule-token` | None (token) | Reschedule via email link token |
+| `POST` | `/appointment-bookings/{booking_id}/resend-confirmation` | `MANAGE_APPOINTMENTS` | Resend the confirmation email |
+
+### POST /appointment-bookings/
+
+Creates a new appointment booking. Sends a confirmation email to the provided address with confirm/cancel/reschedule links.
+
+**Request body:**
+
+```json
+{
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "email": "jane.doe@example.com",
+  "phone": "801-555-0100",
+  "appointment_type_id": 1,
+  "slot_datetime_utc": "2026-07-05T15:00:00Z",
+  "interviewer_user_id": 3,
+  "notes": "I prefer the early slot."
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `first_name` | string | Yes | Member's first name |
+| `last_name` | string | Yes | Member's last name |
+| `email` | string | Yes | Confirmation emails are sent here |
+| `phone` | string | Yes | Contact phone number |
+| `appointment_type_id` | integer | Yes | Must match an active appointment type |
+| `slot_datetime_utc` | datetime | Yes | Must be an open slot from the availability API |
+| `interviewer_user_id` | integer | Yes | Interviewer returned from the slots response |
+| `notes` | string | No | Optional notes for the interviewer |
+
+**Response 201:** The created booking object.
+
+**Response 409 Conflict:** The requested slot is no longer available.
+
+### GET /appointment-bookings/
+
+Returns a paginated or filtered list of bookings. All query parameters are optional.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `status` | string | Filter by booking status (`pending`, `confirmed`, `cancelled`, `completed`) |
+| `type_id` | integer | Filter by appointment type |
+| `date_from` | date | Show bookings on or after this date |
+| `date_to` | date | Show bookings on or before this date |
+
+### GET /appointment-bookings/confirm
+
+Handles the email confirmation link. Accepts a `token` query parameter included in the confirmation email. Updates the booking status to `confirmed`.
+
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | Yes | Signed confirmation token from the email |
+
+### Token-based cancel and reschedule
+
+The `cancel-token` and `reschedule-token` endpoints accept a `token` query parameter (or request body) containing a signed token from the member's email link. They do not require authentication.
+
+`POST /appointment-bookings/reschedule-token` also accepts a new `slot_datetime_utc` in the request body.
+
+<Callout type="info">
+  Token links are single-use and time-limited. If a token has expired, direct the member to contact the stake office.
+</Callout>

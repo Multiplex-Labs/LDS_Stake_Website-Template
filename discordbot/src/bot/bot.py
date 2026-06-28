@@ -31,10 +31,12 @@ class LDSStakeBot(Bot):
         # set up Hook Objects
         from .hooks import (
             KanbanHook,
-            BackupsHook
+            BackupsHook,
+            ReservationHook,
         )
         self.kanban_hook = KanbanHook(self)
         self.backups_hook = BackupsHook(self)
+        self.reservation_hook = ReservationHook(self)
     async def setup_hook(self):
         await self.tree.sync()
         self.logger.info(f'Synced {len(self.tree.get_commands())} slash commands.')

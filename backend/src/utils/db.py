@@ -7,7 +7,7 @@ from ..db import ORM
 from ..models import (
     UserSession, Assignment,
     SpeakingTopic, SpeakingAssignment,
-    User, Permissions, Permission,
+    User, Permissions, Permission, MAX_VALID_SCOPES,
     Calling, PresidencyAssignment, UserCalling
 )
 from .security import hash_password
@@ -129,10 +129,10 @@ def create_default_admin_user():
 
 def create_discord_bot_user() -> Optional[User]:
     """Creates a default discord bot user if it doesn't exist."""
-    discord_bot_password = os.getenv("DISCORD_BOT_PASSWORD", None)
+    discord_bot_password = os.getenv("DISCORD_BOT_TOKEN", None)
     if discord_bot_password is None:
         logger.warning(
-            "DISCORD_BOT_PASSWORD is not set. Cannot create discord bot user.")
+            "DISCORD_BOT_TOKEN is not set. Cannot create discord bot user.")
         return None
     orm = ORM()
     with Session(orm.engine) as db:
@@ -288,6 +288,19 @@ def create_system_callings_and_assignments():
             elif existing_slot.user_id is None:
                 existing_slot.user_id = admin_user.id
                 session.add(existing_slot)
+                session.commit()
+
+            # Ensure admin's direct user-level permissions always include all valid flags.
+            # This self-heals when new Permission values are added.
+            admin_perms = session.exec(
+                select(Permissions).where(
+                    Permissions.foreign_id == str(admin_user.id),
+                    Permissions.is_calling == False,
+                )
+            ).first()
+            if admin_perms is not None and admin_perms.scopes != MAX_VALID_SCOPES:
+                admin_perms.scopes = MAX_VALID_SCOPES
+                session.add(admin_perms)
                 session.commit()
 
         create_presidency_assignments(session)
@@ -453,6 +466,26 @@ def pre_populate_fast_sunday_exceptions():
                         user_id=None,
                     ))
         session.commit()
+
+
+def upsert_site_settings():
+    """Creates the singleton SiteSettings row (id=1) with defaults if it doesn't exist."""
+    from ..models import SiteSettings
+    orm = ORM()
+    try:
+        with Session(orm.engine) as session:
+            existing = session.get(SiteSettings, 1)
+            if existing is None:
+                config = SiteSettings(
+                    id=1,
+                    sacrament_times=["8:30am", "10:00am", "11:30am", "1:00pm"],
+                    hidden_pages=[],
+                )
+                session.add(config)
+                session.commit()
+    except Exception as e:
+        logger.error("[startup] upsert_site_settings failed: %s", e, exc_info=True)
+        raise
 
 
 def validate_unique_field(

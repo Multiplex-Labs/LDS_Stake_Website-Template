@@ -1,3 +1,5 @@
+import type { HideablePageKey } from "@/lib/constants";
+
 export interface ActiveCalling {
   id: string;
   firstName: string;
@@ -195,7 +197,7 @@ export interface ApiUserPermissions {
   flags: string[];
 }
 
-// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) intentionally excluded.
+// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) is a reserved service-identity flag auto-assigned to the bot account — must not appear in the user-admin UI.
 export const ASSIGNABLE_PERMISSIONS = [
   { flag: 1,   label: "Manage Users" },
   { flag: 2,   label: "Manage Callings" },
@@ -205,8 +207,53 @@ export const ASSIGNABLE_PERMISSIONS = [
   { flag: 32,  label: "Manage Calling Proposals" },
   { flag: 64,  label: "View Calling Proposals" },
   { flag: 256, label: "Manage Wards" },
-  { flag: 512, label: "Manage Appointments" },
+  { flag: 512,  label: "Manage Appointments" },
+  { flag: 1024, label: "Approve Building Reservations" },
+  { flag: 2048, label: "Manage Building Access" },
+  { flag: 4096, label: "Manage Site Settings" },
 ] as const;
+
+export interface SiteSettingsResponse {
+  stake_name: string;
+  stake_address: string;
+  contact_email: string;
+  reply_to_email: string;
+  hero_title: string;
+  hero_subtitle: string;
+  hero_image_url: string | null;
+  logo_url: string | null;
+  sacrament_times: string[];
+  hidden_pages: HideablePageKey[];
+}
+
+// --- Building Reservation types ---
+
+export type ReservationStatus = "PENDING" | "APPROVED" | "DENIED";
+
+export interface BuildingReservation {
+  id: number;
+  event_name: string;
+  event_description: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  setup_time: string;
+  cleanup_time: string;
+  rooms: string[];
+  organizer_name: string;
+  organizer_email: string;
+  organizer_phone: string;
+  organization: string;
+  organization_other: string | null;
+  affiliation: string;
+  needs_access: boolean;
+  status: ReservationStatus;
+  denial_reason: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+  has_conflict: boolean;
+}
 
 // --- Temple Recommend / Appointment types ---
 

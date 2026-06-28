@@ -21,6 +21,36 @@ File location: `backend/.env`
 | `SP_APPROVAL_THRESHOLD` | Optional | `2` | Number of Stake Presidency approvals required to advance a calling proposal from `SP_APPROVAL` to `HC_APPROVAL`. |
 | `HC_APPROVAL_THRESHOLD` | Optional | `3` | Number of High Council approvals required to advance a calling proposal from `HC_APPROVAL` to `INTERVIEW`. |
 
+### Email
+
+Both providers are optional. When both are configured, Brevo is used first and Mailjet serves as the fallback. Omitting both disables outbound email silently.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `BREVO_API_KEY` | Optional | — | Brevo transactional API key. When set, Brevo is used as the primary email provider (300 emails/day on the free tier). |
+| `BREVO_FROM_EMAIL` | Optional | — | Sender address for Brevo. Required when `BREVO_API_KEY` is set. |
+| `MAILJET_API_KEY` | Optional | — | Mailjet API key. Used as the email fallback when Brevo is not configured. |
+| `MAILJET_SECRET_KEY` | Optional | — | Mailjet secret key. Required when `MAILJET_API_KEY` is set. |
+| `MAILJET_FROM_EMAIL` | Optional | — | Sender address for Mailjet. Required when `MAILJET_API_KEY` is set. |
+| `REPLY_TO_EMAIL` | Optional | — | Reply-to address shown to email recipients. Recommended: a monitored clerk inbox (e.g. `clerk@yourstake.org`). Falls back to `BREVO_FROM_EMAIL` if unset. |
+
+### Google Calendar
+
+Both variables are required together. Omitting either disables Google Calendar sync silently.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | Optional | — | Filesystem path to a GCP service account JSON file. Enables Google Calendar sync for appointment bookings. |
+| `GOOGLE_CALENDAR_ID` | Optional | — | Google Calendar ID (e.g. `abc123@group.calendar.google.com`). Required together with `GOOGLE_SERVICE_ACCOUNT_FILE`. |
+
+### CORS and URLs
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `ALLOWED_ORIGINS` | Optional | `http://localhost:3100` | Comma-separated list of allowed frontend origins for CORS. In production, set this to your public site URL. |
+| `FRONTEND_BASE_URL` | Optional | `http://localhost:3100` | Base URL used in redirect responses and email links pointing to the frontend. |
+| `BACKEND_BASE_URL` | Optional | `http://localhost:8000` | Base URL used in email links pointing directly to the backend (e.g. email confirmation links). |
+
 <Callout type="warn">
   Never commit `JWT_SECRET_KEY` or `INITIAL_ADMIN_PASSWORD` to version control. Add `backend/.env` to `.gitignore`.
 </Callout>
@@ -39,15 +69,20 @@ File location: `frontend/.env`
   The frontend does not require a `.env` file for local development — defaults point to `localhost:8000`, which is where the backend runs.
 </Callout>
 
-## Slackbot
+## Discord Bot
 
-File location: `slackbot/.env`
+File location: `discordbot/.env`
+
+The Discord bot is a standalone service that connects to Discord via the gateway API and also exposes a FastAPI HTTP server on port 8001. It communicates with the main backend using the credentials below.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SLACK_BOT_TOKEN` | Required | — | Bot OAuth token from your Slack app (starts with `xoxb-`). Found in the Slack app dashboard under **OAuth & Permissions**. |
-| `SLACK_APP_TOKEN` | Required | — | App-level token from your Slack app (starts with `xapp-`). Required for Socket Mode. Found under **Basic Information → App-Level Tokens**. |
+| `DISCORD_TOKEN` | Required | — | Discord bot token from the Discord developer portal (under Bot → Token). |
+| `BACKEND_URL` | Required | — | URL of the main FastAPI backend (e.g. `http://localhost:8000`). The Discord bot calls this to look up users and notify approvers. |
+| `BACKEND_TOKEN` | Required | — | Service-to-service authentication token used when the Discord bot calls the main backend API. Must match the token configured in the main backend. |
+| `DATABASE_PATH` | Optional | `./database.db` | Path to the Discord bot's own SQLite database file (used for `UserMapping` and audit logs). |
+| `DEV` | Optional | `false` | Enables debug logging and Uvicorn reload mode. Set to `false` in production. |
 
-<Callout type="info">
-  Socket Mode does not require a public inbound URL or webhook endpoint. The Slackbot establishes an outbound WebSocket connection to Slack, making it suitable for deployments behind NAT or a firewall.
+<Callout type="warn">
+  Never commit `DISCORD_TOKEN` or `BACKEND_TOKEN` to version control. Add `discordbot/.env` to `.gitignore`.
 </Callout>

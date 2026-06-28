@@ -1,0 +1,114 @@
+---
+title: "Building Reservations"
+description: "Submit a building reservation request as a member or review, approve, and deny reservation requests as an authorized leader."
+---
+
+## Member Guide
+
+The building reservation form is publicly accessible at `/stake-info/reserve`. You do not need a portal account to submit a request.
+
+### Filling Out the Reservation Form
+
+<Steps>
+  <Step>
+    Navigate to `/stake-info/reserve`.
+  </Step>
+  <Step>
+    Complete all required fields (marked below). Optional fields are noted separately.
+  </Step>
+  <Step>
+    Click **Submit Request**. You will receive a confirmation email acknowledging receipt of your request.
+  </Step>
+</Steps>
+
+#### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| Event Name | Short title for the event |
+| Event Description | What the event is and its purpose |
+| Date | The date of the event |
+| Start Time | When the event begins |
+| End Time | When the event ends |
+| Rooms | Select one or more rooms needed (multi-select) |
+| Organizer Name | Your full name |
+| Organizer Email | An email address where you can receive approval or denial notices |
+| Organizer Phone | A phone number where organizers can reach you |
+| Organization | The group or organization hosting the event |
+| Affiliation | Whether the group is a member organization or non-member |
+| Building Access Needed | Whether you need a key or access code to enter the building |
+
+#### Optional Fields
+
+| Field | Description |
+|-------|-------------|
+| Setup Time | How much time before the event start you need for setup |
+| Cleanup Time | How much time after the event end you need for cleanup |
+| Additional Notes | Any other details the approver should know |
+
+<Callout type="note">
+  After submitting, your request enters a **Pending** status. An authorized leader will review it and you will be notified by email when it is approved or denied.
+</Callout>
+
+---
+
+## Admin Guide
+
+Admin features require the `APPROVE_BLDG_RESERVATIONS` permission and are accessible from the Leader Portal admin panel.
+
+### Reviewing Pending Reservations
+
+<Steps>
+  <Step>
+    Open the Leader Portal and navigate to **Building Reservations** in the admin panel.
+  </Step>
+  <Step>
+    Use the status filter to view reservations by status: **Pending**, **Approved**, or **Denied**.
+  </Step>
+  <Step>
+    Click any reservation to view its full details, including event information, organizer contact, requested rooms, and times.
+  </Step>
+</Steps>
+
+### Handling Conflicts
+
+When two reservations overlap on the same date and one or more of the same rooms, the admin panel displays a **conflict warning** on both reservations. Review both requests before taking action.
+
+<Callout type="warning">
+  Conflicts are flagged automatically based on date and room overlap. You are responsible for resolving conflicts — for example, by contacting the organizers to adjust times or rooms, or by denying one of the requests.
+</Callout>
+
+### Approving a Reservation
+
+<Steps>
+  <Step>
+    Open the reservation and review the details for accuracy and conflicts.
+  </Step>
+  <Step>
+    Click **Approve**.
+  </Step>
+  <Step>
+    The organizer receives an approval email at the address they provided. If your building requires key or access coordination, a notification is also sent to the building access managers via Discord.
+  </Step>
+</Steps>
+
+### Denying a Reservation
+
+<Steps>
+  <Step>
+    Open the reservation you want to deny.
+  </Step>
+  <Step>
+    Click **Deny**.
+  </Step>
+  <Step>
+    Enter a **denial reason**. This reason is required and is included in the denial email sent to the organizer.
+  </Step>
+  <Step>
+    Confirm the denial. The organizer receives a denial email explaining the reason.
+  </Step>
+</Steps>
+
+<Callout type="note">
+  A denial reason is required so that organizers understand why their request was not approved and can make alternative arrangements or resubmit with adjustments.
+</Callout>

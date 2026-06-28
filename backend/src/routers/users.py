@@ -388,7 +388,7 @@ async def upload_user_photo(
         raise HTTPException(status_code=400, detail="Unsupported image format.")
 
     # Storage directory (mirror of app mount)
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "profile_images"))
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "static", "profile_images"))
     os.makedirs(base_dir, exist_ok=True)
 
     # Unique filename
