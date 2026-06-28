@@ -11,16 +11,25 @@ The portal uses an IntFlag bitmask system for authorization. Permissions can be 
 
 Defined in `backend/src/models/permissions.py` as a Python `IntFlag` enum. Because it is an `IntFlag`, flags can be combined with bitwise OR.
 
-| Flag | Description |
-|------|-------------|
-| `NONE` | No permissions (value 0) |
-| `MANAGE_USERS` | Create, edit, and deactivate user accounts |
-| `MANAGE_CALLINGS` | Create and edit callings and slot assignments |
-| `MANAGE_ASSIGNMENTS` | Manage High Council assignments |
-| `MANAGE_SPEAKING_SCHEDULE` | Edit the speaking calendar |
-| `SUBMIT_CALLING_PROPOSALS` | Submit new calling or release proposals |
-| `MANAGE_CALLING_PROPOSALS` | Move proposals through the Kanban stages, approve/reject |
-| `VIEW_CALLING_PROPOSALS` | Read-only view of the Kanban board |
+| Flag | Value | Description |
+|------|-------|-------------|
+| `NONE` | 0 | No permissions |
+| `MANAGE_USERS` | 1 | Create, edit, and deactivate user accounts |
+| `MANAGE_CALLINGS` | 2 | Create and edit callings and slot assignments |
+| `MANAGE_ASSIGNMENTS` | 4 | Manage High Council assignments |
+| `MANAGE_SPEAKING_SCHEDULE` | 8 | Edit the speaking calendar |
+| `SUBMIT_CALLING_PROPOSALS` | 16 | Submit new calling or release proposals |
+| `MANAGE_CALLING_PROPOSALS` | 32 | Move proposals through the Kanban stages, approve/reject |
+| `VIEW_CALLING_PROPOSALS` | 64 | Read-only view of the Kanban board |
+| `MANAGE_WARDS` | 256 | Edit ward names and meeting times |
+| `MANAGE_APPOINTMENTS` | 512 | Manage appointment types, availability windows, exceptions, and bookings |
+| `APPROVE_BLDG_RESERVATIONS` | 1024 | Review, approve, and deny building reservation requests |
+| `MANAGE_ACCESS` | 2048 | Grant or revoke permissions for other users |
+| `MANAGE_SITE_SETTINGS` | 4096 | Update stake name, logo, hero image, contact info, and nav visibility |
+
+<Callout type="info">
+  `DISCORD_BOT` (value 128) is a reserved internal flag used by the Discord bot service to authenticate API calls. It cannot be assigned to portal user accounts.
+</Callout>
 
 ---
 
