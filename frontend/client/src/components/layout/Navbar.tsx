@@ -230,7 +230,9 @@ export function Navbar() {
                         <ListItem href="/leader/speaking" title="Speaking Schedule" />
                         <ListItem href="/leader/presidency" title="Presidency Assignments" />
                         <ListItem href="/leader/calling-system" title="Stake Calling System" />
-                        <ListItem href="/leader/reservations" title="Building Reservations" />
+                        {(user.permissions & 1024) === 1024 && (
+                          <ListItem href="/leader/reservations" title="Building Reservations" />
+                        )}
                         <ListItem href="/leader/admin" title="Administration" />
                         <ListItem href="/leader/site-settings" title="Site Settings" />
                       </ul>
@@ -460,7 +462,9 @@ export function Navbar() {
                     <MobileLink href="/leader/speaking" onClick={() => setMobileOpen(false)}>Speaking Schedule</MobileLink>
                     <MobileLink href="/leader/presidency" onClick={() => setMobileOpen(false)}>Presidency Assignments</MobileLink>
                     <MobileLink href="/leader/calling-system" onClick={() => setMobileOpen(false)}>Calling System</MobileLink>
-                    <MobileLink href="/leader/reservations" onClick={() => setMobileOpen(false)}>Building Reservations</MobileLink>
+                    {(user.permissions & 1024) === 1024 && (
+                      <MobileLink href="/leader/reservations" onClick={() => setMobileOpen(false)}>Building Reservations</MobileLink>
+                    )}
                     <MobileLink href="/leader/admin" onClick={() => setMobileOpen(false)}>Administration</MobileLink>
                     <MobileLink href="/leader/site-settings" onClick={() => setMobileOpen(false)}>Site Settings</MobileLink>
                   </>
