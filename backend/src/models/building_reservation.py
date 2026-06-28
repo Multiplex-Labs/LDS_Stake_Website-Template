@@ -84,31 +84,13 @@ class BuildingReservationResponse(SQLModel):
     has_conflict: bool = False
 
     @classmethod
-    def from_orm_with_conflict(cls, obj: BuildingReservation, has_conflict: bool) -> "BuildingReservationResponse":
-        return cls(
-            id=obj.id,
-            event_name=obj.event_name,
-            event_description=obj.event_description,
-            date=obj.date,
-            start_time=obj.start_time,
-            end_time=obj.end_time,
-            setup_time=obj.setup_time,
-            cleanup_time=obj.cleanup_time,
-            rooms=obj.rooms_list(),
-            organizer_name=obj.organizer_name,
-            organizer_email=obj.organizer_email,
-            organizer_phone=obj.organizer_phone,
-            organization=obj.organization,
-            organization_other=obj.organization_other,
-            affiliation=obj.affiliation,
-            needs_access=obj.needs_access,
-            status=obj.status,
-            denial_reason=obj.denial_reason,
-            submitted_at=obj.submitted_at,
-            reviewed_at=obj.reviewed_at,
-            reviewed_by=obj.reviewed_by,
-            has_conflict=has_conflict,
-        )
+    def from_orm_with_conflict(
+        cls, obj: "BuildingReservation", has_conflict: bool
+    ) -> "BuildingReservationResponse":
+        data = obj.model_dump()
+        data["rooms"] = obj.rooms_list()
+        data["has_conflict"] = has_conflict
+        return cls(**data)
 
 
 class DenyRequest(SQLModel):

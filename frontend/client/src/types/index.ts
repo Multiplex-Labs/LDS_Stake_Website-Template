@@ -210,8 +210,6 @@ export const ASSIGNABLE_PERMISSIONS = [
   { flag: 2048, label: "Manage Building Access" },
 ] as const;
 
-export const PERM_APPROVE_BLDG_RESERVATIONS = 1024;
-
 // --- Building Reservation types ---
 
 export type ReservationStatus = "PENDING" | "APPROVED" | "DENIED";

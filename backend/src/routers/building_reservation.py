@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -80,13 +81,10 @@ def _get_emails_with_permission(flag: int) -> list[str]:
         perm_rows = session.exec(
             select(Permissions).where(
                 Permissions.is_calling == False,
+                Permissions.scopes.op("&")(flag) == flag,
             )
         ).all()
-        user_ids = [
-            int(p.foreign_id)
-            for p in perm_rows
-            if (p.scopes & flag) == flag
-        ]
+        user_ids = [int(p.foreign_id) for p in perm_rows]
         if not user_ids:
             return []
         users = session.exec(
@@ -110,12 +108,6 @@ def _bg_notify_approvers(
         from ..utils.discord_bot import DiscordBotHandle
         approver_emails = _get_emails_with_permission(Permission.APPROVE_BLDG_RESERVATIONS)
         bot = DiscordBotHandle()
-        if not bot.enabled:
-            logger.warning(
-                "[reservations] Discord bot disabled — reservation %s has no approver notification channel",
-                reservation_id,
-            )
-            return
         if not approver_emails:
             logger.warning(
                 "[reservations] No users have APPROVE_BLDG_RESERVATIONS permission; "
@@ -242,11 +234,38 @@ def list_reservations(
     if date:
         query = query.where(BuildingReservation.date == date)
     reservations = session.exec(query).all()
-    return [
-        BuildingReservationResponse.from_orm_with_conflict(
-            r,
-            _check_conflict(session, r.id, r.date, r.rooms_list()),
+
+    if not reservations:
+        return []
+
+    # One query for all active (PENDING/APPROVED) reservations used in conflict checks
+    active = session.exec(
+        select(BuildingReservation).where(
+            BuildingReservation.status.in_([ReservationStatus.PENDING, ReservationStatus.APPROVED])
         )
+    ).all()
+
+    active_by_date: defaultdict = defaultdict(list)
+    for r in active:
+        active_by_date[r.date].append(r)
+
+    def _has_conflict(reservation: BuildingReservation) -> bool:
+        rooms_set = set(reservation.rooms_list())
+        for other in active_by_date[reservation.date]:
+            if other.id == reservation.id:
+                continue
+            try:
+                if rooms_set & set(other.rooms_list()):
+                    return True
+            except (json.JSONDecodeError, TypeError):
+                logger.error(
+                    "[reservations] Reservation %s has malformed rooms JSON; skipping conflict check",
+                    other.id,
+                )
+        return False
+
+    return [
+        BuildingReservationResponse.from_orm_with_conflict(r, _has_conflict(r))
         for r in reservations
     ]
 
@@ -263,7 +282,7 @@ def get_reservation(
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found")
     has_conflict = _check_conflict(
-        session, reservation.id, reservation.date, json.loads(reservation.rooms)
+        session, reservation.id, reservation.date, reservation.rooms_list()
     )
     return BuildingReservationResponse.from_orm_with_conflict(reservation, has_conflict)
 

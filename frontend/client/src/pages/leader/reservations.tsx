@@ -48,11 +48,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useAuthStore } from "@/stores/auth";
 import { apiRequest } from "@/lib/queryClient";
-import { type BuildingReservation, type ReservationStatus, PERM_APPROVE_BLDG_RESERVATIONS } from "@/types";
-
-function hasPermission(scopes: number, flag: number): boolean {
-  return (scopes & flag) === flag;
-}
+import { hasPermission, Permission } from "@/lib/constants";
+import { type BuildingReservation, type ReservationStatus } from "@/types";
 
 function statusColor(status: ReservationStatus): string {
   switch (status) {
@@ -105,10 +102,9 @@ export default function BuildingReservationsAdmin() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<BuildingReservation | null>(null);
-  const [denyReason, setDenyReason] = useState("");
-  const [showDeny, setShowDeny] = useState(false);
+  const [denyReason, setDenyReason] = useState<string | null>(null);
 
-  const canAccess = user ? hasPermission(user.permissions, PERM_APPROVE_BLDG_RESERVATIONS) : false;
+  const canAccess = user ? hasPermission(user.permissions, Permission.APPROVE_BLDG_RESERVATIONS) : false;
 
   const { data: reservations = [], isLoading, isError, error } = useQuery<BuildingReservation[]>({
     queryKey: ["/api/reservations"],
@@ -140,8 +136,7 @@ export default function BuildingReservationsAdmin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/reservations"] });
       setSelected(null);
-      setDenyReason("");
-      setShowDeny(false);
+      setDenyReason(null);
       toast.success("Reservation denied");
     },
     onError: (err: Error) => {
@@ -167,10 +162,16 @@ export default function BuildingReservationsAdmin() {
     },
   });
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const startDow = getDay(monthStart);
+  const { monthStart, monthEnd, days, startDow } = useMemo(() => {
+    const s = startOfMonth(currentMonth);
+    const e = endOfMonth(currentMonth);
+    return {
+      monthStart: s,
+      monthEnd: e,
+      days: eachDayOfInterval({ start: s, end: e }),
+      startDow: getDay(s),
+    };
+  }, [currentMonth]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, BuildingReservation[]>();
@@ -395,8 +396,7 @@ export default function BuildingReservationsAdmin() {
         onOpenChange={(open) => {
           if (!open) {
             setSelected(null);
-            setShowDeny(false);
-            setDenyReason("");
+            setDenyReason(null);
           }
         }}
       >
@@ -517,11 +517,11 @@ export default function BuildingReservationsAdmin() {
                       )}
                     </Button>
 
-                    {!showDeny ? (
+                    {denyReason === null ? (
                       <Button
                         variant="outline"
                         className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => setShowDeny(true)}
+                        onClick={() => setDenyReason("")}
                       >
                         Deny Reservation
                       </Button>
@@ -537,7 +537,7 @@ export default function BuildingReservationsAdmin() {
                           <Button
                             variant="destructive"
                             className="flex-1"
-                            disabled={!denyReason.trim() || denyMutation.isPending}
+                            disabled={!denyReason?.trim() || denyMutation.isPending}
                             onClick={() =>
                               denyMutation.mutate({
                                 id: selected.id,
@@ -556,10 +556,7 @@ export default function BuildingReservationsAdmin() {
                           </Button>
                           <Button
                             variant="outline"
-                            onClick={() => {
-                              setShowDeny(false);
-                              setDenyReason("");
-                            }}
+                            onClick={() => setDenyReason(null)}
                           >
                             Cancel
                           </Button>

@@ -12,7 +12,7 @@ def require_enabled():
             @wraps(func)
             def wrapper(self, *args, **kwargs):
                 if not getattr(self, "enabled", False):
-                    self.logger.debug("DiscordBotHandle disabled; skipping %s", func.__name__)
+                    self.logger.warning("DiscordBotHandle disabled; skipping %s", func.__name__)
                     return
                 return func(self, *args, **kwargs)
             return wrapper

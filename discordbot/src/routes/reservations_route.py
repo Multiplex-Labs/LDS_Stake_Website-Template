@@ -59,5 +59,10 @@ async def notify_approvers(payload: ReservationNotifyRequest, request: Request):
 @router.post("/access-notify")
 async def notify_access_managers(payload: AccessNotifyRequest, request: Request):
     logger.info("Received access notify request for reservation id: %s", payload.reservation_id)
+    if not payload.access_manager_emails:
+        logger.warning(
+            "No access manager emails in access-notify payload for reservation %s",
+            payload.reservation_id,
+        )
     await request.app.state.bot.reservation_hook.send_access_dms(payload)
-    return {"message": "Access notification sent"}
+    return {"message": "Access notification dispatched", "manager_count": len(payload.access_manager_emails)}

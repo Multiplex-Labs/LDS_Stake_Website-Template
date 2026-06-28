@@ -102,7 +102,7 @@ class ReservationHook(BaseHook):
                 continue
             view = ApprovalView(payload.reservation_id, self.bot)
             try:
-                self._send_dm(member.id, message, view=view)
+                await member.send(message, view=view)
             except Exception:
                 logger.exception("Failed to send approval DM to %s", email)
 
@@ -131,6 +131,6 @@ class ReservationHook(BaseHook):
                 logger.warning("No Discord mapping for access manager email: %s", email)
                 continue
             try:
-                self._send_dm(member.id, message)
+                await member.send(message)
             except Exception:
                 logger.exception("Failed to send access DM to %s", email)

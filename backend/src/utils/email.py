@@ -19,7 +19,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
 logger = logging.getLogger("application")
 
@@ -630,23 +630,30 @@ def render_reservation_pending(
     return EmailContent(html=html_body, plain=plain_body)
 
 
+def _send_reservation_email(
+    reservation: Any,
+    content: Any,
+    subject_prefix: str,
+) -> None:
+    send_email(
+        reservation.organizer_email,
+        reservation.organizer_name,
+        f"{subject_prefix}: {reservation.event_name}",
+        content.html,
+        content.plain,
+    )
+
+
 def send_reservation_pending(reservation) -> None:
-    rooms = json.loads(reservation.rooms) if isinstance(reservation.rooms, str) else reservation.rooms
     content = render_reservation_pending(
         organizer_name=reservation.organizer_name,
         event_name=reservation.event_name,
         date_str=str(reservation.date),
         start_time=reservation.start_time,
         end_time=reservation.end_time,
-        rooms=rooms,
+        rooms=reservation.rooms_list(),
     )
-    send_email(
-        reservation.organizer_email,
-        reservation.organizer_name,
-        f"Reservation Request Received: {reservation.event_name}",
-        content.html,
-        content.plain,
-    )
+    _send_reservation_email(reservation, content, "Building Reservation Pending Approval")
 
 
 def render_reservation_approved(
@@ -813,12 +820,6 @@ def send_reservation_denied(reservation) -> None:
     content = render_reservation_denied(
         organizer_name=reservation.organizer_name,
         event_name=reservation.event_name,
-        denial_reason=reservation.denial_reason or "No reason provided.",
+        denial_reason=reservation.denial_reason or "",
     )
-    send_email(
-        reservation.organizer_email,
-        reservation.organizer_name,
-        f"Building Reservation Not Approved: {reservation.event_name}",
-        content.html,
-        content.plain,
-    )
+    _send_reservation_email(reservation, content, "Building Reservation Denied")
