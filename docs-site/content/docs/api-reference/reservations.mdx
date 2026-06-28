@@ -97,7 +97,7 @@ Returns a list of reservation requests. Supports optional filtering.
 
 ---
 
-## GET /reservations/{reservation_id}
+## GET /reservations/\{reservation_id\}
 
 Returns a single reservation by its ID, including full organizer details and room list.
 
@@ -105,7 +105,7 @@ Returns a single reservation by its ID, including full organizer details and roo
 
 ---
 
-## POST /reservations/{reservation_id}/approve
+## POST /reservations/\{reservation_id\}/approve
 
 Marks a reservation as approved. Sends a notification email to the organizer.
 
@@ -115,7 +115,7 @@ Marks a reservation as approved. Sends a notification email to the organizer.
 
 ---
 
-## POST /reservations/{reservation_id}/deny
+## POST /reservations/\{reservation_id\}/deny
 
 Marks a reservation as denied and records the reason. Sends a notification email to the organizer including the reason text.
 
@@ -129,7 +129,7 @@ Marks a reservation as denied and records the reason. Sends a notification email
 
 ---
 
-## DELETE /reservations/{reservation_id}
+## DELETE /reservations/\{reservation_id\}
 
 Permanently removes the reservation record. Use this for housekeeping after a reservation has been processed, or to remove erroneous submissions.
 

@@ -1,10 +1,10 @@
-import { docs, meta } from '@/.source';
+import { docs, meta } from '@/.source/server';
 import { loader } from 'fumadocs-core/source';
-import { createMDXSource } from 'fumadocs-mdx';
-import { attachFile } from 'fumadocs-openapi/server';
+import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
+import { openapiPlugin } from 'fumadocs-openapi/server';
 
 export const source = loader({
   baseUrl: '/docs',
-  source: createMDXSource(docs, meta),
-  pageTree: { attachFile },
+  source: toFumadocsSource(docs, meta),
+  plugins: [openapiPlugin()],
 });
