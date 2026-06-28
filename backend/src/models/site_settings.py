@@ -16,11 +16,11 @@ class SiteSettings(BaseModel, table=True):
     hero_subtitle: str = Field(default="A community dedicated to faith, service, and fellowship. Join us in worship and activities.", max_length=500)
     hero_image_url: Optional[str] = Field(default=None, max_length=500)
     logo_url: Optional[str] = Field(default=None, max_length=500)
-    sacrament_times: list[str] = Field(
+    sacrament_times: Optional[list[str]] = Field(
         default_factory=list,
         sa_column=Column("sacrament_times", SAJSON)
     )
-    hidden_pages: list[str] = Field(
+    hidden_pages: Optional[list[str]] = Field(
         default_factory=list,
         sa_column=Column("hidden_pages", SAJSON)
     )

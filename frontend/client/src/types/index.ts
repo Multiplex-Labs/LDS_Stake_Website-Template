@@ -1,3 +1,5 @@
+import type { HideablePageKey } from "@/lib/constants";
+
 export interface ActiveCalling {
   id: string;
   firstName: string;
@@ -195,7 +197,7 @@ export interface ApiUserPermissions {
   flags: string[];
 }
 
-// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) intentionally excluded.
+// Must stay in sync with Permission IntFlag in backend/src/models/permissions.py; DISCORD_BOT (128) is a reserved service-identity flag auto-assigned to the bot account — must not appear in the user-admin UI.
 export const ASSIGNABLE_PERMISSIONS = [
   { flag: 1,   label: "Manage Users" },
   { flag: 2,   label: "Manage Callings" },
@@ -221,7 +223,7 @@ export interface SiteSettingsResponse {
   hero_image_url: string | null;
   logo_url: string | null;
   sacrament_times: string[];
-  hidden_pages: string[];
+  hidden_pages: HideablePageKey[];
 }
 
 // --- Building Reservation types ---

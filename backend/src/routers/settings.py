@@ -1,5 +1,4 @@
 import os
-import mimetypes
 import logging
 from enum import Enum
 from typing import Optional
@@ -7,7 +6,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlmodel import SQLModel, Session, Field
-from pydantic import field_validator
+from pydantic import BaseModel, field_validator
 
 from ..models import Permission, SiteSettings
 from ..db import get_session
@@ -22,11 +21,11 @@ ALLOWED_HIDDEN_PAGES = frozenset([
     "callings", "sustainings", "presidency",
 ])
 
-TIME_PATTERN = re.compile(r"^\d{1,2}:\d{2}\s?(am|pm)$", re.IGNORECASE)
+TIME_PATTERN = re.compile(r"^(1[0-2]|[1-9]):([0-5]\d)\s?(am|pm)$", re.IGNORECASE)
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-class SiteSettingsResponse(SQLModel):
+class SiteSettingsResponse(BaseModel):
     stake_name: str
     stake_address: str
     contact_email: str
@@ -66,6 +65,8 @@ class SiteSettingsUpdate(SQLModel):
         for t in v:
             if not TIME_PATTERN.match(str(t)):
                 raise ValueError(f"Invalid time format: '{t}'. Expected format like '10:00am'.")
+        if len(v) != len(set(v)):
+            raise ValueError("Duplicate sacrament times are not allowed.")
         return v
 
     @field_validator("hidden_pages")
@@ -76,6 +77,8 @@ class SiteSettingsUpdate(SQLModel):
         unknown = set(v) - ALLOWED_HIDDEN_PAGES  # type: ignore[arg-type]
         if unknown:
             raise ValueError(f"Unknown page keys: {sorted(unknown)}")
+        if len(v) != len(set(v)):
+            raise ValueError("Duplicate page keys are not allowed.")
         return v
 
 
@@ -99,10 +102,15 @@ def _default_settings() -> SiteSettingsResponse:
     )
 
 
+# Empty path ("") avoids FastAPI's trailing-slash redirect on /settings/ which drops the Authorization header.
 @router.get("", response_model=SiteSettingsResponse)
 def get_settings(session: Session = Depends(get_session)) -> SiteSettingsResponse:
     """Return current site settings. Public — no auth required."""
-    settings = session.get(SiteSettings, 1)
+    try:
+        settings = session.get(SiteSettings, 1)
+    except Exception as e:
+        logger.error("[settings] get_settings: DB lookup failed: %s", e, exc_info=True)
+        return _default_settings()
     if settings is None:
         return _default_settings()
     return SiteSettingsResponse(
@@ -125,7 +133,7 @@ def update_settings(
     session: Session = Depends(get_session),
     _: object = Depends(CallingUser(permissions=[Permission.MANAGE_SITE_SETTINGS])),
 ) -> SiteSettingsResponse:
-    """Update site settings. Requires MANAGE_SITE_SETTINGS permission."""
+    """Partially update site settings (only provided fields are written; absent fields are unchanged). Requires MANAGE_SITE_SETTINGS permission."""
     settings = session.get(SiteSettings, 1)
     if settings is None:
         settings = SiteSettings(id=1, sacrament_times=[], hidden_pages=[])
@@ -135,9 +143,13 @@ def update_settings(
     for key, value in update_data.items():
         setattr(settings, key, value)
 
-    session.add(settings)
-    session.commit()
-    session.refresh(settings)
+    try:
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+    except Exception as e:
+        logger.error("[settings] update_settings: DB commit failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save settings.")
 
     return SiteSettingsResponse(
         stake_name=settings.stake_name,
@@ -171,12 +183,8 @@ async def upload_site_image(
     if len(contents) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image must be smaller than 5MB.")
 
-    _, ext = os.path.splitext(file.filename or "")
-    if not ext:
-        ext = mimetypes.guess_extension(file.content_type) or ".jpg"
-    ext = ext.lower()
-    if ext == ".jpeg":
-        ext = ".jpg"
+    EXT_BY_MIME = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+    ext = EXT_BY_MIME[file.content_type]
 
     base_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "static", "site_images")
@@ -188,9 +196,13 @@ async def upload_site_image(
     settings = session.get(SiteSettings, 1)
     if settings is None:
         settings = SiteSettings(id=1, sacrament_times=[], hidden_pages=[])
-        session.add(settings)
-        session.commit()
-        session.refresh(settings)
+        try:
+            session.add(settings)
+            session.commit()
+            session.refresh(settings)
+        except Exception as e:
+            logger.error("[settings] upload_site_image: DB commit failed: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to save settings.")
 
     # Delete old file for this image type if it exists and differs
     old_url = settings.logo_url if image_type == SiteImageType.logo else settings.hero_image_url
@@ -201,12 +213,13 @@ async def upload_site_image(
             try:
                 os.remove(old_path)
             except OSError:
-                logger.warning("[settings] Could not delete old site image: %s", old_path)
+                logger.warning("[settings] Could not delete old site image: %s", old_path, exc_info=True)
 
     try:
         with open(fpath, "wb") as f:
             f.write(contents)
     except OSError as e:
+        logger.error("[settings] upload_site_image: failed to write %s: %s", fpath, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save image.") from e
 
     public_path = f"/api/static/site_images/{fname}"
@@ -215,9 +228,13 @@ async def upload_site_image(
     else:
         settings.hero_image_url = public_path
 
-    session.add(settings)
-    session.commit()
-    session.refresh(settings)
+    try:
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+    except Exception as e:
+        logger.error("[settings] upload_site_image: DB commit failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save settings.")
 
     return SiteSettingsResponse(
         stake_name=settings.stake_name,
@@ -234,8 +251,12 @@ async def upload_site_image(
 
 
 def get_reply_to_email(session: Session) -> str:
-    """Resolve reply-to address: DB setting takes priority over REPLY_TO_EMAIL env var."""
-    settings = session.get(SiteSettings, 1)
+    """Resolve reply-to address: DB setting takes priority, then REPLY_TO_EMAIL env var, then BREVO_FROM_EMAIL env var."""
+    try:
+        settings = session.get(SiteSettings, 1)
+    except Exception as e:
+        logger.warning("[settings] get_reply_to_email: DB lookup failed, using env fallback: %s", e)
+        settings = None
     if settings and settings.reply_to_email:
         return settings.reply_to_email
     return os.getenv("REPLY_TO_EMAIL", "") or os.getenv("BREVO_FROM_EMAIL", "")

@@ -212,6 +212,7 @@ def _send_booking_confirmation_email(booking_id: int):
             confirm_url=confirm_url,
             cancel_url=cancel_url,
         )
+        reply_to = get_reply_to_email(session)
         try:
             send_email(
                 to_email=booking.member_email,
@@ -219,7 +220,7 @@ def _send_booking_confirmation_email(booking_id: int):
                 subject=f"Appointment Confirmation — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -272,6 +273,7 @@ def _send_interviewer_notification_email(booking_id: int):
             date_str=date_str,
             time_str=time_str,
         )
+        reply_to = get_reply_to_email(session)
         try:
             send_email(
                 to_email=interviewer.email,
@@ -279,7 +281,7 @@ def _send_interviewer_notification_email(booking_id: int):
                 subject=f"New Appointment Booking — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -317,6 +319,7 @@ def _send_member_cancellation_email(booking_id: int):
             time_str=time_str,
             rebook_url=rebook_url,
         )
+        reply_to = get_reply_to_email(session)
         try:
             send_email(
                 to_email=booking.member_email,
@@ -324,7 +327,7 @@ def _send_member_cancellation_email(booking_id: int):
                 subject=f"Appointment Cancelled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -363,6 +366,7 @@ def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
             reason=reason,
             rebook_url=rebook_url,
         )
+        reply_to = get_reply_to_email(session)
         try:
             send_email(
                 to_email=booking.member_email,
@@ -370,7 +374,7 @@ def _send_presidency_cancellation_email(booking_id: int, reason: Optional[str]):
                 subject=f"Appointment Cancelled by Presidency — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -399,6 +403,7 @@ def _send_reschedule_member_email(new_booking_id: int, old_start_datetime: datet
 
         cancel_url = f"{BACKEND_BASE_URL}/appointment-bookings/cancel/{new_booking.confirmation_token}"
 
+        reply_to = get_reply_to_email(session)
         try:
             html_body, plain_body = render_booking_reschedule_success(
                 member_name=new_booking.member_name,
@@ -414,7 +419,7 @@ def _send_reschedule_member_email(new_booking_id: int, old_start_datetime: datet
                 subject=f"Appointment Rescheduled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -441,6 +446,7 @@ def _send_reschedule_interviewer_email(new_booking_id: int, old_start_datetime: 
             logger.error("_send_reschedule_interviewer_email: interviewer or email not found for booking %d", new_booking_id)
             return
 
+        reply_to = get_reply_to_email(session)
         try:
             html_body, plain_body = render_reschedule_interviewer_notification(
                 interviewer_name=f"{interviewer.fname} {interviewer.lname}",
@@ -455,7 +461,7 @@ def _send_reschedule_interviewer_email(new_booking_id: int, old_start_datetime: 
                 subject=f"Appointment Rescheduled — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(
@@ -562,6 +568,7 @@ def _send_already_confirmed_email(booking_id: int):
         date_str = booking.booking_date.strftime("%A, %B %d, %Y")
         time_str = _format_time_str(booking.start_minute_of_day, config.timezone)
 
+        reply_to = get_reply_to_email(session)
         try:
             html_body, plain_body = render_booking_already_confirmed(
                 member_name=booking.member_name,
@@ -579,7 +586,7 @@ def _send_already_confirmed_email(booking_id: int):
                 subject=f"Your Appointment Details — {appt_type.name}",
                 html_body=html_body,
                 plain_body=plain_body,
-                reply_to=get_reply_to_email(session),
+                reply_to=reply_to,
             )
         except Exception:
             logger.error(

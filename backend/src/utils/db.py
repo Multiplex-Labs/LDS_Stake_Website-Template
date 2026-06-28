@@ -472,16 +472,20 @@ def upsert_site_settings():
     """Creates the singleton SiteSettings row (id=1) with defaults if it doesn't exist."""
     from ..models import SiteSettings
     orm = ORM()
-    with Session(orm.engine) as session:
-        existing = session.get(SiteSettings, 1)
-        if existing is None:
-            config = SiteSettings(
-                id=1,
-                sacrament_times=["8:30am", "10:00am", "11:30am", "1:00pm"],
-                hidden_pages=[],
-            )
-            session.add(config)
-            session.commit()
+    try:
+        with Session(orm.engine) as session:
+            existing = session.get(SiteSettings, 1)
+            if existing is None:
+                config = SiteSettings(
+                    id=1,
+                    sacrament_times=["8:30am", "10:00am", "11:30am", "1:00pm"],
+                    hidden_pages=[],
+                )
+                session.add(config)
+                session.commit()
+    except Exception as e:
+        logger.error("[startup] upsert_site_settings failed: %s", e, exc_info=True)
+        raise
 
 
 def validate_unique_field(

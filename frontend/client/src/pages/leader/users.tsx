@@ -75,10 +75,10 @@ import {
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiUser, ApiCalling, ApiUserPermissions, Ward } from "@/types";
-
-const ASSIGNABLE_MASK = ASSIGNABLE_PERMISSIONS.reduce((acc, { flag }) => acc | flag, 0);
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep as WizardShellStep } from "@/components/ui/wizard-shell";
+
+const ASSIGNABLE_MASK = ASSIGNABLE_PERMISSIONS.reduce((acc, { flag }) => acc | flag, 0);
 
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;

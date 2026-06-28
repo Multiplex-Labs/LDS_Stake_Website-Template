@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useSettings, SETTINGS_FALLBACKS } from "@/hooks/useSettings";
 import { useChipInput } from "@/hooks/useChipInput";
 import { HIDEABLE_PAGES } from "@/lib/constants";
+import type { HideablePageKey } from "@/lib/constants";
 import type { SiteSettingsResponse } from "@/types";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -35,7 +36,9 @@ const contactSchema = z.object({
 });
 
 const featuresSchema = z.object({
-  hidden_pages: z.array(z.string()),
+  hidden_pages: z.array(
+    z.enum(HIDEABLE_PAGES.map((p) => p.key) as [HideablePageKey, ...HideablePageKey[]])
+  ),
 });
 
 type GeneralFields = z.infer<typeof generalSchema>;
@@ -83,8 +86,9 @@ function GeneralTab({ settings }: { settings: SiteSettingsResponse }) {
       form.reset(form.getValues());
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Unexpected error";
       console.error("[site-settings] general save error:", err);
-      toast.error("Failed to save settings");
+      toast.error("Failed to save settings", { description: msg });
     },
   });
 
@@ -142,12 +146,21 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
     form.reset({ hero_title: settings.hero_title, hero_subtitle: settings.hero_subtitle });
   }, [settings.hero_title, settings.hero_subtitle]);
 
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      if (heroPreview) URL.revokeObjectURL(heroPreview);
+    };
+  }, [logoPreview, heroPreview]);
+
   function handleFileSelect(file: File, type: "logo" | "hero") {
     const url = URL.createObjectURL(file);
     if (type === "logo") {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
       setLogoFile(file);
       setLogoPreview(url);
     } else {
+      if (heroPreview) URL.revokeObjectURL(heroPreview);
       setHeroFile(file);
       setHeroPreview(url);
     }
@@ -159,13 +172,13 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
         const fd = new FormData();
         fd.append("file", logoFile);
         const res = await apiRequest("POST", "/api/settings/upload/logo", fd);
-        if (!res.ok) throw new Error("Logo upload failed");
+        if (!res.ok) throw new Error(await res.text());
       }
       if (heroFile) {
         const fd = new FormData();
         fd.append("file", heroFile);
         const res = await apiRequest("POST", "/api/settings/upload/hero", fd);
-        if (!res.ok) throw new Error("Hero image upload failed");
+        if (!res.ok) throw new Error(await res.text());
       }
       await saveSettings(data);
     },
@@ -181,8 +194,9 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
       form.reset(form.getValues());
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Unexpected error";
       console.error("[site-settings] appearance save error:", err);
-      toast.error("Failed to save appearance settings");
+      toast.error("Failed to save appearance settings", { description: msg });
     },
   });
 
@@ -190,7 +204,6 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
 
   return (
     <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
-      {/* Logo */}
       <div className="space-y-2">
         <Label>Stake Logo</Label>
         <div className="flex items-center gap-4">
@@ -219,7 +232,6 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
         />
       </div>
 
-      {/* Hero Image */}
       <div className="space-y-2">
         <Label>Hero Image</Label>
         <div className="space-y-2">
@@ -246,7 +258,6 @@ function AppearanceTab({ settings }: { settings: SiteSettingsResponse }) {
         />
       </div>
 
-      {/* Text fields */}
       <div className="space-y-2">
         <Label htmlFor="hero_title">Hero Title</Label>
         <Input id="hero_title" {...form.register("hero_title")} />
@@ -288,8 +299,9 @@ function ContactTab({ settings }: { settings: SiteSettingsResponse }) {
       form.reset(form.getValues());
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Unexpected error";
       console.error("[site-settings] contact save error:", err);
-      toast.error("Failed to save contact settings");
+      toast.error("Failed to save contact settings", { description: msg });
     },
   });
 
@@ -337,7 +349,7 @@ function FeaturesTab({ settings }: { settings: SiteSettingsResponse }) {
 
   const hiddenPages = form.watch("hidden_pages");
 
-  function togglePage(key: string) {
+  function togglePage(key: HideablePageKey) {
     const current = form.getValues("hidden_pages");
     const next = current.includes(key)
       ? current.filter((k) => k !== key)
@@ -353,8 +365,9 @@ function FeaturesTab({ settings }: { settings: SiteSettingsResponse }) {
       form.reset(form.getValues());
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Unexpected error";
       console.error("[site-settings] features save error:", err);
-      toast.error("Failed to save feature settings");
+      toast.error("Failed to save feature settings", { description: msg });
     },
   });
 
@@ -393,8 +406,20 @@ function FeaturesTab({ settings }: { settings: SiteSettingsResponse }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SiteSettings() {
-  const { data: settings } = useSettings();
+  const { data: settings, isError } = useSettings();
   const s = settings ?? SETTINGS_FALLBACKS;
+
+  if (isError) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8 max-w-3xl">
+          <p className="text-sm text-destructive">
+            Could not load current settings. Please refresh the page and try again.
+          </p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
