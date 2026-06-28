@@ -22,6 +22,7 @@ class Permission(IntFlag):
     MANAGE_APPOINTMENTS = 512
     APPROVE_BLDG_RESERVATIONS = 1024
     MANAGE_ACCESS = 2048
+    MANAGE_SITE_SETTINGS = 4096
 
 # All assignable flags; DISCORD_BOT excluded so the validator rejects it explicitly.
 MAX_VALID_SCOPES = int(functools.reduce(operator.or_, Permission)) & ~int(Permission.DISCORD_BOT)

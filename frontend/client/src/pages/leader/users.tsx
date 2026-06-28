@@ -78,6 +78,8 @@ import type { ApiUser, ApiCalling, ApiUserPermissions, Ward } from "@/types";
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep as WizardShellStep } from "@/components/ui/wizard-shell";
 
+const ASSIGNABLE_MASK = ASSIGNABLE_PERMISSIONS.reduce((acc, { flag }) => acc | flag, 0);
+
 type SortKey = "name" | "active" | "email";
 type SortConfig = { key: SortKey; direction: "asc" | "desc" } | null;
 
@@ -1682,7 +1684,7 @@ export function UserAdminContent() {
           onClose={() => setPermissionsUserId(null)}
           onTogglePermission={(newScopes) => {
             if (permissionsUserId === null) return;
-            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes });
+            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes & ASSIGNABLE_MASK });
           }}
           onRemoveCalling={({ callingId, slotNumber }) => removeCallingMutation.mutate({ callingId, slotNumber })}
           onAssignCalling={({ callingId, slotNumber, userId, onSuccess }) => {
