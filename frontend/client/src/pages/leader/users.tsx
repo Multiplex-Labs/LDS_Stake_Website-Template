@@ -75,6 +75,8 @@ import {
 import { BUTTON_HOVER, ICON_BTN_HOVER } from "@/lib/constants";
 import { ASSIGNABLE_PERMISSIONS } from "@/types";
 import type { ApiUser, ApiCalling, ApiUserPermissions, Ward } from "@/types";
+
+const ASSIGNABLE_MASK = ASSIGNABLE_PERMISSIONS.reduce((acc, { flag }) => acc | flag, 0);
 import { WizardShell } from "@/components/ui/wizard-shell";
 import type { WizardStep as WizardShellStep } from "@/components/ui/wizard-shell";
 
@@ -1682,7 +1684,7 @@ export function UserAdminContent() {
           onClose={() => setPermissionsUserId(null)}
           onTogglePermission={(newScopes) => {
             if (permissionsUserId === null) return;
-            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes });
+            setPermissionsMutation.mutate({ userId: permissionsUserId, scopes: newScopes & ASSIGNABLE_MASK });
           }}
           onRemoveCalling={({ callingId, slotNumber }) => removeCallingMutation.mutate({ callingId, slotNumber })}
           onAssignCalling={({ callingId, slotNumber, userId, onSuccess }) => {

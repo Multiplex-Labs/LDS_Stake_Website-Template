@@ -99,7 +99,7 @@ def _default_settings() -> SiteSettingsResponse:
     )
 
 
-@router.get("/", response_model=SiteSettingsResponse)
+@router.get("", response_model=SiteSettingsResponse)
 def get_settings(session: Session = Depends(get_session)) -> SiteSettingsResponse:
     """Return current site settings. Public — no auth required."""
     settings = session.get(SiteSettings, 1)
@@ -119,7 +119,7 @@ def get_settings(session: Session = Depends(get_session)) -> SiteSettingsRespons
     )
 
 
-@router.put("/", response_model=SiteSettingsResponse)
+@router.put("", response_model=SiteSettingsResponse)
 def update_settings(
     body: SiteSettingsUpdate,
     session: Session = Depends(get_session),
@@ -179,7 +179,7 @@ async def upload_site_image(
         ext = ".jpg"
 
     base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "static", "site_images")
+        os.path.join(os.path.dirname(__file__), "..", "..", "static", "site_images")
     )
     os.makedirs(base_dir, exist_ok=True)
     fname = f"{image_type.value}{ext}"
