@@ -81,8 +81,8 @@ async def lifespan(app: FastAPI):
                        "please set SSL_ENABLED=false in your .env file. "
                        "Otherwise, refresh tokens will not work.")
     ## Check for production CORS misconfiguration
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3100")
-    if "localhost" in allowed_origins and os.getenv("DEV", "false").lower() != "true":
+    _origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3100").split(",")]
+    if any("localhost" in o for o in _origins) and os.getenv("DEV", "false").lower() != "true":
         logger.warning(
             "ALLOWED_ORIGINS contains 'localhost' but DEV is not 'true'. "
             "This is likely a production misconfiguration. "

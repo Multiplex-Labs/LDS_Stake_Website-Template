@@ -1,10 +1,12 @@
 from logging import getLogger
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
+from ..utils.auth import require_backend_token
+
 logger = getLogger("application")
-router = APIRouter(prefix="/reservations", tags=["reservations"])
+router = APIRouter(prefix="/reservations", tags=["reservations"], dependencies=[Depends(require_backend_token)])
 
 
 class ReservationNotifyRequest(BaseModel):
