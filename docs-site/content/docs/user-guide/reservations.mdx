@@ -1,11 +1,17 @@
 ---
 title: "Building Reservations"
-description: "Submit a building reservation request as a member or review, approve, and deny reservation requests as an authorized leader."
+description: "Submit a building reservation request as a member, or review, approve, and deny requests as an authorized leader."
 ---
+
+The Building Reservations system allows members and organizations to request building use at `/stake-info/reserve`. Authorized leaders review, approve, or deny requests from the admin panel at `/leader/reservations`.
 
 ## Member Guide
 
-The building reservation form is publicly accessible at `/stake-info/reserve`. You do not need a portal account to submit a request.
+The reservation form is publicly accessible at `/stake-info/reserve`. No portal account is required to submit a request.
+
+<Callout type="warn">
+  The member submission form is currently a frontend stub. Filling out the form and clicking **Submit Reservation Request** displays a confirmation message, but the request is **not yet saved to the server**. Backend integration for the member submission path is pending. Contact the stake executive secretary directly until this feature is fully wired.
+</Callout>
 
 ### Filling Out the Reservation Form
 
@@ -14,10 +20,13 @@ The building reservation form is publicly accessible at `/stake-info/reserve`. Y
     Navigate to `/stake-info/reserve`.
   </Step>
   <Step>
-    Complete all required fields (marked below). Optional fields are noted separately.
+    Complete all required fields (marked in the tables below). Optional fields are noted separately.
   </Step>
   <Step>
-    Click **Submit Request**. You will receive a confirmation email acknowledging receipt of your request.
+    Check the agreement box confirming you have reviewed the building use guidelines. The form cannot be submitted without this.
+  </Step>
+  <Step>
+    Click **Submit Reservation Request**.
   </Step>
 </Steps>
 
@@ -25,70 +34,82 @@ The building reservation form is publicly accessible at `/stake-info/reserve`. Y
 
 | Field | Description |
 |-------|-------------|
-| Event Name | Short title for the event |
-| Event Description | What the event is and its purpose |
-| Date | The date of the event |
+| Event Name | Short title for the event (minimum 2 characters) |
+| Date | The date of the event (must be a future date) |
 | Start Time | When the event begins |
 | End Time | When the event ends |
-| Rooms | Select one or more rooms needed (multi-select) |
+| Setup Time | How much time before the event start you need for setup (dropdown: 15m – 4h) |
+| Cleanup Time | How much time after the event end you need for cleanup (dropdown: 15m – 4h) |
+| Rooms or Areas | Select one or more rooms from the list (multi-select with checkboxes); a "Select Entire Facility" shortcut is available |
 | Organizer Name | Your full name |
-| Organizer Email | An email address where you can receive approval or denial notices |
+| Organizer Email | An email address where approval or denial notices can be sent |
 | Organizer Phone | A phone number where organizers can reach you |
-| Organization | The group or organization hosting the event |
-| Affiliation | Whether the group is a member organization or non-member |
-| Building Access Needed | Whether you need a key or access code to enter the building |
+| Organization | Select the ward, stake, or group hosting the event from the dropdown; choose "Other" to type a custom organization name |
+| Event Affiliation | Select the reservation type from the dropdown: Stake Activity, Ward Activity, Stake Member, Out-of-Stake Member, or Non-Affiliated |
 
 #### Optional Fields
 
 | Field | Description |
 |-------|-------------|
-| Setup Time | How much time before the event start you need for setup |
-| Cleanup Time | How much time after the event end you need for cleanup |
-| Additional Notes | Any other details the approver should know |
+| Event Description | Brief description of the event and its purpose |
 
 <Callout type="note">
-  After submitting, your request enters a **Pending** status. An authorized leader will review it and you will be notified by email when it is approved or denied.
+  The **Affiliation** and **Organization** fields are dropdown selects, not free-text inputs. If your organization is not listed under Organization, choose **Other** — an additional text field will appear to enter the organization name.
 </Callout>
 
 ---
 
 ## Admin Guide
 
-Admin features require the `APPROVE_BLDG_RESERVATIONS` permission and are accessible from the Leader Portal admin panel.
+Admin features require the `APPROVE_BLDG_RESERVATIONS` permission and are accessible at `/leader/reservations` in the Leader Portal.
 
-### Reviewing Pending Reservations
+### Viewing Reservations
 
-<Steps>
-  <Step>
-    Open the Leader Portal and navigate to **Building Reservations** in the admin panel.
-  </Step>
-  <Step>
-    Use the status filter to view reservations by status: **Pending**, **Approved**, or **Denied**.
-  </Step>
-  <Step>
-    Click any reservation to view its full details, including event information, organizer contact, requested rooms, and times.
-  </Step>
-</Steps>
+The admin page provides two views, selectable via tabs at the top:
+
+- **Calendar** — A month-by-month calendar displaying reservations as color-coded event chips (yellow = Pending, green = Approved, grey = Denied). Use the left and right arrows to navigate between months. A conflict warning triangle appears on any reservation that overlaps another in date and rooms.
+- **List** — A tabular view of all reservations. Use the **Status** dropdown to filter by All, Pending, Approved, or Denied. The total count of matching reservations is shown.
+
+Click any reservation chip (in Calendar view) or any row (in List view) to open the detail panel.
+
+### Detail Panel
+
+Clicking a reservation opens a slide-over panel on the right side of the screen. The panel displays:
+
+- Event name and current status badge
+- Conflict badge (if applicable)
+- Date, time range, setup time, and cleanup time
+- List of reserved rooms
+- Event description (if provided)
+- Organizer name, phone, email, organization, and affiliation
+- A warning banner if the organizer indicated they **do not have building access** (fob or code)
+- Denial reason (if the reservation was previously denied)
+- Submission timestamp and review timestamp (if already reviewed)
+- Approve and Deny controls (for Pending reservations only)
+- Delete button (available for any reservation regardless of status)
 
 ### Handling Conflicts
 
-When two reservations overlap on the same date and one or more of the same rooms, the admin panel displays a **conflict warning** on both reservations. Review both requests before taking action.
+When two reservations overlap on the same date and share one or more of the same rooms, the system automatically flags both with a **conflict warning** — a triangle icon appears on the calendar chip and in the detail panel.
 
-<Callout type="warning">
-  Conflicts are flagged automatically based on date and room overlap. You are responsible for resolving conflicts — for example, by contacting the organizers to adjust times or rooms, or by denying one of the requests.
+<Callout type="warn">
+  Conflicts are detected automatically based on date and room overlap. You are responsible for resolving them — for example, by contacting the organizers to adjust times or rooms, or by denying one of the requests.
 </Callout>
 
 ### Approving a Reservation
 
 <Steps>
   <Step>
-    Open the reservation and review the details for accuracy and conflicts.
+    Open the reservation from the Calendar or List view.
   </Step>
   <Step>
-    Click **Approve**.
+    Review the full details in the slide-over panel, including any conflict warnings.
   </Step>
   <Step>
-    The organizer receives an approval email at the address they provided. If your building requires key or access coordination, a notification is also sent to the building access managers via Discord.
+    Click **Approve Reservation**.
+  </Step>
+  <Step>
+    The panel closes and the reservation status updates to **Approved**. An approval email is sent to the organizer at the address they provided.
   </Step>
 </Steps>
 
@@ -96,19 +117,32 @@ When two reservations overlap on the same date and one or more of the same rooms
 
 <Steps>
   <Step>
-    Open the reservation you want to deny.
+    Open the reservation from the Calendar or List view.
   </Step>
   <Step>
-    Click **Deny**.
+    Click **Deny Reservation**. A text area appears inline in the panel.
   </Step>
   <Step>
-    Enter a **denial reason**. This reason is required and is included in the denial email sent to the organizer.
+    Enter a **denial reason** in the text area. This field is required — the **Confirm Denial** button remains disabled until text is entered.
   </Step>
   <Step>
-    Confirm the denial. The organizer receives a denial email explaining the reason.
+    Click **Confirm Denial**. The reservation status updates to **Denied** and the organizer receives a denial email that includes the reason. Click **Cancel** to dismiss the denial text area without taking action.
   </Step>
 </Steps>
 
 <Callout type="note">
   A denial reason is required so that organizers understand why their request was not approved and can make alternative arrangements or resubmit with adjustments.
 </Callout>
+
+### Deleting a Reservation
+
+The Delete button is available in the detail panel for any reservation, regardless of status. Deleting a reservation permanently removes it and cannot be undone. An confirmation dialog is shown before the delete is executed.
+
+<Callout type="warn">
+  Deletion is permanent. Use denial (not deletion) for requests that were reviewed and rejected — the denial record and reason are retained for reference. Only delete reservations that were entered in error or are otherwise no longer needed.
+</Callout>
+
+## Related pages
+
+- [Site Settings](/user-guide/site-settings) — controlling whether the Reserve Building page appears in navigation
+- [API: Building Reservations](/api-reference/reservations) — reservation submission and approval endpoints

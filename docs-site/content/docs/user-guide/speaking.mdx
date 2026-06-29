@@ -1,56 +1,179 @@
 ---
 title: "Speaking Schedule"
-description: "Track and manage speaking assignments across all wards from the Speaking Schedule page."
+description: "View the monthly High Council speaking rotation and manage ward assignments and topics from the Admin Hub."
 ---
 
-## What This Page Does
+The **High Council Speaking Schedule** page (`/leader/speaking`) is a read-only calendar that shows which High Councilor is assigned to speak at which ward each month, along with the monthly topic. Managing assignments and topics is done from the [Admin Hub](/user-guide/admin) at `/leader/admin?tab=speaking`.
 
-The Speaking Schedule page (`/leader/speaking`) provides a central view of who is speaking at each ward on each date. Stake leaders and clerks can add, edit, and remove assignments from this page.
+<Callout type="info">
+  Viewing the speaking schedule requires an authenticated leader account. Managing assignments requires the **MANAGE_SPEAKING_SCHEDULE** permission.
+</Callout>
 
-## Viewing the Schedule
+---
 
-The schedule is displayed as a table or calendar view. Each entry shows:
+## Viewing the Speaking Schedule
 
-| Field | Description |
-|-------|-------------|
-| Date | The Sunday (or other date) of the speaking assignment |
-| Ward | The ward where the speaker will speak |
-| Speaker | The name of the speaker |
-| Topic | The topic assigned to the speaker (optional) |
+Navigate to `/leader/speaking`. The page heading reads **High Council Speaking Schedule**. A toggle in the top-right corner switches between **Month View** and **Full Year**.
 
-You can scroll through past and future dates. Use the ward filter (if present) to narrow the view to a specific ward.
+### Month View
 
-## Adding a Speaking Assignment
+**Month View** is the default. It shows assignments for a single month at a time.
+
+**Navigating by month**
+
+Use the **left chevron** (`‹`) and **right chevron** (`›`) buttons next to the current month and year label (for example, `JUNE 2026`) to move backward or forward one month. When you navigate past December the year increments automatically; navigating before January decrements it.
+
+**Topic card**
+
+If a topic has been set for the current month, a card appears above the assignment grid displaying:
+
+- The topic text as a large heading.
+- The reference material (scripture or other source) below the topic, preceded by a book icon.
+
+If no topic has been set, the card shows **No topic set**.
+
+**Assignment cards**
+
+Below the topic card, the page renders a responsive grid of cards — one card per High Councilor who has a ward assignment that month. Each card shows:
+
+- A **ward badge** identifying the ward (for example, `3rd Ward`).
+- The **High Councilor's full name**.
+
+Cards are sorted by ward. If no assignments exist for the selected month, a placeholder message reads **No speaking assignments for this month.**
+
+**Not Speaking This Month**
+
+When at least one High Councilor has an assignment, a section labeled **Not Speaking This Month** appears below the grid. It lists, as outline badges, the names of all High Councilors who have no ward assignment for that month.
+
+### Full Year View
+
+Click **Full Year** to switch to the year view. This view displays a scrollable table where:
+
+| Axis | Content |
+|------|---------|
+| Rows | One row per High Councilor |
+| Columns | Twelve month columns (Jan – Dec), abbreviated |
+
+Each cell shows the **ward number** (for example, `3`) if that High Councilor has an assignment for that month, or a dim dot (`•`) if they are unassigned. The **High Councilor** column is sticky so names remain visible when scrolling horizontally.
+
+<Callout type="info">
+  The year displayed in Full Year view is the same year that was active when you were last in Month View. To view a different year, switch to Month View, navigate to a month in the desired year, and then switch back to Full Year.
+</Callout>
+
+---
+
+## Managing the Speaking Schedule (Admin Hub)
+
+Navigate to `/leader/admin?tab=speaking` to access the speaking management tools. This tab contains two sections: **Speaking Topics** and **Ward Schedule**.
+
+<Callout type="warn">
+  Both sections require the **MANAGE_SPEAKING_SCHEDULE** permission. If the tab is not visible, contact your stake clerk or system administrator.
+</Callout>
+
+### Year Navigation
+
+Both sections share the same year selector. Use the **left chevron** and **right chevron** buttons flanking the year dropdown, or click the dropdown directly to jump to a specific year. The available range spans two years before and two years after the current year. Changing the year reloads both sections simultaneously.
+
+---
+
+### Speaking Topics
+
+The **Speaking Topics** section lists all twelve months in a grid with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| **Month** | A colored status circle with the abbreviated month name, the full month name, and a status subtext |
+| **Topic** | A text input for the speaking topic |
+| **Reference Material** | A text input for a scripture or other reference source |
+| **Status** | A badge reflecting the current state of the row |
+| *(action)* | A **Save** or **Edit** button |
+
+**Topic status values**
+
+| Status | Badge color | Meaning |
+|--------|-------------|---------|
+| Planned | Green | A topic has been saved for this month. Inputs are locked. |
+| Unsaved | Amber | The topic has been edited locally but not yet saved. |
+| Empty | Red | No topic has been set or edited for this month. |
+
+**Adding or editing a topic**
 
 <Steps>
-  <Step title="Open the Add dialog">
-    Click the **Add Assignment** button (or the **+** icon) at the top of the page.
+  <Step title="Locate the month row">
+    Find the row for the month you want to update. An **Empty** row has no topic yet; a **Planned** row has a saved topic.
   </Step>
-  <Step title="Select a date">
-    Use the date picker to choose the date of the speaking assignment. Future dates are most common, but past dates can be recorded as well.
+  <Step title="Unlock the inputs if the row is Planned">
+    If the row status is **Planned**, the inputs are disabled. Click the **Edit** button on the right side of the row to unlock them. The status changes to **Unsaved**.
   </Step>
-  <Step title="Select a ward">
-    Choose the ward where the speaker will be speaking. All system wards are available in the dropdown.
+  <Step title="Enter the topic and reference material">
+    Type the speaking topic in the **Topic** field (placeholder: *Add topic…*). Optionally enter a scripture passage or other source in the **Reference Material** field (placeholder: *Add reference material…*).
   </Step>
-  <Step title="Enter the speaker's name">
-    Type the speaker's name. You may also be able to select from the list of portal users if the speaker has a portal account.
-  </Step>
-  <Step title="Enter a topic (optional)">
-    Type the talk topic in the topic field. This field is optional — if you leave it blank, the assignment still saves and appears in the schedule without a topic.
-  </Step>
-  <Step title="Save">
-    Click **Save**. The assignment appears in the schedule immediately.
+  <Step title="Save the row">
+    Click **Save** on the right side of the row. The status badge changes to **Planned** and the inputs lock again. A **Topic saved.** toast confirms success.
   </Step>
 </Steps>
 
-<Callout type="note">
-  The topic field is entirely optional. It is common to add the assignment first and fill in the topic once it has been confirmed with the speaker.
+<Callout type="info">
+  The **Save** button is disabled until the **Topic** field contains at least one non-whitespace character. The Reference Material field is optional.
 </Callout>
 
-## Editing an Assignment
+**Saving all unsaved topics at once**
 
-Click on an existing assignment row or its **Edit** button to open the edit dialog. All fields (date, ward, speaker name, topic) can be updated. Click **Save** to apply changes.
+If you have edited topics across multiple months without saving each individually, click **Save All Changes** in the bottom-right corner of the section. This submits all rows currently in **Unsaved** status in a single operation. An **All changes saved.** toast confirms success. If any individual save fails, the failed rows remain in **Unsaved** state and an error toast reports the count.
 
-## Removing an Assignment
+---
 
-Click the **Delete** or **Remove** button on an assignment row and confirm the prompt. The assignment is removed from the schedule immediately.
+### Ward Schedule
+
+The **Ward Schedule** section displays a table for assigning High Councilors to wards by month.
+
+**Table layout**
+
+| Axis | Content |
+|------|---------|
+| Rows | One row per High Councilor (with avatar and name, sticky left column) |
+| Columns | Twelve month columns (Jan – Dec, abbreviated) plus a trailing actions column |
+
+Each cell in the grid represents one High Councilor for one month. A colored badge showing the ward number (for example, `5`) appears when an assignment exists; a dim dash (`—`) appears when no ward is assigned.
+
+**Assigning or changing a ward for a cell**
+
+<Steps>
+  <Step title="Click the cell">
+    Click any cell in the schedule grid. The cell activates and a dropdown opens immediately, showing all wards in the stake plus a **— None** option at the top.
+  </Step>
+  <Step title="Select a ward">
+    Choose a ward from the list. The dropdown closes and the assignment is saved automatically. A **Schedule updated.** toast confirms success.
+  </Step>
+  <Step title="Remove an assignment">
+    To clear an existing assignment, click the cell and select **— None** from the top of the dropdown. The cell reverts to a dim dash.
+  </Step>
+</Steps>
+
+**Clearing an entire month**
+
+Each month column header includes a small **X** button beneath the abbreviated month label. Clicking it opens a confirmation dialog:
+
+> **Clear all [Month] assignments?**
+> This will remove every ward assignment for [Month] [Year]. This cannot be undone.
+
+Click **Clear** to proceed or **Cancel** to abort. A **Month cleared.** toast confirms success.
+
+**Clearing all assignments for a High Councilor**
+
+Each High Councilor row has a **trash icon** button on the far right. Clicking it opens a confirmation dialog:
+
+> **Clear all assignments for [Name]?**
+> This will remove every ward assignment for [Name] in [Year]. This cannot be undone.
+
+Click **Clear** to proceed or **Cancel** to abort. A **Schedule cleared.** toast confirms success.
+
+<Callout type="warn">
+  Clearing a month or a High Councilor's assignments for the year cannot be undone from within the portal. Assignments must be re-entered manually afterward.
+</Callout>
+
+## Related pages
+
+- [Admin Hub](/user-guide/admin) — overview of all Admin Hub tabs
+- [HC Assignments](/user-guide/assignments) — High Councilor slot details and responsibility editing
+- [Releases & Sustainings](/user-guide/sustainings) — preparing verbatim sustaining language

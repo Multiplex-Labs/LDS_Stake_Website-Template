@@ -1,7 +1,9 @@
 ---
 title: "Appointments"
-description: "Book, reschedule, and cancel Temple Recommend interviews online. Admins can manage appointment types, interviewer availability windows, and blocked-out dates."
+description: "Book, reschedule, and cancel Temple Recommend interviews online. Admins can manage appointment types, availability windows, and exceptions."
 ---
+
+The Appointments system lets members book Temple Recommend interviews online at `/stake-info/temple-recommend`. Administrators configure appointment types, availability, and exceptions from the Admin Hub.
 
 ## Member Guide
 
@@ -36,14 +38,14 @@ The appointment booking page is publicly accessible — you do not need a portal
 
 ### Rescheduling an Appointment
 
-If you need to change your appointment time, use the rescheduling link included in your confirmation email, or navigate directly to `/appointments/reschedule`.
+Rescheduling is done exclusively through the link in your confirmation email. The link contains a secure token that identifies your booking — the reschedule page cannot be used without it.
 
 <Steps>
   <Step>
-    Open the reschedule link from your confirmation email, or go to `/appointments/reschedule`.
+    Open your confirmation email and click the **Reschedule** link.
   </Step>
   <Step>
-    Enter the email address you used when booking.
+    The page verifies your token automatically and loads your booking details. If the link has already been used or is invalid, you will see a "Link not found" message — book a new appointment at `/stake-info/temple-recommend` in that case.
   </Step>
   <Step>
     Select a new date and time slot following the same steps as a new booking.
@@ -53,16 +55,20 @@ If you need to change your appointment time, use the rescheduling link included 
   </Step>
 </Steps>
 
+<Callout type="warning">
+  Appointments cannot be rescheduled within 24 hours of the scheduled time. If you are within the cutoff window, contact your stake clerk directly.
+</Callout>
+
 ### Cancelling an Appointment
 
-To cancel, use the cancellation link in your confirmation email, or go to `/appointments/cancelled`.
+Cancellation is handled through the link in your confirmation email. Clicking the cancellation link processes the cancellation immediately — no further confirmation step is required on your end.
 
 <Steps>
   <Step>
-    Open the cancellation link from your confirmation email, or navigate to `/appointments/cancelled`.
+    Open your confirmation email and click the **Cancel Appointment** link.
   </Step>
   <Step>
-    Confirm the cancellation when prompted.
+    The cancellation is processed automatically. You are redirected to a confirmation page at `/appointments/cancelled` that confirms your appointment has been removed.
   </Step>
   <Step>
     A cancellation notification is sent to both you and the interviewer.
@@ -77,7 +83,7 @@ To cancel, use the cancellation link in your confirmation email, or go to `/appo
 
 ## Admin Guide
 
-Admin features require the `MANAGE_APPOINTMENTS` permission and are accessible from the admin panel in the Leader Portal.
+Admin features require the `MANAGE_APPOINTMENTS` permission and are accessible at `/leader/admin?tab=temple-recommend` in the Leader Portal.
 
 ### Managing Appointment Types
 
@@ -154,3 +160,9 @@ The **Bookings** view lists all appointment requests. Use the status filter to n
 | Rescheduled | Appointment was moved to a new date/time |
 
 Click any booking row to see full details, including the member's name, email, selected appointment type, and scheduled time.
+
+## Related pages
+
+- [Admin Hub](/user-guide/admin) — Appointment Manager tab overview
+- [Site Settings](/user-guide/site-settings) — controlling whether the Temple Recommends page is visible in navigation
+- [API: Appointments](/api-reference/appointments) — appointment types, availability, and booking endpoints

@@ -3,8 +3,6 @@ title: Introduction
 description: LDS Stake Portal — a self-hosted management system for stake leaders
 ---
 
-# LDS Stake Portal
-
 The LDS Stake Portal is an open-source, self-hosted web application for managing the administrative work of an LDS stake. It provides stake leaders with a secure, private portal for tracking callings, High Council assignments, speaking schedules, and sustaining records — all in one place.
 
 ## Who is this for?
@@ -36,10 +34,10 @@ The LDS Stake Portal is an open-source, self-hosted web application for managing
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Vite, Express proxy, shadcn/ui |
+| Frontend | React 19, Vite, Express proxy, shadcn/ui, Tailwind CSS |
 | Backend | FastAPI (Python 3.11+), SQLModel, SQLite / PostgreSQL |
-| Auth | JWT (access token in memory + HttpOnly refresh cookie) |
-| Discord bot | discord.py + FastAPI (port 8001) |
+| Auth | JWT — short-lived access token in memory + HttpOnly refresh cookie |
+| Discord bot (optional) | discord.py + FastAPI (port 8001) |
 
 ## Quick links
 

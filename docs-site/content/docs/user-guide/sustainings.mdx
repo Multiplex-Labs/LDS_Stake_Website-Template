@@ -1,35 +1,122 @@
 ---
 title: "Releases & Sustainings"
-description: "View verbatim sustaining and release language for each ward, ready to read aloud in sacrament meeting."
+description: "Prepare and view verbatim sustaining, release, and ordination language for each ward's sacrament meeting."
 ---
 
-## Accessing the Page
+The Releases & Sustainings workflow has two pages that work together:
 
-Navigate to `/leader/sustainings`. This page provides the verbatim language a bishop or presiding officer reads when sustaining or releasing members in a sacrament meeting.
+1. **Sustainings Prep** (`/leader/callings/sustainings-prep`) — A drag-and-drop tool for arranging proposals from the Kanban board into per-ward sustaining lists and adding priesthood ordination entries. Requires the `MANAGE_CALLING_PROPOSALS` permission.
+2. **Releases & Sustainings** (`/leader/sustainings`) — A read-only view that renders the verbatim sacrament meeting language built from the prep state. Any authenticated user can access this page.
 
-## Ward Tabs
+The two pages link to each other. On the Releases & Sustainings page, users with the correct permission see a **Prepare Form** button. On the Sustainings Prep page, a **Previous Page** button returns to the viewer.
 
-At the top of the page is a row of tabs — one tab per ward in the stake. Click a ward's tab to switch to that ward's sustaining content.
+---
 
-Each tab displays the formatted sustaining and release language specific to that ward. You can navigate freely between wards without losing your place.
+## Part 1: Sustainings Prep Tool
 
-## Reading the Language
+Navigate to `/leader/callings/sustainings-prep`. This page is only accessible to users with the `MANAGE_CALLING_PROPOSALS` permission. All others receive an access-denied message.
 
-The text displayed under each ward tab is the exact, verbatim language to be read aloud. It is formatted for ease of reading in a sacrament meeting setting. No editing or reformatting is needed before use.
+### Layout
+
+The page is divided into two areas:
+
+- **Left panel (Unassigned Callings)** — A sticky pool containing all proposals currently at the **Sustain** stage (stage 3) of the Kanban pipeline, plus any ordination entries you have added manually. A search box filters the pool by name, calling, or ward.
+- **Right panel (Ward drop zones)** — A two-column grid of collapsible drop targets, one for **Stake** and one for each ward in the stake.
+
+Each card in the pool is color-coded by type:
+- Blue left border — new calling
+- Red left border — release
+- Secondary left border — priesthood ordination
+
+### Dragging Proposals into Ward Zones
+
+To assign a name to a ward's sustaining list, drag its card from the Unassigned Callings pool and drop it onto the appropriate ward drop zone on the right. The drop zone highlights when a card is held over it, and it opens automatically when a card is dropped into it.
+
+To move a card between ward zones, drag it from one drop zone to another. To return a card to the unassigned pool, drag it from a ward zone and drop it onto the pool panel on the left.
+
+Each ward zone shows a **Pending** badge with the count of items currently assigned to it.
 
 <Callout type="info">
-  The sustaining language follows the format used by The Church of Jesus Christ of Latter-day Saints for conducting sustainings in sacrament meetings. It includes the names of those being called or released and the appropriate congregational response prompt.
+  The pool is reconciled against the live Kanban board each time the page loads. New proposals that reached stage 3 since the last session are added automatically. Proposals that have moved out of stage 3 are removed from wherever they were placed.
 </Callout>
 
-## Sustainings Prep Tool
+### Adding Priesthood Ordination Entries
 
-The verbatim language on this page is built from proposals that have reached the **Sustain** stage in the calling Kanban pipeline. To manage which names appear and in what order, use the **Sustainings Prep** tool at `/leader/callings/sustainings-prep`.
+Calling proposals on the Kanban board do not cover Melchizedek Priesthood ordinations. To add an ordination, click the **Add Ordination** button in the toolbar. A dialog opens where you enter:
 
-The Sustainings Prep tool lets you:
+- **First Name** (required)
+- **Last Name** (required)
+- **Office** — Elder or High Priest (required)
 
-- Drag calling proposals and ordination entries into per-ward sustaining lists
-- Assign a sacrament meeting date for each ward
-- Reorder names within each list
-- Save the prepared list locally and reload it in a later session
+Clicking **Add to Pool** places the ordination entry into the Unassigned Callings pool. It can then be dragged into any ward zone like a calling proposal. Ordination entries are local only — they are not backed by any backend record.
 
-Once your list is ready, return to `/leader/sustainings` to see the formatted verbatim language incorporating the arranged names.
+### Setting the Sacrament Meeting Date
+
+A date picker in the toolbar lets you record the sacrament meeting date for the sustainings. Click the button labeled **Select date** (or the currently selected date) to open a calendar popover. Select a date using the month and year dropdowns, then click the day. The selected date appears in the toolbar button label.
+
+This date is stored in the local prep state. It is available to the viewer page but is not currently rendered in the printed verbatim language.
+
+### Saving State
+
+The prep state is saved automatically to `localStorage` after every change. There is no Save button — every drag, drop, date selection, and ordination addition is persisted immediately. The state is restored the next time the page loads.
+
+To discard all assignments and start over, click **Clear All** in the toolbar. This removes all ward assignments, returns all proposals to the unassigned pool, and deletes ordination entries. The action is immediate and cannot be undone.
+
+<Callout type="warning">
+  The prep state is stored in the browser's local storage. It is specific to the device and browser where it was saved. If you prepare the form on one device and then open the viewer on a different device, the viewer will show no content.
+</Callout>
+
+---
+
+## Part 2: Releases & Sustainings Viewer
+
+Navigate to `/leader/sustainings`. Any authenticated user can view this page.
+
+### Ward Selector
+
+When prep state is present, a row of toggle buttons appears below the page header — one button for **Stake** and one for each ward that has at least one release, ordination, or sustaining assigned to it. Wards with no entries are hidden automatically.
+
+Click a toggle button to switch to that ward's content. Only one ward is active at a time. The Stake toggle (if it has entries) appears first; ward toggles follow in numeric order.
+
+<Callout type="info">
+  The ward selector uses a ToggleGroup component, not a tab strip. Functionally it behaves like tabs, but the visual style is a set of outlined buttons rather than a tabbed bar.
+</Callout>
+
+### Empty State
+
+If no prep state exists, or if the prep state contains no entries in any ward zone, the page displays:
+
+> No Stake Business at this time
+> There are no releases, ordinations, or sustainings scheduled.
+
+Use the **Prepare Form** button (visible to users with `MANAGE_CALLING_PROPOSALS`) to navigate to the Sustainings Prep tool and build the list.
+
+### Content Structure
+
+Each ward's content is divided into three sections, rendered in this order:
+
+1. **Release** — Lists individuals being released with their name and calling. If no releases are assigned to the ward, displays "No releases at this time." The verbatim text uses the standard Church language for expressing appreciation.
+2. **Priesthood Ordinations** — Lists each ordination entry with verbatim proposal language for the office (Elder or High Priest). This section is hidden entirely if no ordinations are assigned to the ward.
+3. **Sustainings** — Lists individuals being sustained with their name and calling. If no sustainings are assigned, displays "No sustainings at this time." The verbatim text uses the standard language for the uplifted-hand vote.
+
+For the Stake view, each row also shows the ward the person belongs to. In ward-specific views, the ward column is omitted.
+
+### Stake Items in Ward Views
+
+If the Stake ward zone has any entries in the prep state, those items are automatically included in the content of every ward that also has its own entries. This allows stake-level callings to be read in each individual ward's sacrament meeting without duplicating the prep work.
+
+### Printing
+
+Click the **Print** button to open the browser's print dialog. The navigation bar and page footer are hidden in the print layout so only the sustaining language is printed.
+
+### Navigation Buttons
+
+Two buttons appear at the top of the viewer (hidden on print):
+
+- **Previous Page** — returns to `/leader/calling-system` (the Calling Tracker index).
+- **Prepare Form** — navigates to `/leader/callings/sustainings-prep` to edit the prep state. This button is only visible to users with the `MANAGE_CALLING_PROPOSALS` permission.
+
+## Related pages
+
+- [Manage Callings (Kanban Board)](/user-guide/callings/manage) — advance proposals to the Sustain stage where they become available in the Prep Tool
+- [Speaking Schedule](/user-guide/speaking) — monthly High Councilor speaking assignments

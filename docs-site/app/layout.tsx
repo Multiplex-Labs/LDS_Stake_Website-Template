@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import 'fumadocs-ui/style.css';
+import 'fumadocs-openapi/css/preset.css';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (

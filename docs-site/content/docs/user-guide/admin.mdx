@@ -1,0 +1,123 @@
+---
+title: "Admin Hub"
+description: "The central editing interface for stake data — manage users, callings, wards, speaking assignments, high council assignments, presidency assignments, and appointment settings."
+---
+
+The Admin Hub at `/leader/admin` is the primary place for stake leaders to edit portal data. Most view-only pages in the Leader Portal have their editing counterparts here, organized into tabs.
+
+<Callout type="info">
+  Access to the Admin Hub requires an authenticated portal account. Individual tabs may require specific permissions — see each section below for details.
+</Callout>
+
+## Tabs at a Glance
+
+| Tab | URL | Permission required | What you can manage |
+|-----|-----|---------------------|---------------------|
+| **Users** | `/leader/admin?tab=users` | `MANAGE_USERS` | Create, edit, and deactivate leader accounts; assign callings; upload profile photos |
+| **Callings** | `/leader/admin?tab=callings` | `MANAGE_CALLINGS` | Define calling names, slot counts, and visibility settings |
+| **Wards** | `/leader/admin?tab=wards` | `MANAGE_WARDS` | Edit ward names and sacrament meeting start times |
+| **Speaking Assignments** | `/leader/admin?tab=speaking` | `MANAGE_SPEAKING_SCHEDULE` | Assign wards to HC slots by month; set monthly speaking topics |
+| **HC Assignments** | `/leader/admin?tab=hc-assignments` | `MANAGE_ASSIGNMENTS` | Edit each slot's responsibility text and committee label |
+| **Presidency Assignments** | `/leader/admin?tab=presidency` | `MANAGE_ASSIGNMENTS` | Manage Stake Presidency member ward and responsibility assignments |
+| **Appointment Manager** | `/leader/admin?tab=temple-recommend` | `MANAGE_APPOINTMENTS` | Configure Temple Recommend appointment types, interviewer availability, and scheduling exceptions |
+
+<Callout type="note">
+  The Appointment Manager tab is only visible to accounts with the `MANAGE_APPOINTMENTS` permission. If you do not see it, contact your system administrator.
+</Callout>
+
+---
+
+## Users tab
+
+Manage portal accounts from `/leader/admin?tab=users`. The link `/leader/user-admin` redirects here automatically.
+
+You can add new users, edit names and contact details, assign callings, upload profile photos, reset passwords, and deactivate or delete accounts.
+
+See the [User Administration guide](/user-guide/user-admin) for a complete walkthrough.
+
+---
+
+## Callings tab
+
+Manage the list of named callings used throughout the portal from `/leader/admin?tab=callings`.
+
+From this tab you can:
+
+- Add new calling names for your stake.
+- Set the maximum number of slots (concurrent holders) for a calling.
+- Control whether a calling appears on public-facing pages.
+
+<Callout type="note">
+  The three system callings — **High Councilor**, **Stake Presidency**, and **Bishop** — are created automatically on first boot and cannot be deleted. Their slot counts and visibility settings can still be edited.
+</Callout>
+
+---
+
+## Wards tab
+
+Edit ward records from `/leader/admin?tab=wards`.
+
+You can update ward display names and adjust sacrament meeting start times. Ward names appear throughout the portal on assignment tables, speaking schedules, and calling proposals.
+
+<Callout type="info">
+  Adding a new ward requires editing `backend/wards.csv` and restarting the backend. New rows in the CSV are picked up automatically on the next restart without affecting existing records. See [First Run and Bootstrap](/deployment/first-run) for the CSV format.
+</Callout>
+
+---
+
+## Speaking Assignments tab
+
+Manage the High Council speaking rotation from `/leader/admin?tab=speaking`.
+
+This tab has two sections:
+
+- **Speaking Topics** — set the monthly topic and reference material for the year.
+- **Ward Schedule** — assign each High Councilor to a ward for each month.
+
+See the [Speaking Schedule guide](/user-guide/speaking) for step-by-step instructions on both sections.
+
+---
+
+## HC Assignments tab
+
+Edit High Councilor responsibility and committee details from `/leader/admin?tab=hc-assignments`.
+
+Each row corresponds to a High Councilor slot. You can update:
+
+- **Responsibility** — the stake assignment areas the High Councilor covers (displayed as badges).
+- **Committee** — the committee label shown on the assignments page.
+
+See the [HC Assignments guide](/user-guide/assignments) for more detail.
+
+---
+
+## Presidency Assignments tab
+
+Manage Stake Presidency ward oversight from `/leader/admin?tab=presidency`.
+
+From this tab you can update the wards and responsibilities assigned to each presidency member. Changes appear on the Stake Leadership public page.
+
+---
+
+## Appointment Manager tab
+
+Configure Temple Recommend scheduling from `/leader/admin?tab=temple-recommend`. This tab is only visible to accounts with the `MANAGE_APPOINTMENTS` permission.
+
+From this tab you can:
+
+- Add or edit **appointment types** (e.g., Temple Recommend, Limited Use Recommend).
+- Set **availability windows** — recurring days and hours when interviewers are available.
+- Add **availability exceptions** — blocked dates for individual interviewers or all interviewers.
+- Review and manage incoming **bookings**.
+
+See the [Appointments guide](/user-guide/appointments) for a full walkthrough.
+
+---
+
+## Related pages
+
+- [User Administration](/user-guide/user-admin) — detailed user management guide
+- [HC Assignments](/user-guide/assignments) — viewing and editing HC slot details
+- [Speaking Schedule](/user-guide/speaking) — setting topics and ward assignments
+- [Appointments](/user-guide/appointments) — appointment type and availability configuration
+- [Site Settings](/user-guide/site-settings) — stake name, logo, and navigation visibility
