@@ -141,6 +141,28 @@ class DiscordBotHandle:
         return self._post("/kanban/request-approval/", json=body) is not None
 
     @require_enabled()
+    def send_interview_reminder(
+        self,
+        proposal_id: int,
+        interviewer_email: str,
+        person: str,
+        calling: str,
+        ward: str,
+        is_release:bool,
+        url=""):
+        """Let an interviewer know that they were assigned an interview."""
+        body = {
+            "proposal_id": proposal_id,
+            "interviewer_email": interviewer_email,
+            "person": person,
+            "calling": calling,
+            "ward": ward,
+            "url":url,
+            "is_release":is_release
+        }
+        return self._post("/kanban/schedule-interview", json=body) is not None
+    
+    @require_enabled()
     def send_backup(self, markdown: str, filename: str | None = None) -> bool:
         """Send markdown to the Discord bot backups route to be converted and posted.
 

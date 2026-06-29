@@ -7,6 +7,7 @@ from discord.ext.commands import Bot, Cog
 from dotenv import load_dotenv
 from rich.console import Console
 from sqlmodel import select
+from typing import List
 
 from .utils import BackendClient
 
@@ -51,7 +52,32 @@ class LDSStakeBot(Bot):
                     member = guild.get_member(user.discord_user_id)
                     if member:
                         return member
-
+        self.logger.warning(f"Could not find user with email: {email}")
+                    
+    async def get_user_by_role(self, role: str) -> List[Member]:
+        """
+        Get all guild members that have a specific role.
+        
+        Args:
+            role: The name of the role to search for
+            
+        Returns:
+            A list of Member objects that have the specified role
+        """
+        users = []
+        
+        for guild in self.guilds:
+            # Find the role by name in the guild
+            guild_role = next((r for r in guild.roles if r.name == role), None)
+            
+            # If role found, get all members with that role
+            if guild_role:
+                for member in guild.members:
+                    if guild_role in member.roles:
+                        users.append(member)
+        
+        return users
+    
 from .cogs import UserMappingCog, ChannelsAndRolesCog, BackupsCog
 
 async def initialize_bot() -> LDSStakeBot:

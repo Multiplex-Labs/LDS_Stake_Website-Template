@@ -23,6 +23,7 @@ class ChannelsAndRolesCog(Cog):
             view_channel=True,
         ),
         "Stake Technology Specialist": Permissions.all(),
+        "Stake Executive Secretary": Permissions().all()
     }
 
     CHANNEL_CONFIG = [

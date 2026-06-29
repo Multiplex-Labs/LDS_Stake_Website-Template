@@ -3,7 +3,7 @@ import logging
 from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import View, button, Button
 from .base_hook import BaseHook
-from ...models import KanbanUpdateRequest, KanbanApprovalRequest
+from ...models import KanbanUpdateRequest, KanbanApprovalRequest, InterviewRequest
 from ..bot import LDSStakeBot
 
 class ApprovalView(View):
@@ -57,7 +57,7 @@ class KanbanHook(BaseHook):
         """
         user = await self.bot.get_user_by_email(approval.approver_email)
         if user:
-            view = ApprovalView(approval.proposal_id, self.bot, approval.approver_email)
+            view = ApprovalView(str(approval.proposal_id), self.bot, approval.approver_email)
             message = (
                 f"## 🛠️ Calling Approval Request\n\n"
                 f"**Proposal ID:** `{approval.proposal_id}`\n"
@@ -68,3 +68,31 @@ class KanbanHook(BaseHook):
                 f"Please review the update and click Approve or Reject."
             )
             self._send_dm(user.id, message, view=view)
+
+    async def send_interview_request(self, interview: InterviewRequest):
+        """
+        Send interview scheduling reminders to the interviewer and stake executive secretary
+        """
+        interviewer = await self.bot.get_user_by_email(interview.interviewer_email)
+        if interviewer:
+            message = (
+                f"## You have been assigned a {'release' if interview.is_release else 'calling'} interview\n\n"
+                f"**Proposal ID:** `{interview.proposal_id}`\n\n"
+                f"**Person:** `{interview.person}`\n\n"
+                f"**Calling:** `{interview.calling}`\n\n"
+                f"**Ward:** `{interview.ward}`\n\n"
+                f"Please coordinate with the Stake Executive Secretary to schedule an interview time"
+            )
+            self._send_dm(interviewer.id, message)
+        exec_sec = await self.bot.get_user_by_role("Stake Executive Secretary")
+        if len(exec_sec) > 0:
+            exec_sec = exec_sec[0]
+            interviewer_name = interviewer.nick if interviewer else interview.interviewer_email
+            message = (
+                f"## {interviewer_name} been assigned a {'release' if interview.is_release else 'calling'} interview\n\n"
+                f"**Proposal ID:** `{interview.proposal_id}`\n\n"
+                f"**Person:** `{interview.person}`\n\n"
+                f"**Calling:** `{interview.calling}`\n\n"
+                f"**Ward:** `{interview.ward}`\n\n"
+                f"Please coordinate with {interviewer_name} and {interview.person} to schedule an interview time"
+            )

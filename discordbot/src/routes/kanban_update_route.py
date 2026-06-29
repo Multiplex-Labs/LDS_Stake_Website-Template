@@ -2,7 +2,7 @@ from logging import getLogger
 
 from fastapi import APIRouter, Depends, Request
 
-from ..models import KanbanUpdateRequest, KanbanApprovalRequest
+from ..models import KanbanUpdateRequest, KanbanApprovalRequest, InterviewRequest
 from ..utils.auth import require_backend_token
 
 logger = getLogger("application")
@@ -30,3 +30,14 @@ async def request_approval(approval_request: KanbanApprovalRequest, request: Req
     # Send approval request to approver
     await request.app.state.bot.kanban_hook.send_approval_request(approval_request)
     return {"message": "Kanban update approval requested successfully!"}
+
+@router.post("/schedule-interview")
+async def schedule_interview(interview_request: InterviewRequest, request: Request):
+    """
+    Let Stake Executive Sec and interviewer know that there is a request to schedule an interview for a calling
+    """
+
+    logger.info("Recieved interview request for proposal id: %s", interview_request.proposal_id)
+
+    await request.app.state.bot.kanban_hook.send_interview_request(interview_request)
+    return {"message": "Interview requested successfully!"}

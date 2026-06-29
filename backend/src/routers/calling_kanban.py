@@ -485,6 +485,7 @@ def remind_all_overdue(
 # CallingInterview endpoints
 @router.post("/proposals/{proposal_id}/interview", response_model=CallingInterview)
 def schedule_interview(
+    request: Request,
     proposal_id: int,
     interviewer_id: int,
     session: Session = Depends(get_session),
@@ -506,6 +507,18 @@ def schedule_interview(
     session.add(interview)
     session.commit()
     session.refresh(interview)
+
+    ward = session.get(Ward, interview.proposal.ward_id)
+
+    interviewee = " ".join([interview.proposal.fname, interview.proposal.lname])
+    request.app.state.discord_bot.send_interview_reminder(
+        proposal_id,
+        interviewer.email,
+        interviewee,
+        interview.proposal.proposed_calling,
+        ward.name if ward else "",
+        interview.proposal.is_release
+    )
     return interview
 
 @router.post("/proposals/{proposal_id}/interview/complete", response_model=CallingInterview)
