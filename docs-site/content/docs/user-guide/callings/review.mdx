@@ -1,48 +1,105 @@
 ---
 title: "Review Calling Proposals"
-description: "Stake Presidency members approve calling proposals from the Review page before they advance in the pipeline."
+description: "Approve or deny calling proposals as a Stake Presidency or High Council member from the Review page."
 ---
 
-## Accessing the Page
+The Review page (`/leader/callings/review`) is where Stake Presidency and High Council members cast approval votes on calling proposals. Viewing requires the `VIEW_CALLING_PROPOSALS` permission; voting additionally requires holding a qualifying calling.
 
-Navigate to `/leader/callings/review`. This page is primarily used by **Stake Presidency members** to review and approve newly submitted calling proposals.
+<Callout type="note">
+  Release proposals do not appear on this page. They skip approval stages and enter the Kanban board at the Interview stage.
+</Callout>
 
 ## What Appears Here
 
-The Review page shows all proposals currently in the **SP Approval** stage — these are new calling proposals that have been submitted but have not yet received enough approvals to advance to the High Council Approval stage.
+The Review page contains two independent sections:
+
+- **Stake Presidency Review** — proposals currently in the **SP Approval** stage (stage 0)
+- **High Council Review** — proposals currently in the **HC Approval** stage (stage 1)
+
+Each section renders a table with columns: Name, Calling/Assignment, Ward, Approvals, and Date Submitted.
 
 <Callout type="note">
-  Release proposals do not appear on this page. Because releases skip the SP Approval stage, they enter the pipeline at the Interview stage and are managed directly on the [Manage (Kanban)](/user-guide/callings/manage) page.
+  Release proposals do not appear on this page. Releases skip both approval stages and enter the pipeline at the Interview stage, so they are managed directly on the [Manage (Kanban)](/user-guide/callings/manage) board.
 </Callout>
 
-## Approving a Proposal
+Rows where you have already submitted a vote are visually dimmed, and the Approvals column shows a **Voted** badge in place of the approval count.
 
-Each proposal card shows the candidate's name, proposed calling, ward, and submitter. To approve:
+## Opening a Proposal
 
-1. Locate the proposal you want to approve.
-2. Click the **Approve** button on the proposal card.
-3. Your approval is recorded individually — each Stake Presidency member approves independently.
+Click any row to open the proposal dialog. The dialog contains two tabs.
 
-Your approval is personal and tied to your portal account. The system keeps a running count of approvals per proposal.
+### Details tab
 
-## The SP Approval Threshold
+Shows three information cards:
 
-When a proposal accumulates enough SP approvals, it **automatically advances** to the HC Approval stage. The required number of approvals is controlled by the `SP_APPROVAL_THRESHOLD` environment variable (default: **2**).
+- **Candidate** — member's first name, last name, and spouse name (if provided), and their ward
+- **Recommendation** — the proposed calling, the proposal type (New Calling or Release), and the submission date
+- **Review Status** — the current approval stage, a live count of approvals and denials from eligible reviewers, and your voting access (Can vote / Voting only / Already voted)
 
-<Callout type="info">
-  The threshold is configured by your system administrator. If you are unsure what the current threshold is, check with your clerk or the person who manages the portal backend.
-</Callout>
+If you do not hold the calling required to vote at the current stage, a notice in the Review Status card explains that you are viewing the proposal in read-only mode.
 
-Once the threshold is reached, the proposal disappears from this Review page and appears in the **HC Approval** column on the [Manage (Kanban)](/user-guide/callings/manage) board.
+### Votes tab
 
-## Withdrawing Your Approval
+Shows every eligible reviewer for the current stage with their vote status:
 
-If you approved a proposal in error or change your mind, you can withdraw your approval by clicking the **Withdraw Approval** button (or by clicking the Approve button again to toggle it off). Setting your approval to withdrawn sets your vote to `approved=false` and reduces the approval count.
+| Status | Meaning |
+|--------|---------|
+| **Approved** (green badge) | This reviewer submitted an approval |
+| **Denied** (red badge) | This reviewer submitted a denial |
+| **Pending** (outline badge) | This reviewer has not yet voted |
+
+The tab header badge shows the total number of votes submitted so far.
+
+## Who Can Vote
+
+Voting rights are determined by your portal calling assignment, not by your permission level alone.
+
+| Stage | Eligible voters |
+|-------|----------------|
+| Stake Presidency Review | Users assigned to the **Stake President**, **Stake First Counselor**, or **Stake Second Counselor** calling |
+| High Council Review | Users assigned to the **High Councilor** calling |
+
+If you have the `VIEW_CALLING_PROPOSALS` permission but do not hold one of the above callings for the stage you are viewing, the Approve and Deny buttons will not appear and the dialog will note that you are viewing only.
+
+## Approving or Denying a Proposal
+
+When you are an eligible voter and have not yet voted on a proposal, the dialog footer shows two buttons:
+
+- **Deny** — records your vote as a denial
+- **Approve** — records your vote as an approval
+
+Click the appropriate button. The dialog closes, the board data refreshes, and a toast notification confirms your action.
 
 <Callout type="warn">
-  Withdrawing your approval may cause a proposal to fall back below the threshold if other approvals were also withdrawn, but the system does not automatically move a proposal backward once it has advanced. Stage movements are one-directional in normal operation.
+  Votes are final in the UI. Once you submit either Approve or Deny, both buttons are disabled for that proposal and cannot be changed from this page. If a vote was submitted in error, contact your clerk or system administrator.
 </Callout>
 
-## Proposal Details
+## The Approval Threshold
 
-Click the proposal card or its **Details** button to see full information: the candidate's full name, proposed calling, ward, submitter, submission date, and any comments that have been added.
+Each approval stage has a configurable threshold. When the number of approvals for a proposal reaches the threshold, the system **automatically advances** the proposal to the next stage.
+
+| Stage | Threshold environment variable | Default |
+|-------|-------------------------------|---------|
+| SP Approval | `SP_APPROVAL_THRESHOLD` | 2 |
+| HC Approval | `HC_APPROVAL_THRESHOLD` | 3 |
+
+When a proposal auto-advances, it disappears from its current section on this page and appears in the next column on the Manage board.
+
+<Callout type="info">
+  Thresholds are configured by your system administrator in the backend environment variables. Contact your clerk if you are unsure what values are currently set.
+</Callout>
+
+## Error States
+
+| Error | Cause |
+|-------|-------|
+| Already Voted | Your account already has a vote on record for this proposal at this stage. Votes cannot be changed from the UI. |
+| Not Authorized | Your account does not hold an eligible calling for this stage. |
+| Stage Changed | The proposal moved to a new stage between when you opened the dialog and when you clicked a button. Close the dialog, refresh the page, and check the current stage. |
+| Proposal Not Found | The proposal was deleted before you submitted your vote. Refresh the page. |
+
+## Related pages
+
+- [Submit a Calling Proposal](/user-guide/callings/submit) — create new calling recommendations and releases
+- [Manage Callings (Kanban Board)](/user-guide/callings/manage) — advance proposals through the pipeline after approval
+- [Environment Variables](/deployment/environment) — `SP_APPROVAL_THRESHOLD` and `HC_APPROVAL_THRESHOLD` settings

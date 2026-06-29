@@ -1,84 +1,235 @@
 ---
 title: "Upgrading"
-description: "How to safely apply updates, run migrations, and restart the Stake Portal services."
+description: "How to pull updated images, apply migrations, and roll back to a previous version."
 ---
 
-Follow these steps in order every time you update to a new version of the portal. Skipping steps — especially running migrations after restarting the backend — can leave the application in an inconsistent state.
+Choose the upgrade path that matches your deployment type.
 
-## Upgrade Steps
+<Callout type="info">
+  **CI builds are manual.** The GitHub Actions workflow (`build-push.yml`) uses `workflow_dispatch` and must be triggered manually — it does not run automatically on every commit or push to `main`. Before pulling, confirm that a new image build has been triggered and completed: go to the Actions tab in GitHub, select "Build and Push Docker Images", and check the run history.
+</Callout>
 
-### 1. Pull the latest code
+---
+
+## Production: Docker Compose (Pre-Built Images)
+
+This is the standard path for any production server running GHCR images.
+
+<Steps>
+<Step>
+**Check the release notes**
+
+Review the changelog or release notes before proceeding. Some releases include migration-specific instructions (e.g., data backfills, configuration changes, or manual steps) that must be completed before or after running containers.
+</Step>
+<Step>
+**Pull the updated images**
+
+```bash
+cd /opt/lds-stake-portal
+docker compose pull
+```
+
+This fetches the latest `latest`-tagged images from GHCR for all services. No source code is downloaded.
+</Step>
+<Step>
+**Restart services with the new images**
+
+```bash
+docker compose up -d
+```
+
+Docker Compose recreates only the containers whose images have changed. The backend runs Alembic migrations automatically at startup (`RUN_MIGRATIONS=true` by default).
+</Step>
+<Step>
+**Verify the upgrade**
+
+```bash
+docker compose ps
+docker compose logs -f backend
+curl http://localhost:8000/health
+```
+
+Confirm all services show `healthy` or `running` and that the backend logs show "Application startup complete."
+</Step>
+<Step>
+**Remove old images** (optional)
+
+```bash
+docker image prune -f
+```
+
+This removes dangling (untagged) images left behind by the update. It does not affect named volumes or running containers.
+</Step>
+</Steps>
+
+<Callout type="warn">
+  Do not use `docker compose up -d --build`. For production image-based deployments, `--build` forces Docker to rebuild all images from the local source tree — which requires the full repository checkout and all build dependencies on the host, and produces images that have not been scanned or published through CI. Use `docker compose pull` to get the tested, published images instead.
+</Callout>
+
+---
+
+## Triggering a New Build (Maintainers and Fork Operators)
+
+New images are not built automatically on push. To publish updated images:
+
+1. Push your changes to GitHub (or merge a pull request to `main`)
+2. Go to the Actions tab in your repository on GitHub
+3. Select the "Build and Push Docker Images" workflow
+4. Click "Run workflow" and confirm
+
+The workflow builds all four service images in parallel, scans each with Trivy for critical vulnerabilities, and pushes to GHCR only if the scan passes. Each build produces two tags per image:
+
+- `latest` — moves on every successful build
+- `sha-<7-char-commit-sha>` — an immutable tag referencing the exact build (e.g., `sha-f371827`)
+
+---
+
+## Pinning to a Specific Build
+
+The `sha-<7-char>` tag lets you pin to an exact image version. This is useful for staging environments or when you want explicit control over which version is running in production.
+
+To pin all services to a specific build, update the `image:` lines in your `docker-compose.yml`:
+
+```yaml
+backend:
+  image: ghcr.io/rc27122/lds_stake_website-template-2/backend:sha-f371827
+```
+
+Find available SHA tags in the GHCR package pages for the repository.
+
+To return to floating on `latest`, change the tag back to `:latest` and run `docker compose pull`.
+
+---
+
+## Rolling Back to a Previous Version
+
+If an upgrade introduces a problem:
+
+<Steps>
+<Step>
+**Identify the last known-good SHA tag**
+
+Check the GHCR package page for the service image. SHA tags correspond to the short commit SHA visible in the GitHub Actions run history.
+</Step>
+<Step>
+**Update your `docker-compose.yml` image references**
+
+Change `:latest` to the specific SHA tag you want to roll back to:
+
+```yaml
+backend:
+  image: ghcr.io/rc27122/lds_stake_website-template-2/backend:sha-abc1234
+frontend:
+  image: ghcr.io/rc27122/lds_stake_website-template-2/frontend:sha-abc1234
+```
+</Step>
+<Step>
+**Pull and restart**
+
+```bash
+docker compose pull
+docker compose up -d
+```
+</Step>
+<Step>
+**Roll back database migrations if needed**
+
+If the update included a schema migration and you need to roll it back:
+
+```bash
+docker compose exec backend uv run alembic -c alembic.ini downgrade -1
+```
+
+Each `-1` steps back one migration. Run `docker compose exec backend uv run alembic -c alembic.ini history --verbose` to see the full migration history and identify the target revision.
+
+<Callout type="warn">
+  Downgrading a migration can result in data loss if the migration added columns or tables that now contain data. Always back up the database before rolling back in production.
+</Callout>
+</Step>
+</Steps>
+
+---
+
+## Manual Migrations
+
+By default, the backend runs Alembic migrations automatically on every startup (`RUN_MIGRATIONS=true`). If you need to manage migrations manually or run them outside the container entrypoint, set `RUN_MIGRATIONS=false` in `backend/.env` and run migrations explicitly:
+
+```bash
+# Run from inside the running backend container
+docker compose exec backend uv run alembic -c alembic.ini upgrade head
+```
+
+Or in a temporary container against the same named volume:
+
+```bash
+docker compose run --rm backend uv run alembic -c alembic.ini upgrade head
+```
+
+---
+
+## Checking the Current Migration State
+
+```bash
+docker compose exec backend uv run alembic -c alembic.ini current
+```
+
+Compare against the latest head:
+
+```bash
+docker compose exec backend uv run alembic -c alembic.ini heads
+```
+
+---
+
+## Development: Build from Source
+
+This path applies only if you are running the portal from a local source checkout using `npm run dev` and `uv run python main.py` directly. This is not the production path.
+
+<Steps>
+<Step>
+**Pull the latest source**
 
 ```bash
 git pull origin main
 ```
+</Step>
+<Step>
+**Install updated dependencies**
 
-### 2. Check the release notes
-
-Before proceeding, review the changelog or release notes for the version you are upgrading to. Some releases include migration-specific instructions (e.g., data backfills, manual SQL steps, or configuration changes) that must be completed before or after running Alembic.
-
-### 3. Apply database migrations
+```bash
+cd backend && uv sync
+cd frontend && npm install
+```
+</Step>
+<Step>
+**Apply database migrations**
 
 ```bash
 cd backend
 uv run alembic -c alembic.ini upgrade head
 ```
 
-<Callout type="warn">
-  Always apply migrations **before** restarting the backend. Starting the backend against an unmigrated schema can cause runtime errors or data corruption.
-</Callout>
-
-This command is idempotent — it is safe to run even if no new migrations exist.
-
-### 4. Rebuild the frontend
+Always apply migrations before restarting the backend. Starting the backend against an unmigrated schema can cause runtime errors.
+</Step>
+<Step>
+**Build the frontend**
 
 ```bash
 cd frontend
-npm install
 npm run build
 ```
+</Step>
+<Step>
+**Restart services**
 
-`npm install` is required whenever `package.json` or `package-lock.json` has changed. Running it on every upgrade is safe and ensures dependencies are up to date.
-
-### 5. Restart all services
-
-**Docker Compose:**
-
-```bash
-docker compose down
-docker compose up -d
-```
-
-Or, to rebuild images as well:
+Restart the backend first (migrations must be applied), then the frontend.
 
 ```bash
-docker compose up -d --build
+# Kill and restart backend
+uv run python main.py
+
+# Kill and restart frontend
+node dist/index.cjs
 ```
-
-**Manual deployment:**
-
-Restart each service process using whatever process manager you have configured (e.g., `systemctl restart stake-backend`, `pm2 restart stake-frontend`). Restart the backend first, then the frontend.
-
-## Rolling Back a Migration
-
-If you need to undo the most recently applied migration:
-
-```bash
-cd backend
-uv run alembic -c alembic.ini downgrade -1
-```
-
-Each `-1` steps back one migration. Run `uv run alembic -c alembic.ini history --verbose` to see the full migration history and identify the target revision.
-
-<Callout type="warn">
-  Downgrading a migration may result in data loss if the migration added columns or tables that now contain data. Always back up the database before rolling back in a production environment.
-</Callout>
-
-## Checking the Current Migration State
-
-```bash
-cd backend
-uv run alembic -c alembic.ini current
-```
-
-This prints the revision the database is currently at. Compare it against `uv run alembic -c alembic.ini heads` to verify the database is fully up to date.
+</Step>
+</Steps>

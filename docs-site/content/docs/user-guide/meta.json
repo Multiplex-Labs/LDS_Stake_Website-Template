@@ -1,4 +1,4 @@
 {
   "title": "User Guide",
-  "pages": ["overview", "assignments", "speaking", "callings", "sustainings", "user-admin", "appointments", "reservations", "site-settings"]
+  "pages": ["overview", "admin", "assignments", "speaking", "callings", "sustainings", "user-admin", "appointments", "reservations", "site-settings"]
 }

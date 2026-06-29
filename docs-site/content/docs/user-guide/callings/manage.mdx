@@ -1,30 +1,47 @@
 ---
-title: "Manage Callings (Kanban)"
-description: "Move calling proposals through the pipeline using the Kanban board on the Manage page."
+title: "Manage Callings (Kanban Board)"
+description: "Track and advance calling and release proposals through the pipeline using the drag-and-drop Kanban board."
 ---
 
-## Accessing the Page
+The Calling Tracker (`/leader/calling-system`) is the central hub for all active proposals. Every calling and release that has not yet reached Done appears here as a card on a Kanban board, organized by pipeline stage.
 
-Navigate to `/leader/callings/manage`. This is the central hub for tracking active calling proposals. All proposals that have not yet reached the Done stage are visible here.
+## Permissions
+
+| Permission | What you can do |
+|-----------|-----------------|
+| `MANAGE_CALLING_PROPOSALS` | Drag cards between stages, open the detail modal with editable fields and stage advance controls, post and edit comments, delete proposals |
+| `VIEW_CALLING_PROPOSALS` | View the board and open the read-only proposal detail modal; also unlocks the **Release & Sustaining Form** navigation button |
+| Neither | The board is not accessible (redirect to login or access denied) |
 
 ## Kanban Board Layout
 
-Proposals are displayed in columns, one column per stage. Each column shows all proposals currently at that stage. You can scroll horizontally to see all columns.
+The board displays one column per pipeline stage. Each column header shows the stage name and a count badge. Cards scroll horizontally across columns; each column scrolls vertically when it contains many proposals.
+
+### What Each Card Shows
+
+Every proposal card displays:
+
+- **Name** — the candidate's first and last name
+- **Calling** — the proposed calling or assignment title
+- **Ward** — the ward this calling belongs to
+- **Submitted** badge — the date the proposal was first created
+- **Updated** badge — the date the proposal was last modified
+
+New callings have a colored left border accent; releases have a destructive (red) left border so they are visually distinct at a glance.
 
 ### Pipeline Stages
 
-| Stage | Description |
-|-------|-------------|
-| **SP Approval** | Newly submitted callings await Stake Presidency approval. Approvals are recorded on the [Review](/user-guide/callings/review) page. |
-| **HC Approval** | Proposal has passed SP approval threshold; High Councilors now review and approve. |
-| **Interview** | The candidate has been interviewed by a member of the Stake Presidency or High Council. |
-| **Sustain** | The candidate has been sustained in sacrament meeting. |
-| **Set Apart** | The person has been set apart in their new calling. |
-| **LCR Update** | The calling has been recorded in Leader and Clerk Resources (LCR). |
-| **Done** | Process is complete. The proposal moves to the [Archive](/user-guide/callings/archive). |
+| Stage | Column Title | Description |
+|-------|-------------|-------------|
+| **SP Approval** | Pending SP Approval | Newly submitted callings await Stake Presidency approval. Approvals are recorded on the [Review](/user-guide/callings/review) page. |
+| **HC Approval** | Pending HC Approval | Proposal has passed the SP approval threshold; High Councilors now review and approve. |
+| **Interview** | Pending Interview | An interviewer must be assigned and the interview completed before the proposal advances. |
+| **Sustain** | Pending Sustain | The candidate has been approved to be sustained in sacrament meeting. |
+| **Set Apart** | Pending Set Apart | The person has been sustained and is waiting to be set apart in their new calling. |
+| **LCR Update** | Pending LCR Update | The calling must be recorded in Leader and Clerk Resources (LCR) before the process is complete. |
 
 <Callout type="note">
-  The current stage of a proposal is derived from the most recent stage movement recorded for that proposal — it is not a field stored directly on the proposal itself. This means the full history of every stage transition is preserved.
+  The current stage of a proposal is derived from the most recent stage transition recorded for that proposal — it is not a field stored directly on the proposal itself. This means the full history of every stage transition is preserved and visible on the [Archive](/user-guide/callings/archive) page.
 </Callout>
 
 ## Release vs. Calling Flow
@@ -38,48 +55,134 @@ SP Approval → HC Approval → Interview → Sustain → Set Apart → LCR Upda
 Interview → Sustain → LCR Update → Done
 
 <Callout type="info">
-  Releases skip SP Approval, HC Approval, and Set Apart. They enter the board at Interview and move directly from Sustain to LCR Update.
+  Releases skip SP Approval, HC Approval, and Set Apart. They enter the board at the Interview stage and move directly from Sustain to LCR Update.
 </Callout>
 
-## Advancing a Proposal
+## Moving Proposals with Drag and Drop
 
-To move a proposal to the next stage:
+Proposals are moved between stages by **dragging a card** from one column and dropping it onto the target column. Drag-and-drop is only available to users with the `MANAGE_CALLING_PROPOSALS` permission.
 
-1. Locate the proposal card on the board.
-2. Click the **Advance** button (or "Move to Next Stage") on the card.
-3. The card moves to the next column immediately.
+**Rules for dragging:**
 
-<Callout type="warn">
-  Stage advances are permanent in normal operation. There is no "undo" button. If a proposal is advanced by mistake, contact your clerk or system administrator.
+- Cards can only move **one stage at a time** — forward or backward. Dropping a card onto a column that is more than one stage away is rejected with an informational toast.
+- When you begin dragging a card, only the adjacent columns (the one immediately before and immediately after the card's current stage) are highlighted as valid drop targets.
+
+### Dragging Forward (Advancing)
+
+| Dragged from | What happens |
+|-------------|-------------|
+| **SP Approval** | Advances immediately to HC Approval |
+| **HC Approval** | Advances immediately to Interview |
+| **Interview** | Opens the [detail modal](#proposal-detail-modal) — you must assign an interviewer and mark the interview complete before the proposal can advance |
+| **Sustain** | Advances immediately to Set Apart (callings) or LCR Update (releases) |
+| **Set Apart** | Advances immediately to LCR Update |
+
+<Callout type="note">
+  The LCR Update stage has no column on the board — the "Mark LCR Updated → Archive" action is only available inside the detail modal. Once LCR is marked complete the proposal moves to Done and leaves the board entirely.
 </Callout>
 
-## Viewing Proposal Details
+### Dragging Backward (Reverting)
 
-Click a proposal card to expand it or open a detail view. You will see:
+Dragging a card to the column immediately to its **left** reverts the proposal one stage backward. This calls the revert endpoint (`POST /proposals/{id}/revert`).
 
-- **Candidate name** — first and last name
-- **Proposed calling** — the calling title
-- **Ward** — the ward this calling belongs to
-- **Submitter** — who submitted the proposal
-- **Submission date** — when the proposal was created
-- **Is Release** — whether this is a calling or a release
-- **Spouse name** — if provided at submission
-- **Stage history** — all stage transitions with timestamps
+**Revert limits:**
 
-## Comments
+- New callings cannot be reverted below SP Approval (stage 0).
+- Releases cannot be reverted below Interview (stage 2), because Interview is their starting stage.
+- A toast notification is shown if you attempt to revert a proposal that is already at its minimum stage.
 
-Each proposal has a **comments section** that all authorized users can read and write.
+<Callout type="info">
+  Reverting a stage is a supported operation, not an admin-only workaround. Use it to correct an accidental advance. If a proposal has been advanced all the way to Done, it cannot be reverted and can only be viewed on the [Archive](/user-guide/callings/archive) page.
+</Callout>
+
+## Proposal Detail Modal
+
+Click any proposal card to open the detail modal. The content of the modal differs based on your permissions.
+
+### With MANAGE_CALLING_PROPOSALS Permission
+
+The modal is fully interactive and contains three sections:
+
+**1. Stage Actions**
+
+The top section shows the proposal's current stage as a badge, followed by controls for advancing to the next stage. Controls vary by stage:
+
+| Current Stage | Controls shown |
+|--------------|----------------|
+| SP Approval or HC Approval | An informational notice: "Approval at this stage is handled on the Review Callings page." No advance controls are shown here. |
+| Interview | A two-step action: (a) select an interviewer from the user dropdown and click **Assign**, then (b) click **Mark Interview Complete → Sustainment** to advance the proposal. |
+| Sustain | A single **Mark as Sustained** button that advances to Set Apart (callings) or LCR Update (releases). |
+| Set Apart | A single **Mark as Set Apart → LCR Update** button. |
+| LCR Update | A single **Mark LCR Updated → Archive** button. Completing this moves the proposal to Done and removes it from the board. |
+
+**2. Proposal Details (Editable)**
+
+Below the stage actions is an editable form with the following fields:
+
+| Field | Description |
+|-------|-------------|
+| First Name | The candidate's first name |
+| Last Name | The candidate's last name |
+| Spouse's First Name | Optional spouse name |
+| Ward | Select from the ward dropdown |
+| Calling / Assignment | The proposed calling title |
+| Mark as release | Checkbox to toggle whether this is a release rather than a new calling |
+
+Click **Save Changes** in the modal footer to persist edits. Changes are applied immediately and the board refreshes.
+
+**3. Comments**
+
+Below the editable fields is a comment thread for the proposal. All users with `MANAGE_CALLING_PROPOSALS` can read and write comments.
 
 <Steps>
-  <Step title="Open comments">
-    Click the **Comments** button or expand the comments section on a proposal card.
-  </Step>
   <Step title="Read existing comments">
-    All previous comments appear in chronological order with the commenter's name and timestamp.
+    All previous comments appear in chronological order, each showing the commenter's name and timestamp. If a comment has been edited, an "(edited)" label appears beside the timestamp.
   </Step>
   <Step title="Add a comment">
-    Type your comment in the text field at the bottom of the comments section and click **Submit**.
+    Type your note in the text area at the bottom of the comments section and click **Post**.
+  </Step>
+  <Step title="Edit your own comment">
+    Click the pencil icon on any comment you authored to switch it to an inline edit field. Click **Save** to confirm or **Cancel** to discard.
+  </Step>
+  <Step title="Delete your own comment">
+    Click the trash icon on any comment you authored. A confirmation prompt appears before the comment is deleted.
   </Step>
 </Steps>
 
-Comments are useful for recording notes about the interview, any concerns raised during the approval process, or coordination notes for the clerk.
+**Modal footer (MANAGE_CALLING_PROPOSALS):**
+
+- **Delete Proposal** button (red, bottom-left) — permanently deletes the proposal. A confirmation dialog appears first. This button is only shown for proposals that have not yet reached the Done stage. If the proposal is already at the Sustain stage or later, the confirmation dialog warns that the proposal may have already been announced publicly.
+- **Cancel** button — closes the modal without saving.
+- **Save Changes** button — saves any edits to the proposal fields.
+
+### Without MANAGE_CALLING_PROPOSALS (View-Only)
+
+Users without `MANAGE_CALLING_PROPOSALS` see a read-only view of the proposal details:
+
+- Current stage badge
+- Member name
+- Spouse name (if provided)
+- Proposed calling
+- Ward
+- Type (New Calling or Release)
+
+No stage advance controls, no editable fields, and no comments section are shown. The footer contains only a **Close** button.
+
+## Navigation Links on This Page
+
+The top of the page contains quick-access buttons for related tasks:
+
+| Button | Destination | Visible to |
+|--------|------------|-----------|
+| **New Recommendation** | `/leader/callings/submit` | All authenticated users |
+| **Review Callings** | `/leader/callings/review` | All authenticated users |
+| **Release & Sustaining Form** | `/leader/sustainings` | Users with `MANAGE_CALLING_PROPOSALS` or `VIEW_CALLING_PROPOSALS` |
+
+At the bottom of the board, a **Historical Records** link navigates to `/leader/callings/archive`, where completed (Done) proposals are stored with their full stage history.
+
+## Related pages
+
+- [Submit a Calling Proposal](/user-guide/callings/submit) — create new recommendations and releases
+- [Review Calling Proposals](/user-guide/callings/review) — SP and HC approval voting
+- [Calling Archive](/user-guide/callings/archive) — browse completed proposals
+- [Releases & Sustainings](/user-guide/sustainings) — prepare verbatim sustaining language

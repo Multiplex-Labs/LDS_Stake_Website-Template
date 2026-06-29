@@ -1,24 +1,50 @@
 ---
 title: "Site Settings"
-description: "Configure the portal's stake name, address, logo, hero image, contact information, and which navigation pages are visible to the public."
+description: "Configure the stake name, address, sacrament meeting times, logo, hero image, contact information, and public navigation visibility."
 ---
 
-## Access and Permissions
+Site Settings (`/leader/site-settings`) is a content management interface for configuring public-facing portal content. Access requires the `MANAGE_SITE_SETTINGS` permission.
 
-Site Settings is located at `/leader/site-settings` in the Leader Portal. Access requires the `MANAGE_SITE_SETTINGS` permission. If you do not see this page in the navigation, contact your portal administrator to have the permission added to your account or calling.
+The page has four tabs: **General**, **Appearance**, **Contact**, and **Features**. Each tab has its own **Save** button — changes on one tab do not affect the others.
 
 ---
 
 ## General Tab
 
-The General tab controls the stake identity fields that appear throughout the portal.
+The General tab controls the stake identity fields and sacrament meeting times displayed throughout the portal.
 
-| Field | Where it appears |
-|-------|-----------------|
-| Stake Name | Navbar (site title), Footer, and the home page hero heading |
-| Stake Address | Footer |
+| Field | Label in form | Where it appears |
+|-------|--------------|-----------------|
+| Stake name | Stake Name | Navbar (site title), Footer, and the home page hero heading |
+| Stake address | Stake Center Address | Footer |
+| Meeting times | Sacrament Meeting Times | Footer |
 
-Update either field and click **Save** to apply the change immediately to all public-facing pages.
+### Stake Name and Stake Center Address
+
+Edit either text field and click **Save** to apply the change immediately to all public-facing pages.
+
+### Sacrament Meeting Times
+
+Meeting times are stored as a list of chips. Each chip is a plain-text time string validated against the format `9:00am`.
+
+<Steps>
+  <Step>
+    Click inside the **Sacrament Meeting Times** input field.
+  </Step>
+  <Step>
+    Type a time in `9:00am` format, then press **Enter** or type a comma to add it as a chip.
+  </Step>
+  <Step>
+    Repeat for each ward meeting time. To remove a time, click the `×` on its chip, or press **Backspace** to remove the last one.
+  </Step>
+  <Step>
+    Click **Save**. The updated list appears in the site footer immediately.
+  </Step>
+</Steps>
+
+<Callout type="note">
+  Times must follow the `9:00am` format (lowercase am/pm, no space). The list is displayed in the footer in the order the times were entered.
+</Callout>
 
 ---
 
@@ -26,91 +52,100 @@ Update either field and click **Save** to apply the change immediately to all pu
 
 The Appearance tab controls the visual identity of the home page and the navigation bar.
 
-### Text Fields
-
-| Field | Where it appears |
-|-------|-----------------|
-| Hero Title | Home page hero section — large heading |
-| Hero Subtitle | Home page hero section — subheading below the title |
-
-### Logo Upload
+### Stake Logo
 
 The logo appears in the Navbar on every page of the site.
 
 <Steps>
   <Step>
-    Click **Upload Logo** (or the existing logo thumbnail to replace it).
+    Click **Choose File** under the **Stake Logo** label.
   </Step>
   <Step>
     Select a JPEG, PNG, or WebP image. The file must be 5 MB or smaller.
   </Step>
   <Step>
-    The preview updates immediately. Click **Save** to apply the change.
+    A thumbnail preview appears immediately next to the button. Click **Save** to upload the file and apply the change.
   </Step>
 </Steps>
 
-### Hero Image Upload
+### Hero Image
 
 The hero image is displayed as the full-width background of the home page hero section.
 
 <Steps>
   <Step>
-    Click **Upload Hero Image** (or the existing image thumbnail to replace it).
+    Click **Choose File** under the **Hero Image** label.
   </Step>
   <Step>
     Select a JPEG, PNG, or WebP image. The file must be 5 MB or smaller.
   </Step>
   <Step>
-    The preview updates immediately. Click **Save** to apply the change.
+    A preview of the image appears above the button. Click **Save** to upload the file and apply the change.
   </Step>
 </Steps>
 
 <Callout type="note">
-  Accepted image formats: JPEG, PNG, WebP. Maximum file size: 5 MB. For best results, use a wide-format image (at least 1920 × 600 pixels) for the hero background.
+  Accepted formats: JPEG, PNG, WebP. Maximum file size: 5 MB per image. For best results, use a wide-format image (at least 1920 × 600 pixels) for the hero background.
 </Callout>
+
+### Hero Text Fields
+
+| Field | Label in form | Where it appears |
+|-------|--------------|-----------------|
+| Hero Title | Hero Title | Home page hero section — large heading |
+| Hero Subtitle | Hero Subtitle | Home page hero section — subheading below the title |
+
+Edit either field and click **Save**. Text changes and image uploads are submitted together in a single save operation.
 
 ---
 
 ## Contact Tab
 
-The Contact tab controls the contact details and sacrament meeting times displayed in the Footer and used in system-generated emails.
+The Contact tab controls the email addresses used in the site footer and in system-generated emails.
 
-| Field | Description | Where it appears |
-|-------|-------------|-----------------|
-| Contact Email | Primary contact address for the stake | Footer |
-| Reply-to Email | The address email recipients can reply to in all system-generated emails | Email headers (not visible on the site) |
-| Sacrament Meeting Times | List of meeting times (format: `10:00am`) | Footer |
+| Field | Label in form | Description | Where it appears |
+|-------|--------------|-------------|-----------------|
+| Public contact email | Public Contact Email | Primary contact address for the stake | Footer |
+| System reply-to email | System Reply-To Email | Address shown when a recipient hits Reply on a portal email | Email headers only (not visible on the site) |
 
 <Callout type="note">
-  The **Reply-to Email** field should be set to a monitored inbox — typically the clerk's email address. This is the address that appears when a member hits "Reply" on any notification email the portal sends.
+  **System Reply-To Email** is optional. If left blank, the portal falls back to the `REPLY_TO_EMAIL` environment variable set by your server administrator. Set this to a monitored clerk inbox so that member replies reach someone who can act on them.
 </Callout>
 
-To add a sacrament meeting time, click **Add Time**, type the time in `10:00am` format, and save. Times are displayed in the Footer in the order they are entered. To remove a time, click the delete icon next to it.
+Update either field and click **Save**.
 
 ---
 
 ## Features Tab
 
-The Features tab lets you control which pages appear in the public navigation bar. Toggling a page off removes it from the Navbar for all visitors; the page itself is not deleted and can be re-enabled at any time.
+The Features tab controls which pages appear in the public navigation bar. Toggling a page off removes it from the Navbar for all visitors; the page itself is not deleted and can be re-enabled at any time.
+
+Each row in the list shows the page label, its URL path, and a toggle switch. When the switch is **on**, the page appears in the navigation. When **off**, it is hidden.
 
 ### Available Feature Toggles
 
-| Feature | Page it controls |
-|---------|-----------------|
+| Label in form | URL path |
+|--------------|----------|
 | Resources | `/resources` |
-| Sports | `/stake-info/sports` |
+| Stake Sports | `/stake-info/sports` |
 | Reserve Building | `/stake-info/reserve` |
-| Temple Recommend | `/appointments` |
-| Ward Map | `/ward-info/map` |
-| Bishops | `/ward-info/bishops` |
+| Temple Recommends | `/stake-info/temple-recommend` |
+| Boundary Map | `/ward-info/map` |
+| Meet our Bishops | `/ward-info/bishops` |
 | HC Assignments | `/leader/assignments` |
-| Speaking | `/leader/speaking` |
-| Callings | `/leader/calling-system` |
+| Speaking Schedule | `/leader/speaking` |
+| Calling System | `/leader/calling-system` |
 | Sustainings | `/leader/sustainings` |
-| Presidency | `/leader/presidency` |
+| Presidency Assignments | `/leader/presidency` |
 
-<Callout type="note">
-  Disabling a feature only removes it from the navigation bar. Anyone who knows the direct URL can still access the page. If a page contains sensitive information, ensure the underlying route is also protected via the `ProtectedRoute` component or the appropriate permission check on the backend.
+Click the toggle next to the page you want to show or hide, then click **Save** to apply all changes at once.
+
+<Callout type="warn">
+  Hiding a page only removes it from the navigation bar. Anyone who knows the direct URL can still access the page. If a page contains sensitive information, ensure the underlying route is also protected via the `ProtectedRoute` component or the appropriate permission check on the backend.
 </Callout>
 
-To toggle a feature, click the toggle switch next to the page name. Changes apply immediately after clicking **Save**.
+## Related pages
+
+- [Admin Hub](/user-guide/admin) — all Admin Hub tabs and permissions
+- [API: Site Settings](/api-reference/settings) — site settings endpoints
+- [Environment Variables](/deployment/environment) — server-level configuration that cannot be changed through the UI

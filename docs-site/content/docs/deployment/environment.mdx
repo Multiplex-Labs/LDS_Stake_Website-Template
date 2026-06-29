@@ -1,59 +1,111 @@
 ---
 title: "Environment Variables"
-description: "Complete reference for all configuration values across the backend, frontend, and Slackbot services."
+description: "Complete reference for all configuration values across the backend, frontend, and Discord bot services."
 ---
 
-Each service reads its configuration from a `.env` file in its own directory. None of the services share environment files.
+Each service reads its configuration from a `.env` file in its own directory. The services do not share environment files. Copy the `.env.example` file from each service directory as a starting point.
+
+---
+
+## Root `.env`
+
+File location: `.env` (repository or deployment root)
+
+Read by Docker Compose only. Not used by any application service directly.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DOMAIN` | Required | — | Your stake's domain (e.g., `yourstake.org`). Caddy uses this to route traffic and provision Let's Encrypt TLS for `DOMAIN`, `www.DOMAIN`, `api.DOMAIN`, and `docs.DOMAIN`. DNS must resolve each hostname to your server before starting the stack — either via three A records or a single A record plus wildcard CNAME (e.g., Cloudflare proxy). See [Docker Deployment](/deployment/docker) for both DNS paths. |
+| `GHCR_REPO` | Required for forks | `rc27122/LDS_Stake_Website-Template-2` | GitHub repository slug used to construct GHCR image names. If you have forked the repository and published images from your fork, set this to your own org/repo slug (e.g., `myorg/my-stake-portal`). Leave unset to use the upstream images. |
+
+---
 
 ## Backend
 
 File location: `backend/.env`
 
+### Core
+
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DEV` | Optional | `false` | Enables debug mode and exposes the Swagger UI at `/docs`. Set to `false` in production. |
+| `DEV` | Optional | `false` | Enables debug mode and exposes the Swagger UI at `/docs`. Set to `false` in production. When `true`, the server binds to `localhost` only; when `false`, it binds to `0.0.0.0` (required for Docker networking). |
 | `PORT` | Optional | `8000` | Port the FastAPI server listens on. |
 | `DB_ENGINE` | Optional | `sqlite` | Database engine. Accepted values: `sqlite`, `postgresql`. |
-| `DATABASE_PATH` | Optional | `./database.db` | Path to the SQLite database file. Only used when `DB_ENGINE=sqlite`. |
-| `INITIAL_ADMIN_PASSWORD` | Required (first run only) | — | Seeds the `admin@admin.com` account when the database is empty. Ignored on all subsequent starts. |
-| `JWT_SECRET_KEY` | Required | — | Secret used to sign and verify JWT tokens. Use a long random string in production — generate one with `openssl rand -hex 32`. |
-| `SSL_ENABLED` | Optional | `false` | Set to `true` when the application is served over HTTPS. Marks the `refresh_token` cookie as `Secure`. |
+| `SQLALCHEMY_ECHO` | Optional | `false` | When `true`, logs every SQL statement to stdout. Useful for debugging; leave `false` in production. |
+| `DATABASE_PATH` | Optional | `./database.db` | Path to the SQLite database file. Only used when `DB_ENGINE=sqlite`. **In Docker, must be `/app/data/database.db`** to place the file inside the `backend-data` named volume. Using a relative path like `./database.db` in Docker places the file in the container's writable layer and it is lost on container recreation. |
+| `RUN_MIGRATIONS` | Optional | `true` | Controls whether Alembic migrations run automatically at backend startup. Leave at `true` for standard deployments — Alembic is idempotent against an already-migrated schema. Set to `false` only if you manage migrations externally. |
+
+### Authentication
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `INITIAL_ADMIN_PASSWORD` | Required (first boot only) | — | Seeds the `admin@admin.com` account when the database contains no users. The backend refuses to start on an empty database if this variable is unset. After at least one user exists in the database, this variable is ignored entirely on all subsequent starts. Remove or leave blank after first login. |
+| `JWT_SECRET_KEY` | Required | — | Secret used to sign and verify JWT access tokens. **Minimum 64 characters.** Known weak placeholders (`secret`, `changeme`, `supersecret`) are rejected even if they meet the length requirement. The backend refuses to start if this check fails. Generate a valid key with `openssl rand -hex 32` (produces exactly 64 hex characters). Do not use `openssl rand -base64 32` — that produces only 44 characters and fails the check. |
+| `SSL_ENABLED` | Required (production) | `false` (Dockerfile default) | Controls the `Secure` flag on the HttpOnly `refresh_token` cookie. **Must be `true` in any production deployment served over HTTPS**, including Docker+Caddy deployments where Caddy handles TLS termination externally. The container's Dockerfile default is `false` — always override this in `backend/.env` for production. Caddy terminates TLS; this flag ensures session cookies cannot be transmitted over plain HTTP connections. |
+
+### Calling Proposal Settings
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
 | `SP_APPROVAL_THRESHOLD` | Optional | `2` | Number of Stake Presidency approvals required to advance a calling proposal from `SP_APPROVAL` to `HC_APPROVAL`. |
 | `HC_APPROVAL_THRESHOLD` | Optional | `3` | Number of High Council approvals required to advance a calling proposal from `HC_APPROVAL` to `INTERVIEW`. |
 
+### Ward Configuration
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `WARD_DEFINITION_FILE` | Optional | `wards.csv` | Path to the ward seed CSV file. In Docker deployments the file is bind-mounted to `/app/wards.csv`, which matches this default. Change only if you need to use a different path inside the container. The CSV format is `name,start_hour` — see [First Run and Bootstrap](/deployment/first-run) for details. |
+
+### Speaking Schedule
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SPEAKING_SCHEDULE_CSV_PATH` | Optional | `./speaking_schedule.csv` | Path to the speaking schedule CSV file. When unset or the file does not exist, speaking schedule API routes return HTTP 503 with a descriptive message; all other routes are unaffected. In Docker, this path resolves to `/app/speaking_schedule.csv` inside the container — a path not covered by any named volume or documented bind mount. To persist a speaking schedule CSV across container recreations, add a bind mount such as `./backend/speaking_schedule.csv:/app/speaking_schedule.csv:ro` to the `backend` service in `docker-compose.yml`. |
+
 ### Email
 
-Both providers are optional. When both are configured, Brevo is used first and Mailjet serves as the fallback. Omitting both disables outbound email silently.
+Both providers are optional. When both are configured, Brevo is the primary provider and Mailjet is the fallback. Omitting both disables outbound email silently — the backend starts normally but any email delivery attempt is a no-op. Email is used for appointment reminders, booking confirmations, and cancellation links.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `BREVO_API_KEY` | Optional | — | Brevo transactional API key. When set, Brevo is used as the primary email provider (300 emails/day on the free tier). |
 | `BREVO_FROM_EMAIL` | Optional | — | Sender address for Brevo. Required when `BREVO_API_KEY` is set. |
-| `MAILJET_API_KEY` | Optional | — | Mailjet API key. Used as the email fallback when Brevo is not configured. |
+| `MAILJET_API_KEY` | Optional | — | Mailjet API key. Used as the email fallback when Brevo is unavailable or returns a 5xx error. |
 | `MAILJET_SECRET_KEY` | Optional | — | Mailjet secret key. Required when `MAILJET_API_KEY` is set. |
 | `MAILJET_FROM_EMAIL` | Optional | — | Sender address for Mailjet. Required when `MAILJET_API_KEY` is set. |
-| `REPLY_TO_EMAIL` | Optional | — | Reply-to address shown to email recipients. Recommended: a monitored clerk inbox (e.g. `clerk@yourstake.org`). Falls back to `BREVO_FROM_EMAIL` if unset. |
+| `REPLY_TO_EMAIL` | Optional | — | Reply-to address shown to email recipients. Recommended: a monitored clerk inbox (e.g., `clerk@yourstake.org`). Falls back to `BREVO_FROM_EMAIL` if unset. |
 
 ### Google Calendar
 
-Both variables are required together. Omitting either disables Google Calendar sync silently.
+Both variables are required together. Omitting either disables Google Calendar sync silently — no error at startup, no impact on any other feature.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | Optional | — | Filesystem path to a GCP service account JSON file. Enables Google Calendar sync for appointment bookings. |
-| `GOOGLE_CALENDAR_ID` | Optional | — | Google Calendar ID (e.g. `abc123@group.calendar.google.com`). Required together with `GOOGLE_SERVICE_ACCOUNT_FILE`. |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | Optional | — | Filesystem path inside the container to a GCP service account JSON file. In Docker, the recommended path is `/run/secrets/google-sa.json`, matched by the bind mount in `docker-compose.yml` (`./secrets/google-sa.json:/run/secrets/google-sa.json:ro`). |
+| `GOOGLE_CALENDAR_ID` | Optional | — | Google Calendar ID (e.g., `abc123@group.calendar.google.com`). Required together with `GOOGLE_SERVICE_ACCOUNT_FILE`. |
 
-### CORS and URLs
+### CORS and Public URLs
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `ALLOWED_ORIGINS` | Optional | `http://localhost:3100` | Comma-separated list of allowed frontend origins for CORS. In production, set this to your public site URL. |
-| `FRONTEND_BASE_URL` | Optional | `http://localhost:3100` | Base URL used in redirect responses and email links pointing to the frontend. |
-| `BACKEND_BASE_URL` | Optional | `http://localhost:8000` | Base URL used in email links pointing directly to the backend (e.g. email confirmation links). |
+| `ALLOWED_ORIGINS` | Optional | `http://localhost:3100` | Comma-separated list of allowed frontend origins for CORS. In production, set this to your public portal URL (e.g., `https://yourstake.org`). |
+| `FRONTEND_BASE_URL` | Required (if email is enabled) | `http://localhost:3100` | Base URL used in emailed links pointing to the frontend. Defaults to `localhost` — in production, all emailed links will point to localhost and be non-functional unless this is set to your public portal URL (e.g., `https://yourstake.org`). |
+| `BACKEND_BASE_URL` | Required (if email is enabled) | `http://localhost:8000` | Base URL used in emailed links pointing to the backend (e.g., appointment cancellation links). Defaults to `localhost` — in production, set to your public API URL (e.g., `https://api.yourstake.org`). |
+
+### Discord Bot Integration
+
+Only needed when running the Discord bot profile. Omitting both variables disables Discord integration silently — no crash, no startup failure.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DISCORD_BOT_TOKEN` | Optional | — | Shared secret for backend-to-discordbot authentication. **Must exactly match `BACKEND_TOKEN` in `discordbot/.env`.** This single value is used for three purposes: (1) the backend creates a `discord-bot@localhost` system user using this value as the password, (2) the backend sends `Authorization: Bearer {DISCORD_BOT_TOKEN}` on all outbound HTTP calls to the Discord bot, and (3) the Discord bot verifies incoming requests against this value. A mismatch causes all backend-to-bot calls to fail with 401 errors. |
+| `DISCORD_BOT_URL` | Optional | `http://discordbot:8001` | Internal URL of the Discord bot service. Use `http://discordbot:8001` in Docker Compose (service name DNS). Use `http://localhost:8001` for local development. |
 
 <Callout type="warn">
-  Never commit `JWT_SECRET_KEY` or `INITIAL_ADMIN_PASSWORD` to version control. Add `backend/.env` to `.gitignore`.
+  Never commit `JWT_SECRET_KEY`, `INITIAL_ADMIN_PASSWORD`, `DISCORD_BOT_TOKEN`, or any email API keys to version control. Add `backend/.env` to `.gitignore`.
 </Callout>
+
+---
 
 ## Frontend
 
@@ -61,26 +113,28 @@ File location: `frontend/.env`
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `BACKEND_URL` | Optional | `http://localhost:8000` | URL the Express proxy forwards all `/api/*` requests to. In Docker Compose, use the internal service name (`http://backend:8000`). For local development outside Docker, use `http://localhost:8000`. **This value is captured once at container startup** — changing it requires a full container restart (`docker compose restart frontend`), not just a process reload. |
 | `PORT` | Optional | `3100` | Port the Express proxy server listens on. |
-| `NODE_ENV` | Optional | `development` | Set to `production` for production builds and deployments. Controls minification and other optimizations. |
-| `BACKEND_URL` | Optional | `http://localhost:8000` | URL the Express proxy forwards all `/api/*` requests to. In Docker Compose, use the internal service name (e.g., `http://backend:8000`). |
+| `NODE_ENV` | Optional | `development` | Set to `production` for production deployments. Affects Express behavior and external npm packages. Note: the production build also bakes `NODE_ENV=production` into the server bundle at compile time, so runtime changes have limited effect on compiled branching logic. |
 
 <Callout type="info">
-  The frontend does not require a `.env` file for local development — defaults point to `localhost:8000`, which is where the backend runs.
+  In Docker Compose, all three variables are already set correctly by the Dockerfile defaults (`BACKEND_URL=http://backend:8000`, `PORT=3100`, `NODE_ENV=production`). A `frontend/.env` file is not strictly required in Docker if the defaults match your setup, but providing one makes your configuration explicit and self-documenting.
 </Callout>
+
+---
 
 ## Discord Bot
 
 File location: `discordbot/.env`
 
-The Discord bot is a standalone service that connects to Discord via the gateway API and also exposes a FastAPI HTTP server on port 8001. It communicates with the main backend using the credentials below.
+The Discord bot is a standalone service that connects to Discord via the gateway API and exposes a FastAPI HTTP server on port 8001 for receiving webhook calls from the main backend.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DISCORD_TOKEN` | Required | — | Discord bot token from the Discord developer portal (under Bot → Token). |
-| `BACKEND_URL` | Required | — | URL of the main FastAPI backend (e.g. `http://localhost:8000`). The Discord bot calls this to look up users and notify approvers. |
-| `BACKEND_TOKEN` | Required | — | Service-to-service authentication token used when the Discord bot calls the main backend API. Must match the token configured in the main backend. |
-| `DATABASE_PATH` | Optional | `./database.db` | Path to the Discord bot's own SQLite database file (used for `UserMapping` and audit logs). |
+| `DISCORD_TOKEN` | Required | — | Discord bot token from the Discord developer portal (Bot → Token). |
+| `BACKEND_URL` | Required | — | URL of the main FastAPI backend. Use `http://backend:8000` in Docker Compose. Use `http://localhost:8000` for local development. |
+| `BACKEND_TOKEN` | Required | — | Shared secret for service-to-service authentication. **Must exactly match `DISCORD_BOT_TOKEN` in `backend/.env`.** The backend uses this value as the password for the `discord-bot@localhost` system user account it creates in FastAPI, as the Bearer token on all outbound HTTP calls to this service, and this service verifies that Bearer token on all inbound requests from the backend. Setting a mismatched value between the two `.env` files will cause all backend-to-bot calls to fail with 401 errors. |
+| `DATABASE_PATH` | Optional | `./database.db` | Path to the Discord bot's own SQLite database file (used for `UserMapping` records and audit logs). In Docker, use `/app/data/database.db` to match the directory the Dockerfile creates. Note: **the `docker-compose.yml` defines no named volume for the Discord bot** — this database is not persisted across container recreation regardless of this setting. See the warning in [Docker Deployment](/deployment/docker#step-6-discord-bot-optional). |
 | `DEV` | Optional | `false` | Enables debug logging and Uvicorn reload mode. Set to `false` in production. |
 
 <Callout type="warn">

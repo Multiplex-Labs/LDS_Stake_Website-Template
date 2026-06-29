@@ -85,3 +85,10 @@ Each service has its own dependency management and is started independently:
 <Callout type="warn">
   The backend and discordbot both use `uv` (Python), but their `pyproject.toml` files and virtual environments are completely separate. A `uv sync` in `backend/` does not affect `discordbot/` and vice versa.
 </Callout>
+
+## Related pages
+
+- [Frontend](/development/frontend) — React SPA conventions: routing, data fetching, and component library
+- [Backend](/development/backend) — FastAPI routers, the CallingUser dependency, and startup sequence
+- [Authentication](/development/authentication) — two-token JWT strategy
+- [Manual Deployment](/deployment/manual) — running services locally from source

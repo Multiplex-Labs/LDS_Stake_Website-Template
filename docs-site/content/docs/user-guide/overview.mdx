@@ -3,6 +3,8 @@ title: "Overview"
 description: "A quick tour of the LDS Stake Portal — how to log in, navigate the interface, and find each Leader Portal section."
 ---
 
+This guide introduces the Stake Portal's layout, explains how to log in, and maps each Leader Portal section to its documentation page.
+
 ## Logging In
 
 Navigate to `/login` and enter your **email address** and **password**, then click **Sign In**.
@@ -23,12 +25,19 @@ The top navigation bar is present on every page.
 
 All leader-only pages live under the `/leader` prefix and require you to be authenticated. Use the navigation menu or the cards below to jump to any section.
 
+<Callout type="info">
+  Several pages in the Leader Portal are **view-only** dashboards. Editing and management for those pages is done from the **Admin Hub** at `/leader/admin`. See the Admin Hub card below and the individual page guides for details on which actions belong where.
+</Callout>
+
 <Cards>
+  <Card title="Admin Hub" icon="settings-2" href="/user-guide/admin">
+    The central editing interface at `/leader/admin`. Tabs cover Users, Callings, Wards, Speaking Assignments, HC Assignments, Presidency Assignments, and the Appointment Manager.
+  </Card>
   <Card title="HC Assignments" icon="map" href="/user-guide/assignments">
-    View and manage which High Councilor is assigned to each ward. Each assignment is tied to a specific slot number on the High Councilor calling.
+    View which High Councilor occupies each slot, their phone number, stake responsibility, and committee badge. This page is read-only. Editing responsibility and committee fields is done in the Admin Hub under the High Council Assignments tab.
   </Card>
   <Card title="Speaking Schedule" icon="microphone" href="/user-guide/speaking">
-    Track who is speaking at each ward on each Sunday. Add, edit, and remove speaking assignments with optional topic notes.
+    View the monthly High Councilor speaking rotation — which HC is assigned to which ward each month. This page is read-only. Editing ward assignments and monthly topics is done in the Admin Hub under the Speaking Assignments tab.
   </Card>
   <Card title="Callings" icon="list-check" href="/user-guide/callings/submit">
     The full calling proposal pipeline — submit new callings and releases, review and approve proposals as a Stake Presidency member, manage proposals through a Kanban board, and browse the completed archive.
@@ -37,18 +46,36 @@ All leader-only pages live under the `/leader` prefix and require you to be auth
     View verbatim sustaining and release language for each ward, ready to read aloud in sacrament meeting.
   </Card>
   <Card title="User Administration" icon="shield-user" href="/user-guide/user-admin">
-    Create and manage portal user accounts, assign callings, upload profile photos, and control access. Requires the MANAGE_USERS permission.
+    Create and manage portal user accounts, assign callings, upload profile photos, and control access. Accessible at `/leader/user-admin` or via the Users tab in the Admin Hub. Requires the MANAGE_USERS permission.
   </Card>
   <Card title="Appointments" icon="calendar" href="/user-guide/appointments">
-    Book, reschedule, and cancel Temple Recommend appointments via an online scheduling interface. Admins can manage appointment types, interviewer availability, and exceptions.
+    Book, reschedule, and cancel Temple Recommend appointments via an online scheduling interface. Admins with the MANAGE_APPOINTMENTS permission can manage appointment types, interviewer availability, and scheduling exceptions from the Admin Hub.
   </Card>
   <Card title="Building Reservations" icon="building" href="/user-guide/reservations">
-    Submit building reservation requests (public) and review, approve, or deny them as an authorized leader.
+    Submit building reservation requests and review, approve, or deny them as an authorized leader.
   </Card>
   <Card title="Site Settings" icon="settings" href="/user-guide/site-settings">
-    Configure the portal's stake name, address, logo, hero image, contact info, and which navigation pages are visible to the public. Requires the MANAGE_SITE_SETTINGS permission.
+    Configure the portal's stake name, address, contact info, hero text, sacrament meeting times, and which navigation pages are visible to the public. Requires the MANAGE_SITE_SETTINGS permission.
   </Card>
 </Cards>
+
+## Admin Hub Tabs
+
+The Admin Hub at `/leader/admin` is the primary editing interface for stake data. It is organized into the following tabs:
+
+| Tab | URL | What you can manage |
+|-----|-----|---------------------|
+| Users | `/leader/admin?tab=users` | Create, edit, and deactivate leader accounts; assign callings and upload photos |
+| Callings | `/leader/admin?tab=callings` | Define calling names, slot counts, and visibility settings |
+| Wards | `/leader/admin?tab=wards` | Edit ward names and sacrament meeting start times |
+| Speaking Assignments | `/leader/admin?tab=speaking` | Assign wards to HC slots by month; edit monthly speaking topics |
+| High Council Assignments | `/leader/admin?tab=hc-assignments` | Edit each slot's responsibility text and committee label |
+| Presidency Assignments | `/leader/admin?tab=presidency` | Manage Stake Presidency member assignments |
+| Appointment Manager | `/leader/admin?tab=temple-recommend` | Manage Temple Recommend appointment types and interviewer availability (visible only to users with the MANAGE_APPOINTMENTS permission) |
+
+<Callout type="note">
+  The Appointment Manager tab only appears if your account has the MANAGE_APPOINTMENTS permission (bitmask value 512). If you do not see it, contact your system administrator.
+</Callout>
 
 ## Calling Pipeline at a Glance
 

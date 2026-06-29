@@ -1,61 +1,104 @@
 ---
 title: "Calling Archive"
-description: "Browse completed calling and release proposals from the Archive page."
+description: "Browse completed calling and release proposals that have reached the Done stage."
 ---
 
-## Accessing the Page
-
-Navigate to `/leader/callings/archive`. The archive is a read-only historical record of every calling proposal that has reached the **Done** stage.
+The Calling Archive (`/leader/callings/archive`) is the permanent record of every proposal that has completed the full pipeline. Proposals that are still active appear on the [Kanban Board](/user-guide/callings/manage), not here.
 
 ## What Appears Here
 
-Only proposals that have completed the full pipeline and reached the **Done** stage are shown in the archive. Active proposals (those still in progress on the Kanban board) do not appear here.
+Only proposals that have completed the full pipeline and reached the **Done** stage are shown. Active proposals (those still moving through the Kanban board) do not appear here.
 
 <Callout type="info">
   A proposal moves to the archive automatically when it is advanced to Done from the LCR Update stage on the [Manage (Kanban)](/user-guide/callings/manage) page.
 </Callout>
 
-## Searching the Archive
+## Filters
 
-Use the **search bar** at the top of the page to filter proposals by:
+All filters are in a collapsible sidebar on the left side of the page. Each section is an expandable accordion. Filters can be combined freely. A **Clear Filters** button at the bottom of the sidebar resets everything at once.
 
-- Candidate name (first or last name)
+| Filter | Type | Description |
+|--------|------|-------------|
+| Name | Text input | Filters by the member's first or last name as you type |
+| Calling | Text input | Filters by calling title as you type |
+| Ward | Select dropdown | Shows only proposals from the selected ward |
+| Type | Select dropdown | Filter by **Calling** (new callings) or **Release** |
+| Completed Date | Date range (start/end) | Shows only proposals completed within the selected date range |
+| Expected Release | Date range (start/end) | Shows only callings whose estimated release date falls within the selected range; not applicable to releases |
+
+## Archive Table
+
+Matching results appear in a table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| Member Name | First and last name of the person called or released |
+| Calling | The calling title proposed |
+| Ward | The ward this proposal belongs to |
+| Date Submitted | When the proposal was originally created |
+| Date Completed | When the proposal reached the Done stage |
+| Est. Release | Estimated future release date (callings only; blank for releases) |
+| Type | **Calling** or **Release** badge |
+
+Results load in batches of 50. Scroll to the bottom of the list to load the next batch.
+
+## Proposal Detail
+
+Click any table row to open the detail dialog for that proposal. The dialog header shows the member's initials, full name, calling, and ward, along with three badges: **Archived**, a **Calling** or **Release** badge, and a **Completed** badge with the date the proposal reached Done.
+
+Below the header, info cards display the **Calling**, **Ward**, and **Spouse** (if one was recorded).
+
+### Timeline
+
+The detail view includes a **Timeline** section that shows each milestone in the proposal's lifecycle, along with a date and a status badge (Completed, Upcoming, Pending, or N/A) for each step.
+
+For new callings, the timeline steps are:
+
+1. Submitted
+2. SP Approval
+3. HC Approval
+4. Interview (includes the interviewer's name if one was assigned)
+5. Sustaining
+6. Set Apart
+7. LCR Update
+8. Est. Release (a calculated estimate, not a pipeline stage)
+
+For releases, the SP Approval, HC Approval, and Set Apart steps are omitted, and Est. Release is marked N/A.
+
+<Callout type="info">
+  The estimated release date is calculated automatically from the completion date. Bishop and High Council callings estimate 3 years; all other callings estimate 1 year.
+</Callout>
+
+### Comments
+
+Any comments recorded on the proposal during the pipeline are displayed in a read-only **Comments** section below the timeline. New comments cannot be added to a Done proposal.
+
+## Editing an Archived Record
+
+Users with the **Manage Calling Proposals** permission see an **Edit Record** button in the detail dialog. Clicking it opens an inline edit form with the following fields:
+
+- First Name
+- Last Name
+- Spouse (optional)
 - Calling title
-- Ward name
+- Ward
+- Interviewer (callings only — sets or updates the assigned interviewer on record)
 
-The list filters as you type — no need to press Enter.
+Click **Save Changes** to commit edits or **Cancel** to discard them.
 
-## Filtering
+<Callout type="info">
+  Editing an archived record corrects the recorded details only. The stage timeline and comments cannot be altered.
+</Callout>
 
-In addition to the search bar, you can apply filters to narrow the archive:
+## Deleting Archived Proposals
 
-| Filter | Options |
-|--------|---------|
-| Ward | Select a specific ward to show only proposals from that ward |
-| Type | Filter by **Calling** (new callings) or **Release** to view each category separately |
-
-Filters can be combined with the search bar.
-
-## Reading an Archived Proposal
-
-Click any row in the archive table to open the full proposal detail view. You will see:
-
-- **Candidate name** — first and last name
-- **Proposed calling** — the calling title
-- **Ward** — the ward this calling belonged to
-- **Submitter** — who submitted the proposal
-- **Spouse name** — if provided
-- **Is Release** — whether this was a new calling or a release
-- **Submission date** — when the proposal was originally created
-
-### Stage History
-
-Below the proposal details, the full **stage history** is displayed. This shows every stage transition — who moved the proposal, from which stage, to which stage, and at what date and time. This provides a complete audit trail of how long each stage took and who was involved.
-
-## Read-Only
-
-Archived proposals cannot be edited, commented on, or moved back into the active pipeline. If a correction is needed for a completed proposal, submit a new proposal with the corrected information.
+There is no way to delete a Done proposal from the portal UI. The archive is a permanent record.
 
 <Callout type="warn">
-  There is no way to delete an archived proposal from the portal UI. The archive is a permanent record.
+  Archived proposals cannot be moved back into the active pipeline. If a new action is needed for a person, submit a new proposal.
 </Callout>
+
+## Related pages
+
+- [Manage Callings (Kanban Board)](/user-guide/callings/manage) — active proposals and pipeline management
+- [Submit a Calling Proposal](/user-guide/callings/submit) — start a new proposal

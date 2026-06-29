@@ -1,11 +1,9 @@
 ---
 title: "User Administration"
-description: "Create and manage portal user accounts, assign callings, and upload profile photos from the User Admin page."
+description: "Create and manage portal user accounts, assign callings, set permissions, and upload profile photos."
 ---
 
-## Accessing the Page
-
-Navigate to `/leader/user-admin`. Access requires the **MANAGE_USERS** permission. If you do not see this page in the navigation, contact your stake clerk or system administrator.
+User Administration is located at `/leader/admin?tab=users` (the direct link `/leader/user-admin` redirects there). It requires the **Manage Users** permission. From this page you can create accounts, assign callings, manage permissions, upload profile photos, reset passwords, and deactivate or delete users.
 
 ## The User Table
 
@@ -13,76 +11,138 @@ The user table lists every portal account. Columns include:
 
 | Column | Description |
 |--------|-------------|
-| Name | The user's first and last name |
-| Email | The user's email address (used for login) |
-| Callings | The calling(s) currently assigned to the user |
-| Status | Whether the account is Active or Inactive |
+| User | Avatar, full name, and email address |
+| Status | Active (green dot) or Inactive (red dot) |
+| Callings | The calling(s) currently assigned to the user, comma-separated |
+| Actions | Per-row dropdown menu (Edit, Permissions, Deactivate/Activate) |
 
-- **Sort** any column by clicking the column header.
-- **Search** by typing in the search bar above the table — filters by name or email address in real time.
-
-## Activating and Deactivating Users
-
-Each user row has an **Active** toggle. Deactivating a user prevents them from logging in without deleting their account or history. Reactivating restores their access immediately.
-
-<Callout type="warn">
-  Deactivating a user does not end any currently active sessions. The user's existing session will expire on its own schedule.
-</Callout>
+Use the **Sort by** dropdown to sort by Name, Status, or Email. Use the search bar to filter by name or email address in real time. Results are paginated at 10 users per page.
 
 ## Adding a New User
 
-Click the **Add User** button to open the Add User wizard. The wizard guides you through six steps:
+Click the **Add User** button to open the Add User wizard. The wizard has five steps:
 
 <Steps>
   <Step title="Basic Info">
-    Enter the user's **first name**, **last name**, and **email address**. All three fields are required. The email address must be unique in the system and will be used as the login username.
-  </Step>
-  <Step title="Bio">
-    Enter a short biography for the user. This is optional — click **Skip** to proceed without adding a bio. The bio can be updated later from the Edit User dialog.
+    Enter the user's **first name** (required), **last name** (required), **email address** (required), and **phone number** (optional). The email address must be unique in the system and is used as the login username.
   </Step>
   <Step title="Password">
-    Set an initial password for the account. The user will be required to change this password on their first login — they will be redirected to `/change-password` immediately after signing in for the first time.
+    Set an initial password for the account. Both **Password** and **Confirm Password** fields are required. The password must be 8–128 characters and include at least one uppercase letter, one digit, and one special character.
+
+    <Callout type="info">
+      The new user will be required to change this password on their first login. They will be redirected to `/change-password` immediately after signing in for the first time.
+    </Callout>
   </Step>
   <Step title="Assign Calling">
-    Optionally assign a calling and slot number to the new user. Select a calling from the dropdown, then select the slot number. Click **Skip** if no calling assignment is needed at this time — callings can be assigned later from the Edit User dialog.
+    Optionally assign a calling to the new user. Select a calling from the dropdown. If the calling has multiple slots (for example, High Councilor or Bishop), a second dropdown appears to select the specific slot or ward. Click **Skip** if no calling assignment is needed at this time.
+
+    If all slots for the selected calling are already filled, the slot dropdown will indicate no slots are available and you must either choose a different calling or skip this step.
   </Step>
   <Step title="Profile Photo">
-    Optionally upload a profile photo. Click **Skip** if no photo is available. If you select a file, a **circular crop dialog** opens:
-    - Drag the image to reposition it within the circular crop area.
-    - Scroll (or use the zoom slider) to zoom in and out.
-    - When satisfied with the crop, click **Crop & Save** to confirm.
+    Optionally upload a profile photo. Accepted formats are JPG, PNG, and WebP up to 5 MB. When you select a file, a **circular crop dialog** opens:
 
-    The cropped image is stored and displayed on the user's profile and in the stake leadership pages.
+    - Drag the image to reposition it within the crop circle.
+    - Use the zoom slider to zoom in or out.
+    - Click **Crop & Save** to confirm. Click **Cancel** to go back and choose a different file.
+
+    Click **Skip** if no photo is available. The photo can be added or changed later from the Edit dialog.
   </Step>
   <Step title="Review">
-    A summary of all the information you entered is displayed before the account is created. Optional fields that were skipped show as **—**. Review everything carefully, then click **Create** to create the account.
+    A summary of all information is displayed before the account is created:
+
+    | Field | Value shown |
+    |-------|-------------|
+    | Name | First and last name |
+    | Email | Login email address |
+    | Phone | Phone number, or — if not provided |
+    | Calling | Calling and slot/ward, or — if skipped |
+    | Photo | "Added" if a photo was cropped and confirmed, or — if skipped |
+
+    Review everything carefully, then click **Create User** to create the account.
   </Step>
 </Steps>
 
 <Callout type="info">
-  After clicking Create, the user account is created first. The profile photo upload and calling assignment (if provided) happen in parallel immediately afterward. If either the photo upload or calling assignment fails, a warning toast will appear — but the user account itself will still have been created successfully. You can retry the photo or calling assignment from the Edit User dialog.
+  After clicking Create User, the account is created first. The photo upload and calling assignment (if provided) happen immediately afterward in parallel. If either step fails, a warning toast appears — but the user account itself will still have been created. Retry the photo or calling assignment from the Edit dialog or Permissions dialog.
 </Callout>
 
 ## Editing an Existing User
 
-Click any user's row in the table (or their **Edit** button) to open the **Edit User** dialog. The dialog has several sections:
+Open the row's **Actions** dropdown and select **Edit** to open the Edit User dialog. The dialog shows a profile header with the user's avatar and a camera button for changing the photo.
 
-### Account Details
+**Editable fields:**
 
-Update the user's **first name**, **last name**, **email address**, **phone number**, **bio**, and **active status** from this section. Click **Save** to apply changes.
+- First Name
+- Last Name
+- Email
+- Phone (optional)
+
+Click **Save Changes** to apply. The dialog footer also exposes **Delete User** and **Reset Password** — see those sections below.
+
+### Changing the Profile Photo
+
+Click the camera button overlaid on the avatar (or the **Choose Photo** / **Change Photo** button in the Add User wizard) to open the file picker. After selecting an image, the circular crop dialog opens. Drag and scroll to position the crop, then click **Use Photo** to upload. The photo is stored as a circular-cropped JPEG; the original file is not retained.
+
+## Managing Permissions
+
+Open the row's **Actions** dropdown and select **Permissions** to open the Permissions dialog. The dialog has two sections navigable via a searchable command palette.
 
 ### Callings
 
-View the callings currently assigned to the user. You can assign a new calling (by selecting a calling and slot number) or remove an existing calling assignment from this section.
+The top section lists every calling currently assigned to the user. Click the **X** next to a calling to remove it. Click **Assign calling…** to enter the calling assignment sub-view, which shows all callings with available slots. Callings with only one slot can be assigned directly; callings with multiple slots expand to show individual slot or ward options.
 
-### Profile Photo
+### Direct Permissions
 
-Re-upload or replace the user's profile photo. The same **circular crop flow** from the Add User wizard applies here:
+The bottom section lists all assignable permission flags. Click a row to toggle that permission on or off for the user. A filled circle icon indicates the permission is active.
 
-1. Click **Upload Photo** and select an image file.
-2. The crop dialog opens — drag and scroll to position the circular crop.
-3. Click **Crop & Save** to confirm. The new photo replaces the previous one immediately.
+| Permission | What it grants |
+|------------|---------------|
+| Manage Users | Create, edit, deactivate, and delete user accounts |
+| Manage Callings | Assign and remove callings from users |
+| Manage Assignments | Edit High Council assignment responsibilities and committees |
+| Manage Speaking Schedule | Set monthly HC ward speaking assignments and topics |
+| Submit Calling Proposals | Submit new calling or release proposals |
+| Manage Calling Proposals | Advance, revert, edit, and delete proposals on the Kanban board |
+| View Calling Proposals | Read-only access to the calling proposals board |
+| Manage Wards | Edit ward records |
+| Manage Appointments | Configure temple recommend appointment types and availability |
+| Approve Building Reservations | Review and approve or deny building reservation requests |
+| Manage Building Access | Manage building access settings |
+| Manage Site Settings | Edit stake name, address, hero content, sacrament times, and hidden pages |
 
 <Callout type="note">
-  The profile photo is stored as a circular-cropped JPEG on the server. The original un-cropped file is not retained.
+  The DISCORD_BOT permission flag (128) is a reserved service-identity flag automatically assigned to the bot account. It does not appear in this dialog and must not be manually assigned to regular users.
 </Callout>
+
+## Activating and Deactivating Users
+
+Each user row's **Actions** dropdown includes a **Deactivate** or **Activate** option. Deactivating a user prevents them from logging in without deleting their account or history. Reactivating restores their access immediately.
+
+Deactivating an active user shows a confirmation dialog. The Deactivate option is disabled if the user is your own account or if they are the last active user in the system.
+
+<Callout type="warn">
+  Deactivating a user does not end any currently active sessions. Existing sessions will expire on their own schedule.
+</Callout>
+
+## Resetting a Password
+
+From within the **Edit User** dialog, click **Reset Password** in the footer. Enter and confirm a new temporary password meeting the complexity requirements (8–128 characters, at least one uppercase letter, one digit, one special character). Click **Reset Password** to apply.
+
+The user will be required to set a new password on their next login and will be redirected to `/change-password` automatically.
+
+## Deleting a User
+
+From within the **Edit User** dialog, click **Delete User** in the footer. A confirmation dialog appears warning that the action permanently removes the account, callings, and all associated data and cannot be undone.
+
+The **Delete User** button is disabled (with a tooltip explanation) in two situations:
+
+- You are viewing your own account — you cannot delete yourself.
+- The user is the last active user in the system.
+
+Some users may also be blocked from deletion by backend constraints (for example, if they have data dependencies). In that case an error toast will appear explaining the reason.
+
+## Related pages
+
+- [Admin Hub](/user-guide/admin) — overview of all Admin Hub management tabs
+- [Permissions reference](/development/permissions) — full list of permission flags and how they work
+- [First Run and Bootstrap](/deployment/first-run) — initial admin account and setup

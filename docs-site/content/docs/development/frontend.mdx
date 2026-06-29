@@ -126,18 +126,16 @@ Use `user` to check if the current user is logged in and to read identity fields
 
 ## Component library
 
-Both **DaisyUI** and **shadcn/ui** are active. Follow this split — never build a custom version of something either library already provides.
+**shadcn/ui** and **Tailwind CSS** are the only UI systems. Do not use DaisyUI. Never build a custom version of something shadcn already provides.
 
 | Need | Use |
 |------|-----|
-| Buttons, badges, tables, alerts | DaisyUI (`btn`, `badge`, `table`, `alert`) |
-| Loading skeletons | DaisyUI (`skeleton`) |
-| Toasts / notifications | DaisyUI toast or Sonner |
-| Cards, simple modals, drawers | DaisyUI |
-| Dialog (accessible) | shadcn `Dialog` |
-| Dropdown menu | shadcn `DropdownMenu` |
-| Select / combobox | shadcn `Select` or `Command` |
-| Popover, Sheet, Tooltip, Accordion | shadcn equivalents |
+| Buttons, badges, inputs, checkboxes, selects, textareas | shadcn (`components/ui/`) |
+| Loading skeletons | `<Skeleton>` from `components/ui/skeleton.tsx` |
+| Spinners / full-page loading | `<Spinner>` from `components/ui/spinner.tsx` |
+| Dialog, Dropdown, Popover, Command, Sheet, Tooltip, Accordion | shadcn (`components/ui/`) |
+| Cards, tabs, tables | shadcn (`components/ui/`) |
+| Toasts / notifications | Sonner |
 | Layout, spacing, custom positioning | Raw Tailwind |
 
 Add new shadcn components via the CLI — do not hand-write files into `components/ui/`:
@@ -152,7 +150,7 @@ npx shadcn@latest add <component-name>
 
 - Use **semantic tokens only**: `primary`, `secondary`, `accent`, `muted`, `background`, `card`, `destructive`. Do not use raw Tailwind color classes like `bg-blue-500` or `text-gray-700`.
 - Max content width: `max-w-6xl mx-auto`. Page padding: `px-4 sm:px-6 lg:px-8`. Section spacing: `py-12`.
-- Typography: Inter for body text, Playfair Display (`font-serif`) for hero and section headings.
+- Typography: Plus Jakarta Sans for body text, Fraunces (`font-serif`) for hero and section headings.
 - Icons: **Lucide React** only. Use `size-4` for inline icons and `size-5` for standalone icons.
 - Dark mode is class-based and works automatically when semantic tokens are used — no manual dark: variants needed.
 

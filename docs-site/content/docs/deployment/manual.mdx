@@ -1,13 +1,40 @@
 ---
 title: "Manual Deployment"
-description: "Run each Stake Portal service directly on the host without containers."
+description: "Run each Stake Portal service directly on the host without containers. For local development and source-based environments."
 ---
 
-Manual deployment gives you full control over each process. It is well-suited for local development, constrained environments, or situations where Docker is not available.
-
 <Callout type="warn">
-  Always start the backend before the frontend. The Express proxy requires the FastAPI server to be reachable at `BACKEND_URL` before it can forward requests.
+  This guide is for local development and source-based environments only. For a production server, use [Docker Deployment](/deployment/docker) instead. Running services directly from source without containerisation means you are responsible for process supervision, restarts on failure, and keeping runtime versions consistent.
 </Callout>
+
+Manual deployment gives you full control over each service and is the right path for:
+
+- Local development and feature work
+- Contributing to the project
+- Environments where Docker is not available
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 18 or later | Required for the frontend |
+| Python | 3.11 or later | Required for backend and Discord bot |
+| uv | Latest | Python package manager — [install here](https://docs.astral.sh/uv/) |
+
+`uv` replaces `pip`, `venv`, and `conda`. Never call `python` or `pip` directly — always use `uv run` and `uv sync`.
+
+---
+
+## Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/rc27122/LDS_Stake_Website-Template-2.git
+cd LDS_Stake_Website-Template-2
+```
+
+---
 
 ## Backend
 
@@ -18,38 +45,73 @@ cd backend
 uv sync
 ```
 
-### 2. Create the environment file
-
-Create `backend/.env`:
+To include test dependencies:
 
 ```bash
-DEV=false
+uv sync --group dev
+```
+
+### 2. Create the environment file
+
+Copy the example and fill in the required values:
+
+```bash
+cp .env.example .env
+```
+
+Minimum configuration for local development:
+
+```bash
+# backend/.env (local dev)
+DEV=true
 PORT=8000
 DB_ENGINE=sqlite
 DATABASE_PATH=./database.db
-INITIAL_ADMIN_PASSWORD=change-me-on-first-run
-JWT_SECRET_KEY=replace-with-a-long-random-string
+INITIAL_ADMIN_PASSWORD=dev-password-123
+JWT_SECRET_KEY=        # generate with: openssl rand -hex 32
 SSL_ENABLED=false
 SP_APPROVAL_THRESHOLD=2
 HC_APPROVAL_THRESHOLD=3
+ALLOWED_ORIGINS=http://localhost:3100
+FRONTEND_BASE_URL=http://localhost:3100
+BACKEND_BASE_URL=http://localhost:8000
 ```
 
-See [Environment Variables](/deployment/environment) for a full description of every setting.
+<Callout type="warn">
+  `JWT_SECRET_KEY` must be at least 64 characters. Generate a valid key with `openssl rand -hex 32`. Do not use `openssl rand -base64 32` — that produces only 44 characters and will fail the startup check.
+</Callout>
 
-### 3. Apply database migrations
+<Callout type="info">
+  `SSL_ENABLED=false` is correct for local development because you are not serving over HTTPS. In any production or publicly accessible deployment, set `SSL_ENABLED=true` to mark session cookies as Secure.
+</Callout>
+
+### 3. Configure `backend/wards.csv`
+
+Create `backend/wards.csv` with your wards before the first start. The format is:
+
+```
+name,start_hour
+Riverside Ward,9.0
+Eastside Ward,11.0
+Westview Ward,13.5
+```
+
+`start_hour` is a decimal hour (9.0 = 9:00 AM, 13.5 = 1:30 PM).
+
+### 4. Apply database migrations
+
+Migrations run automatically at startup by default (`RUN_MIGRATIONS=true`). You can also run them manually:
 
 ```bash
 uv run alembic -c alembic.ini upgrade head
 ```
 
-Run this every time you upgrade to a new version of the portal. It is safe to run against an already-migrated database.
+### 5. Start the backend
 
-### 4. Start the backend
-
-**First run only** (seeds the admin account):
+**First run only** (creates the admin account):
 
 ```bash
-INITIAL_ADMIN_PASSWORD=your-password uv run python main.py
+INITIAL_ADMIN_PASSWORD=dev-password-123 uv run python main.py
 ```
 
 **All subsequent runs:**
@@ -58,11 +120,17 @@ INITIAL_ADMIN_PASSWORD=your-password uv run python main.py
 uv run python main.py
 ```
 
-<Callout type="info">
-  `INITIAL_ADMIN_PASSWORD` is only read when the database is empty. After the first run, removing it from `.env` or leaving it unchanged has no effect — the admin account will not be recreated or overwritten.
-</Callout>
+Or use Uvicorn directly for hot reload during development:
 
-The FastAPI server starts on port 8000. Swagger docs are available at [http://localhost:8000/docs](http://localhost:8000/docs) when `DEV=true`.
+```bash
+uv run python -m uvicorn src.app:app --reload --host localhost --port 8000
+```
+
+The FastAPI server starts on port 8000. When `DEV=true`, the Swagger UI is available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+<Callout type="info">
+  `INITIAL_ADMIN_PASSWORD` is only read when the database contains no users. After the admin account is created, this variable is ignored on all subsequent starts — the account is not recreated or overwritten.
+</Callout>
 
 ---
 
@@ -75,71 +143,136 @@ cd frontend
 npm install
 ```
 
-### 2. Configure environment
-
-Set the following before building or starting the Express server. You can export them in your shell, add them to a `.env` file loaded by your process manager, or prefix the start command directly.
+### 2. Create the environment file
 
 ```bash
-NODE_ENV=production
-BACKEND_URL=http://localhost:8000   # or your production backend URL
-PORT=3100                           # optional; defaults to 3100
+cp .env.example .env
 ```
 
-### 3. Build the React client
+For local development with the backend on localhost:
+
+```bash
+# frontend/.env (local dev)
+BACKEND_URL=http://localhost:8000
+PORT=3100
+NODE_ENV=production
+```
+
+<Callout type="info">
+  `BACKEND_URL` is read once when the Express server starts. If you change this value, you must restart the server process for the change to take effect.
+</Callout>
+
+### 3. Development modes
+
+**Full development stack** (Express + Vite, proxies API to backend):
+
+```bash
+npm run dev
+```
+
+**Vite only** (fast HMR, no Express proxy — the Vite dev server proxies to `http://localhost:8000` directly):
+
+```bash
+npm run dev:client
+```
+
+**Production build + start:**
 
 ```bash
 npm run build
-```
-
-### 4. Start the Express server
-
-```bash
-node server/index.js
-```
-
-Or, if a `start` script is defined in `package.json`:
-
-```bash
-npm start
+node dist/index.cjs
 ```
 
 The portal is served at [http://localhost:3100](http://localhost:3100). Every `/api/*` request is proxied to `BACKEND_URL` with the `/api` prefix stripped.
 
 ---
 
-## Slackbot (Optional)
+## Discord Bot (Optional)
+
+The Discord bot is entirely optional. The backend degrades cleanly without it — all Discord-related features are silently disabled when `DISCORD_BOT_TOKEN` and `DISCORD_BOT_URL` are not set in `backend/.env`.
 
 ### 1. Install dependencies
 
 ```bash
-cd slackbot
+cd discordbot
 uv sync
 ```
 
 ### 2. Create the environment file
 
 ```bash
-# slackbot/.env
-SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_APP_TOKEN=xapp-your-app-level-token
+cp .env.example .env
 ```
 
-### 3. Start the Slackbot
+```bash
+# discordbot/.env (local dev)
+DISCORD_TOKEN=your-discord-bot-token
+BACKEND_URL=http://localhost:8000
+BACKEND_TOKEN=same-shared-secret-as-backend-DISCORD_BOT_TOKEN
+```
+
+Also set the matching variables in `backend/.env`:
+
+```bash
+DISCORD_BOT_TOKEN=same-shared-secret-as-discordbot-BACKEND_TOKEN
+DISCORD_BOT_URL=http://localhost:8001
+```
+
+`BACKEND_TOKEN` and `DISCORD_BOT_TOKEN` must be the same value. See [Environment Variables](/deployment/environment) for a full explanation of how this shared secret is used.
+
+### 3. Start the Discord bot
 
 ```bash
 uv run python main.py
 ```
 
-The Slackbot connects to Slack over Socket Mode (no inbound port required). It can be started or stopped independently of the frontend and backend.
+The bot connects to Discord via the gateway API and also starts a FastAPI HTTP server on port 8001 for receiving requests from the main backend.
 
 ---
 
-## Process Management
+## Startup Order
 
-For long-running production deployments, consider managing each service with a process supervisor such as `systemd`, `pm2` (for Node.js), or `supervisord`. This ensures services restart automatically after a crash or reboot.
+Always start services in this order:
+
+1. **Backend** (`uv run python main.py` in `backend/`) — the database and API must be ready first
+2. **Frontend** (`npm run dev` in `frontend/`) — the Express proxy requires the backend to be reachable
+3. **Discord bot** (`uv run python main.py` in `discordbot/`) — optional, requires the backend to be running
+
+---
+
+## Running Tests
+
+```bash
+# All tests
+cd backend
+uv run pytest
+
+# Single test file
+uv run pytest src/tests/test_auth.py
+
+# Single test
+uv run pytest src/tests/test_auth.py::test_login_sets_cookie_and_returns_token
+```
+
+Tests use an isolated temporary SQLite database and never affect the development database.
+
+---
+
+## TypeScript Type Checking
+
+```bash
+cd frontend
+npm run check
+```
+
+---
+
+## Process Management for Long-Running Deployments
+
+If you are running services manually on a server (not recommended for production — use Docker instead), use a process supervisor to ensure services restart after a crash or reboot.
 
 Example startup order for a systemd-based host:
 
 1. `stake-backend.service` — starts FastAPI via `uv run python main.py`
-2. `stake-frontend.service` — starts Express via `node server/index.js` (depends on backend)
-3. `stake-slackbot.service` — starts Slackbot via `uv run python main.py` (independent)
+2. `stake-frontend.service` — starts Express via `node dist/index.cjs` (depends on backend)
+3. `stake-discordbot.service` — optional, starts the Discord bot via `uv run python main.py`

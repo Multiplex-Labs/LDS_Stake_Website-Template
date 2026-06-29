@@ -1,52 +1,117 @@
 ---
 title: "Submit a Calling Proposal"
-description: "Start a new calling or release proposal from the Submit page."
+description: "Start a new calling recommendation, release, or combined calling-and-release proposal from the Submit page."
 ---
 
-## Accessing the Page
+The Submit page (`/leader/callings/submit`) is where stake leaders create new calling recommendations and releases. Submissions require the `SUBMIT_CALLING_PROPOSALS` permission.
 
-Navigate to `/leader/callings/submit`. You must be authenticated and have the appropriate permissions to submit proposals.
+## Choosing a Submission Type
 
-## The Submission Form
-
-Fill in the following fields to create a new proposal:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| First Name | Yes | The first name of the person being called or released |
-| Last Name | Yes | The last name of the person being called or released |
-| Proposed Calling | Yes | The title or name of the calling (e.g., "Sunday School Teacher", "Ward Clerk") |
-| Ward | Yes | The ward this calling belongs to — select from the dropdown |
-| Submitter | Yes | The name of the person submitting the proposal |
-| Spouse Name | No | The spouse's name, if relevant to the calling |
-| Is Release | Toggle | When enabled, this is a release (removal from a calling) rather than a new calling |
-
-## Callings vs. Releases
-
-The **Is Release** toggle changes how the proposal enters the pipeline.
+Before filling in any fields, select which type of proposal you are submitting by clicking one of three option tiles at the top of the page:
 
 <Cards>
-  <Card title="New Calling (Is Release OFF)" icon="circle-plus">
-    The proposal starts at **SP Approval** (stage 0) and progresses through all seven stages: SP Approval → HC Approval → Interview → Sustain → Set Apart → LCR Update → Done.
+  <Card title="New Calling" icon="user-plus">
+    Recommend a member for a new calling. Displays the Calling Recommendation form only.
   </Card>
-  <Card title="Release (Is Release ON)" icon="circle-minus">
-    The proposal skips SP Approval and HC Approval and enters at **Interview** (stage 2), since releases do not require the same approval process. Releases also skip the Set Apart stage.
+  <Card title="Release Only" icon="user-minus">
+    Release one or more members from their current callings. Displays one or more Release cards. No calling recommendation is included.
+  </Card>
+  <Card title="Calling + Release" icon="users">
+    Submit a calling recommendation and one or more releases in a single submission. Both form sections are shown.
+  </Card>
+</Cards>
+
+The selected type determines which form sections appear and how proposals enter the pipeline.
+
+## Calling Recommendation Fields
+
+This section appears when the submission type is **New Calling** or **Calling + Release**.
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| First Name | Yes | First name of the member being recommended |
+| Last Name | Yes | Last name of the member being recommended |
+| Spouse's First Name | No | Optional; include when relevant to the calling |
+| Ward | Yes | Select from the dropdown. Bishops have their ward pre-filled and locked — the field cannot be changed |
+| Calling / Assignment | Yes | Select from a preset list; choose **Other** to type a custom calling title |
+| Notes | No | Free-text field for any additional context; maximum 500 characters |
+
+<Callout type="note">
+  There is no Submitter field on this form. The portal records the submitter automatically from your logged-in account. Any value typed in that field in an older version of the form would have been ignored by the server, which always overwrites the submitter with the authenticated user's ID.
+</Callout>
+
+## Release Fields
+
+This section appears when the submission type is **Release Only** or **Calling + Release**. At least one release card is required.
+
+Each release card collects:
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| First Name | Yes | First name of the member being released |
+| Last Name | Yes | Last name of the member being released |
+| Spouse's First Name | No | Optional |
+| Ward | Yes | Select from the dropdown. Bishops have their ward pre-filled and locked |
+| Calling Being Released | Yes | Select from a preset list; choose **Other** to type a custom calling title |
+
+Click **Add another release** to add additional release cards to the same submission. Each card is labeled Release One, Release Two, and so on. Cards can be removed with the **Remove** button unless the submission type is Release Only and only one card remains (at least one release is always required).
+
+## The Calling Dropdown
+
+The calling / assignment dropdown list changes based on whether a ward is selected:
+
+- **No ward selected** — shows stake-level callings (Stake High Councilor, Stake Executive Secretary, Stake Clerk, Stake Sunday School positions, Stake Relief Society positions, Stake Primary positions, Other).
+- **Ward selected** — shows ward-level callings (Bishop, Bishopric First Counselor, Bishopric Second Counselor, Ward Executive Secretary, Ward Assistant Executive Secretary, Ward Clerk, Ward Assistant Clerk, Elders Quorum President, Elders Quorum First Counselor, Elders Quorum Second Counselor, Other).
+
+Selecting **Other** from either list dismisses the dropdown and displays a free-text input where you can type any calling title. Click the X button next to the input to return to the dropdown.
+
+## Duplicate Detection
+
+The form checks the active Kanban board in real time. If an identical proposal — same first name, last name, ward, and calling — already exists in the pipeline, a warning banner appears on the relevant form section. You can still submit; the warning is advisory only.
+
+## Submission Summary
+
+A sticky sidebar on the right (bottom on mobile) displays a live summary of everything you have entered. It shows the submission type badge, the calling recommendation details (name, ward, calling), and each release entry. Each section shows a green **Complete** indicator when all required fields are filled or an amber **Incomplete** indicator with a count of remaining required fields.
+
+The **Submit for Review** button is located in this sidebar. The **Cancel** button returns you to `/leader/calling-system` without saving.
+
+## Submitting
+
+When all required fields are complete, click **Submit for Review**. The button label changes to **Submitting…** while the request is in progress. Each proposal (the calling recommendation and each release) is sent as a separate API request; all are submitted together when you click the button.
+
+If submission fails, an error toast appears and the form remains open so you can correct the issue and try again.
+
+## After Submission
+
+On success, a confirmation screen lists every proposal created:
+
+- **Calling** — John Doe → Bishop (Riverside Ward)
+- **Release** — Jane Smith → Elders Quorum President (Riverside Ward)
+
+Two buttons appear:
+
+- **View on Board** — navigates to `/leader/calling-system` to see the proposals on the Kanban board.
+- **Submit Another** — resets the form to start a new submission without leaving the page.
+
+## How Proposals Enter the Pipeline
+
+The submission type controls where each proposal begins in the workflow:
+
+<Cards>
+  <Card title="New Calling (Calling Recommendation)" icon="circle-plus">
+    Enters at **SP Approval** (stage 0). Stake Presidency members approve it on the [Review](/user-guide/callings/review) page before it advances.
+  </Card>
+  <Card title="Release" icon="circle-minus">
+    Skips SP Approval and HC Approval entirely. Enters directly at **Interview** (stage 2). Releases also skip the Set Apart stage later in the pipeline.
   </Card>
 </Cards>
 
 <Callout type="info">
-  If you are unsure whether to use the Is Release toggle, consider: is this person being *placed into* a calling (new calling) or *removed from* a calling (release)? Releases are common when someone moves wards, is called to a new position, or is honorably released from their current calling.
+  A Calling + Release submission creates two separate proposals that travel through the pipeline independently. The calling recommendation starts at SP Approval; the release starts at Interview.
 </Callout>
 
-## Submitting the Proposal
+## Related pages
 
-Once all required fields are filled in, click **Submit**. The proposal is created and immediately appears on the [Manage (Kanban)](/user-guide/callings/manage) page at the appropriate starting stage.
-
-<Callout type="note">
-  You will see a confirmation message after a successful submission. If any required fields are missing, inline validation errors will appear below the relevant fields — correct them and resubmit.
-</Callout>
-
-## What Happens Next
-
-- **New callings** appear in the **SP Approval** column on the Manage board. Stake Presidency members can then open the [Review](/user-guide/callings/review) page to approve the proposal.
-- **Releases** appear in the **Interview** column on the Manage board, ready for the interview step.
+- [Review Calling Proposals](/user-guide/callings/review) — approve or deny proposals as a Stake Presidency or HC member
+- [Manage Callings (Kanban Board)](/user-guide/callings/manage) — track and advance proposals through the pipeline
+- [Calling Archive](/user-guide/callings/archive) — browse completed proposals

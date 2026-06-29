@@ -1,60 +1,64 @@
 ---
 title: "HC Assignments"
-description: "View and manage High Councilor ward assignments from the Assignments page."
+description: "View the High Councilor assignment table and edit responsibility and committee details from the Admin Hub."
 ---
 
-## What This Page Does
-
-The Assignments page (`/leader/assignments`) shows which High Councilor is assigned to each ward in the stake. This gives the Stake Presidency and clerk a single place to see and update ward coverage.
-
-## The Slot Model
-
-Each High Councilor calling has numbered **slots**. A slot represents one assignment relationship between a High Councilor and a ward. Because a High Councilor may cover more than one ward, they can hold multiple slots — for example, slot 1 assigned to Ward A and slot 2 assigned to Ward B.
+The Assignments page (`/leader/assignments`) is a **read-only** reference table that shows every High Councilor slot, who currently fills it, how to reach them, and what stake responsibilities and committee they hold. Editing is done separately in the [Admin Hub](/user-guide/admin).
 
 <Callout type="info">
-  Slots are defined on the calling itself, not on the person. If a new High Councilor is set apart into the same calling and slot, they inherit the assignment automatically.
+  Access to this page requires an authenticated leader account. The page is visible to all users who can log in to the Leader Portal.
 </Callout>
 
-## Viewing Assignments
+## Viewing the Assignments Table
 
-The assignments table displays:
+Navigate to `/leader/assignments`. The table contains one row per High Councilor slot and displays the following columns:
 
 | Column | Description |
 |--------|-------------|
-| Ward | The name of the ward (loaded from the system ward list) |
-| High Councilor | The name of the person currently assigned to that ward |
-| Slot | The slot number used for this assignment |
+| **High Councilor** | The full name of the person currently holding that slot |
+| **Phone** | The High Councilor's phone number on file |
+| **Responsibility** | One or more badges showing the stake assignment areas this person covers |
+| **Committee** | A badge indicating the committee the High Councilor serves on |
 
-Wards with no current assignment still appear in the table so you can see at a glance which wards need coverage.
+Rows are generated automatically from the active High Councilor calling holders. If a slot is vacant or has no responsibility or committee information entered yet, those cells will appear empty.
 
-## Adding an Assignment
+## Editing Responsibility and Committee (Admin Hub)
+
+Authorized administrators can update the **Responsibility** and **Committee** fields for each High Councilor slot. This is done in the Admin Hub, not on the main Assignments page.
+
+<Callout type="warn">
+  Editing assignment details requires the **MANAGE_ASSIGNMENTS** permission. If you do not see the Admin Hub or the edit controls described below, contact your stake clerk or system administrator.
+</Callout>
 
 <Steps>
-  <Step title="Open the Add dialog">
-    Click the **Add Assignment** button above the table.
+  <Step title="Open the Admin Hub">
+    Navigate to `/leader/admin` and select the **HC Assignments** tab, or use the direct link `/leader/admin?tab=hc-assignments`.
   </Step>
-  <Step title="Select a ward">
-    Choose the ward from the dropdown. All system wards are listed.
+  <Step title="Locate the slot to edit">
+    Find the row for the High Councilor slot you want to update. Each row shows the slot number and the current occupant's name.
   </Step>
-  <Step title="Select a High Councilor">
-    Choose the High Councilor from the dropdown. Only users currently holding the High Councilor calling appear here.
+  <Step title="Click the Edit button">
+    Click the **pencil (Edit)** icon on the right side of the row. A dialog opens with two editable fields.
   </Step>
-  <Step title="Select a slot number">
-    Choose the slot number to assign. Each slot number on a High Councilor represents a distinct ward assignment.
+  <Step title="Update the fields">
+    - **Responsibility** — Enter the stake assignment areas this High Councilor covers. You can add multiple values as separate tags.
+    - **Committee** — Enter the committee name this High Councilor serves on.
   </Step>
-  <Step title="Save">
-    Click **Save**. The new assignment appears in the table immediately.
+  <Step title="Save your changes">
+    Click **Save** in the dialog. The updated values appear immediately on both the Admin Hub table and the main Assignments page.
   </Step>
 </Steps>
 
-## Removing an Assignment
+## Ward-to-Slot Assignments
 
-Locate the assignment row in the table and click the **Remove** (trash/delete) button on that row. You will be prompted to confirm before the assignment is deleted.
+The association between a High Councilor slot and the ward(s) that slot covers is **not managed through the portal UI**. Ward assignments are configured by your system administrator in the `wards.csv` file and through the calling slot structure set up when the application is first deployed.
 
-<Callout type="warn">
-  Removing an assignment does not affect the High Councilor's calling itself — it only removes the ward association for that slot.
+<Callout type="info">
+  If a ward assignment needs to change — for example, a different High Councilor slot should cover a given ward — contact your system administrator. They will update the configuration and restart the backend service for the change to take effect.
 </Callout>
 
-## About the Ward List
+## Related pages
 
-Wards displayed in the table and the Add Assignment dropdown come from the system ward list. Wards are loaded from `wards.csv` when the backend starts up. If a ward is missing, contact your system administrator to update the ward configuration file and restart the backend.
+- [Admin Hub](/user-guide/admin) — all Admin Hub tabs and permissions
+- [Speaking Schedule](/user-guide/speaking) — the monthly HC speaking rotation
+- [User Administration](/user-guide/user-admin) — assigning the High Councilor calling to users
