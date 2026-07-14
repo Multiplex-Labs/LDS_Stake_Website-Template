@@ -1,13 +1,13 @@
 # Root Makefile for building and running Docker services
 
-GHCR_REPO ?= rc27122/lds_stake_website-template-2
+DOCKERHUB_REPO ?= joshuamcc/lds_stake_website_template_
 DOCKER_COMPOSE ?= docker compose
 DOCKER_BUILD_OPTS ?= --progress=plain
 
-IMAGE_BACKEND := ghcr.io/$(GHCR_REPO)/backend:latest
-IMAGE_FRONTEND := ghcr.io/$(GHCR_REPO)/frontend:latest
-IMAGE_DOCS_SITE := ghcr.io/$(GHCR_REPO)/docs-site:latest
-IMAGE_DISCORDBOT := ghcr.io/$(GHCR_REPO)/discordbot:latest
+IMAGE_BACKEND := $(DOCKERHUB_REPO)backend:latest
+IMAGE_FRONTEND := $(DOCKERHUB_REPO)frontend:latest
+IMAGE_DOCS_SITE := $(DOCKERHUB_REPO)docs-site:latest
+IMAGE_DISCORDBOT := $(DOCKERHUB_REPO)discordbot:latest
 
 .PHONY: all build-all build-backend build-frontend build-docs-site build-discordbot \
 	run-backend run-frontend run-docs-site run-discordbot \
