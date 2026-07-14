@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/backend:latest
+    image: ghcr.io/${GHCR_REPO:-rc27122/lds_stake_website-template-2}/backend:latest
     env_file:
       - ./backend/.env
     volumes:
@@ -19,7 +19,7 @@ services:
 
   frontend:
     build: ./frontend
-    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/frontend:latest
+    image: ghcr.io/${GHCR_REPO:-rc27122/lds_stake_website-template-2}/frontend:latest
     env_file:
       - ./frontend/.env
     depends_on:
@@ -28,7 +28,7 @@ services:
 
   docs-site:
     build: ./docs-site
-    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/docs-site:latest
+    image: ghcr.io/${GHCR_REPO:-rc27122/lds_stake_website-template-2}/docs-site:latest
     environment:
       - NODE_ENV=production
 
@@ -51,7 +51,7 @@ services:
 
   discordbot:
     build: ./discordbot
-    image: ghcr.io/${GHCR_REPO:-rc27122/LDS_Stake_Website-Template-2}/discordbot:latest
+    image: ghcr.io/${GHCR_REPO:-rc27122/lds_stake_website-template-2}/discordbot:latest
     env_file:
       - ./discordbot/.env
     depends_on:
