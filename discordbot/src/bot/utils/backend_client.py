@@ -32,6 +32,8 @@ class BackendClient:
         async with self._lock:
             # If we already have a token that isn't near expiry, reuse it
             if self._access_token and self._expires_at:
+                if self._expires_at.tzinfo is None:
+                    self._expires_at = self._expires_at.replace(tzinfo=datetime.timezone.utc)
                 now = datetime.datetime.now(datetime.timezone.utc)
                 # refresh a bit early (30s) to avoid race conditions
                 if now < (self._expires_at - datetime.timedelta(seconds=30)):
@@ -75,10 +77,10 @@ class BackendClient:
                 self.logger.error("_get_or_refresh_token: access_token missing in login response: %s", body)
                 raise RuntimeError("Login response did not include access_token")
 
-            self._access_token = token
-            self._expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+            self._access_token = str(token)
+            self._expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
             self.logger.info("_get_or_refresh_token: obtained access token, expires_in=%s seconds", expires_in)
-            return self._access_token
+            return self._access_token 
 
     async def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         """Internal request helper that adds auth and retries on 401 once."""
