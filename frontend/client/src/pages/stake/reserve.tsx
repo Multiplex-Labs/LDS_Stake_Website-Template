@@ -15,7 +15,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 const roomOptions = [
   "N. Cultural Hall (N. Gym)",
@@ -102,8 +103,6 @@ const formSchema = z.object({
 });
 
 export default function ReserveBuilding() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -123,15 +122,41 @@ export default function ReserveBuilding() {
 
   const selectedOrganization = form.watch("organization");
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+  const reservationMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      return apiRequest("POST", "/api/reservations/", {
+        event_name: values.eventName,
+        event_description: values.eventDescription || undefined,
+        date: format(values.date, "yyyy-MM-dd"),
+        start_time: values.startTime,
+        end_time: values.endTime,
+        setup_time: values.setupTime,
+        cleanup_time: values.cleanupTime,
+        rooms: values.rooms,
+        organizer_name: values.organizerName,
+        organizer_email: values.organizerEmail,
+        organizer_phone: values.organizerPhone,
+        organization: values.organization,
+        organization_other: values.organizationOther || undefined,
+        affiliation: values.affiliation,
+      });
+    },
+    onSuccess: () => {
       toast.success("Reservation Request Submitted", {
         description: "Your request has been sent to the Stake Executive Secretary for approval.",
       });
       form.reset();
-    }, 2000);
+    },
+    onError: (error: unknown) => {
+      console.error("[reserve-building] submit reservation:", error);
+      toast.error("Submission Failed", {
+        description: "Could not submit your reservation request. Please try again.",
+      });
+    },
+  });
+
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    reservationMutation.mutate(values);
   }
 
   const handleSelectAllRooms = (checked: boolean) => {
@@ -567,8 +592,8 @@ export default function ReserveBuilding() {
                       )}
                     />
 
-                    <Button type="submit" className="w-full hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl" size="lg" disabled={isSubmitting}>
-                      {isSubmitting ? (
+                    <Button type="submit" className="w-full hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl" size="lg" disabled={reservationMutation.isPending}>
+                      {reservationMutation.isPending ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Submitting Request...
