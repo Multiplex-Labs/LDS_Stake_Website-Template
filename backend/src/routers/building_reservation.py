@@ -171,7 +171,7 @@ def _bg_send_denied(reservation: BuildingReservation) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.post("/", status_code=201, response_model=BuildingReservationResponse)
+@router.post("", status_code=201, response_model=BuildingReservationResponse)
 def create_reservation(
     data: BuildingReservationCreate,
     background_tasks: BackgroundTasks,
@@ -219,7 +219,7 @@ def create_reservation(
     return BuildingReservationResponse.from_orm_with_conflict(reservation, has_conflict)
 
 
-@router.get("/", response_model=list[BuildingReservationResponse])
+@router.get("", response_model=list[BuildingReservationResponse])
 def list_reservations(
     status: Optional[ReservationStatus] = None,
     date: Optional[str] = None,

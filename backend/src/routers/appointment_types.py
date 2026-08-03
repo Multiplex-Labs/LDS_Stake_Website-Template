@@ -40,7 +40,7 @@ class AppointmentTypePatchResponse(SQLModel):
     warnings: List[str]
 
 
-@router.get("/")
+@router.get("")
 def list_appointment_types(
     session: Session = Depends(get_session),
 ) -> List[AppointmentType]:
@@ -54,7 +54,7 @@ def list_appointment_types(
     )
 
 
-@router.post("/")
+@router.post("")
 def create_appointment_type(
     body: AppointmentTypeCreate,
     session: Session = Depends(get_session),

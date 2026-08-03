@@ -986,7 +986,7 @@ function AvailabilitySubTab() {
   });
 
   const { data: users, isLoading: usersLoading } = useQuery<ApiUser[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/"],
   });
 
   const { data: config } = useQuery<TempleRecommendConfig>({
@@ -2048,7 +2048,7 @@ function BookingsSubTab() {
   });
 
   const { data: users } = useQuery<ApiUser[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/"],
   });
 
   const typeMap = useMemo(() => {

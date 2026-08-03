@@ -15,6 +15,7 @@ export async function registerRoutes(
     createProxyMiddleware({
       target: BACKEND_URL,
       changeOrigin: true,
+      xfwd: true,
       pathRewrite: { "^/api": "" },
       on: {
         error: (_err, _req, res) => {

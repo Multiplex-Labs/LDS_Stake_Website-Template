@@ -24,7 +24,7 @@ class TempleRecommendConfigUpdate(SQLModel):
     booking_cutoff_hours: Optional[int] = Field(default=None, ge=0)
 
 
-@router.get("/")
+@router.get("")
 def get_config(session: Session = Depends(get_session)) -> TempleRecommendConfig:
     """Return the singleton temple recommend configuration."""
     config = session.get(TempleRecommendConfig, 1)
@@ -33,7 +33,7 @@ def get_config(session: Session = Depends(get_session)) -> TempleRecommendConfig
     return config
 
 
-@router.patch("/")
+@router.patch("")
 def update_config(
     body: TempleRecommendConfigUpdate,
     session: Session = Depends(get_session),

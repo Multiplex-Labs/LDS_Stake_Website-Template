@@ -35,7 +35,19 @@ def main():
 
     port = int(os.environ.get("PORT", 8000))
     # configure uvicorn programmatically
-    uvicorn.run("src.app:app", host=host, port=port, reload=debug, log_config=log_cfg)
+    # Backend is only ever reached via an internal proxy hop (Caddy or the frontend's
+    # Express proxy) — it is not exposed directly to the internet — so it's safe to trust
+    # X-Forwarded-* headers from any peer and use them to build correct absolute URLs
+    # (e.g. redirect Location headers) instead of the internal container hostname.
+    uvicorn.run(
+        "src.app:app",
+        host=host,
+        port=port,
+        reload=debug,
+        log_config=log_cfg,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
 
 
 if __name__ == "__main__":

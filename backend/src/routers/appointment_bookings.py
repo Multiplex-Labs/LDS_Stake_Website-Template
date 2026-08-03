@@ -681,7 +681,7 @@ class RescheduleInfoResponse(SQLModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/")
+@router.post("")
 def create_booking(
     body: BookingCreate,
     background_tasks: BackgroundTasks,
@@ -1162,7 +1162,7 @@ def resend_confirmation(
     return _PRIVACY_SAFE_RESPONSE
 
 
-@router.get("/")
+@router.get("")
 def list_bookings(
     interviewer_user_id: Optional[int] = Query(default=None),
     appointment_type_id: Optional[int] = Query(default=None),

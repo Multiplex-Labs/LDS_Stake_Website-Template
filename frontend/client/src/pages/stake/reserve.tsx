@@ -124,7 +124,7 @@ export default function ReserveBuilding() {
 
   const reservationMutation = useMutation({
     mutationFn: async (values: z.infer<typeof formSchema>) => {
-      return apiRequest("POST", "/api/reservations/", {
+      return apiRequest("POST", "/api/reservations", {
         event_name: values.eventName,
         event_description: values.eventDescription || undefined,
         date: format(values.date, "yyyy-MM-dd"),
