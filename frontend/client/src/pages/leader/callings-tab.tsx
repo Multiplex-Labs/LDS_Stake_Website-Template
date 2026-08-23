@@ -1084,7 +1084,7 @@ export function CallingsTab() {
                           slot={slot}
                           wardName={calling.name === "Bishop" ? wardByBishopSlot.get(slot) : undefined}
                           occupant={occupantMap.get(`${calling.id}:${slot}`)}
-                          activeUsers={unassignedActiveUsers}
+                          activeUsers={activeUsers}
                           lockSlots={calling.lock_slots}
                         />
                       ))}
