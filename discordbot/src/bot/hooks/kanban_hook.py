@@ -2,6 +2,8 @@ import discord
 import logging
 from discord import Member, Interaction, ButtonStyle, TextChannel, app_commands
 from discord.ui import View, button, Button
+
+from ..utils.exceptions import InvalidHTTPErrorException
 from .base_hook import BaseHook
 from ...models import KanbanUpdateRequest, KanbanApprovalRequest, InterviewRequest
 from ..bot import LDSStakeBot
@@ -18,16 +20,28 @@ class ApprovalView(View):
         logger = logging.getLogger("application")
         logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) clicked Approve.")
         # Send Approval to Backend
-        await self.bot.backend_client.submit_approval(self.email, self.proposal_id, True)
-        await interaction.response.send_message("You approved the update!", ephemeral=True)
+        try:
+            await self.bot.backend_client.submit_approval(self.email, self.proposal_id, True)
+            await interaction.response.send_message("You approved the update!", ephemeral=True)
+        except InvalidHTTPErrorException as e:
+            if e.status_code == 400 and "already submitted" in e.error_message.lower():
+                await interaction.response.send_message(":warning: You have already submitted a response to this approval request. To change your response, you must do so on the stake website.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Error occurred while submitting approval: {e.error_message}", ephemeral=True)
 
     @button(label="Reject", style=ButtonStyle.red, custom_id="reject_update")
     async def reject_button(self, interaction: Interaction, button: Button):
         logger = logging.getLogger("application")
         logger.info(f"User {interaction.user.name} (ID: {interaction.user.id}) clicked Reject.")
         # Send Rejection to Backend
-        await self.bot.backend_client.submit_approval(self.email, self.proposal_id, False)
-        await interaction.response.send_message("You rejected the update!", ephemeral=True)
+        try:
+            await self.bot.backend_client.submit_approval(self.email, self.proposal_id, False)
+            await interaction.response.send_message("You rejected the update!", ephemeral=True)
+        except InvalidHTTPErrorException as e:
+            if e.status_code == 400 and "already submitted" in e.error_message.lower():
+                await interaction.response.send_message(":warning: You have already submitted a response to this approval request. To change your response, you must do so on the stake website.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Error occurred while submitting rejection: {e.error_message}", ephemeral=True)
 
 
 class KanbanHook(BaseHook):
@@ -64,7 +78,7 @@ class KanbanHook(BaseHook):
                 f"**Person:** `{approval.person}`\n"
                 f"**Calling:** `{approval.calling}`\n"
                 f"**Ward:** `{approval.ward}`\n"
-                f"**Details URL:** {approval.url}\n\n"
+                f"**Approval Review Page:** {approval.url.split('calling-proposals')[0]}leader/callings/review\n\n"
                 f"Please review the update and click Approve or Reject."
             )
             self._send_dm(user.id, message, view=view)

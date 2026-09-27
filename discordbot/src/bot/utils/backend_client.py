@@ -5,6 +5,8 @@ from typing import Any, Optional, List
 
 import httpx
 
+from .exceptions import InvalidHTTPErrorException
+
 class BackendClient:
     """Async client for communicating with the backend API.
 
@@ -127,7 +129,7 @@ class BackendClient:
             except Exception:
                 content = resp.text
             self.logger.error("_request: request failed status=%s content=%s", resp.status_code, content)
-            raise RuntimeError(f"Request failed {resp.status_code}: {content}")
+            raise InvalidHTTPErrorException(resp.status_code, content["detail"] if isinstance(content, dict) and "detail" in content else str(content))
 
         # Return parsed JSON when possible, otherwise raw text
         try:
