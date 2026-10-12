@@ -39,7 +39,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { STAGE_LABELS, STAGE_BADGE_VARIANT, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
-import type { CallingProposal, Ward, ApiUser, CallingComment } from "@/types";
+import type { CallingProposal, Ward, ApiUser, CallingComment, KanbanTransition } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
   stageKey: string;
@@ -115,6 +115,12 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     queryKey: ["/api/calling-kanban/proposals", proposal?.id, "comments"],
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/comments`).then((r) => r.json()),
     enabled: !!proposal && canManage,
+  });
+
+  const { data: history = [], isLoading: historyLoading, isError: historyError } = useQuery<KanbanTransition[]>({
+    queryKey: ["/api/calling-kanban/proposals", proposal?.id, "history"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/history`).then((r) => r.json()),
+    enabled: !!proposal,
   });
 
   function closeDialog() {
@@ -445,6 +451,41 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                       </div>
                     </div>
                   )}
+
+                  <Separator />
+
+                  {/* History */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">History</p>
+                      {historyLoading && <span className="text-sm text-muted-foreground">Loading...</span>}
+                      {historyError && <span className="text-sm text-destructive">Failed to load calling history.</span>}
+                    </div>
+
+                    {history.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">No stage history yet.</p>
+                    ) : (
+                      <div className="space-y-2 w-full">
+                        {history.map((h, i) => {
+                          const actor = userMap.get(h.updater_id);
+                          const actorName = actor ? `${actor.fname} ${actor.lname}` : `User ${h.updater_id}`;
+                          const fromLabel = h.from_stage !== null ? STAGE_LABELS[String(h.from_stage)] : "created";
+                          const toLabel = STAGE_LABELS[String(h.to_stage)] ?? `Stage ${h.to_stage}`;
+                          const dateStr = formatCommentDate(h.updated_at);
+                          const summary = h.from_stage === null
+                            ? `${actorName} created the proposal and moved it to ${toLabel}.`
+                            : `${actorName} moved the proposal from ${fromLabel} to ${toLabel}.`;
+
+                          return (
+                            <div key={h.id ?? i} className="rounded-md border bg-muted/30 p-3">
+                              <p className="text-sm text-foreground">{summary}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{dateStr}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
                   <Separator />
 

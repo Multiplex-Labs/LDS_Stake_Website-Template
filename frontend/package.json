@@ -113,5 +113,11 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "bufferutil@4.1.0": true
   }
 }
