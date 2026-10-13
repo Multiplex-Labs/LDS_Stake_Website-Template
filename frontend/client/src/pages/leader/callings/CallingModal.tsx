@@ -39,7 +39,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { STAGE_LABELS, STAGE_BADGE_VARIANT, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
-import type { CallingProposal, Ward, ApiUser, CallingComment, KanbanTransition } from "@/types";
+import type { CallingProposal, Ward, ApiUser, CallingComment, KanbanTransition, CallingInterview } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
   stageKey: string;
@@ -111,6 +111,8 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     return m;
   }, [users]);
 
+  const selectedInterviewer = interviewerId ? userMap.get(Number(interviewerId)) : undefined;
+
   const { data: comments = [], isLoading: commentsLoading, isError: commentsError } = useQuery<CallingComment[]>({
     queryKey: ["/api/calling-kanban/proposals", proposal?.id, "comments"],
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/comments`).then((r) => r.json()),
@@ -122,6 +124,18 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/history`).then((r) => r.json()),
     enabled: !!proposal,
   });
+
+  const { data: proposalInterviewer, isLoading: interviewerLoading } = useQuery<CallingInterview>({
+    queryKey: ["/api/calling-kanban/proposals", proposal?.id, "interview"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/interview`).then((r) => r.json()),
+    enabled: !!proposal,
+  });
+
+  useEffect(() => {
+  if (proposalInterviewer?.interviewer_id != null) {
+    setInterviewerId(String(proposalInterviewer.interviewer_id));
+  }
+  }, [proposalInterviewer?.interviewer_id]);
 
   function closeDialog() {
     onClose();
@@ -445,6 +459,20 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                               <p className="text-sm text-muted-foreground">
                                 Select this checkbox when the submission is for a release rather than a new calling.
                               </p>
+                            </div>
+                          </div>
+                          <div className="col-span-2 pt-4">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                              <span className="text-sm font-medium">Interviewer</span>
+                              <span className="text-sm text-muted-foreground">
+                                {interviewerLoading
+                                  ? "Loading interviewer…"
+                                  : interviewerId
+                                    ? selectedInterviewer
+                                      ? `${selectedInterviewer.fname} ${selectedInterviewer.lname}`
+                                      : "Interviewer details unavailable."
+                                    : "No interviewer assigned."}
+                              </span>
                             </div>
                           </div>
                         </div>
