@@ -128,6 +128,24 @@ calendar-date {
   overflow: hidden;
 }
 
+.select-scrollbar {
+  scrollbar-color: hsl(var(--border)) hsl(var(--popover));
+  scrollbar-width: thin;
+}
+
+.select-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.select-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--popover));
+}
+
+.select-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: hsl(var(--border));
+}
+
 
 .stage-sp-approval  { --stage-bg: hsl(45 80% 50% / 0.10); --stage-border: hsl(45 80% 50% / 0.20); }
 .stage-hc-approval  { --stage-bg: hsl(25 80% 55% / 0.10); --stage-border: hsl(25 80% 55% / 0.20); }
