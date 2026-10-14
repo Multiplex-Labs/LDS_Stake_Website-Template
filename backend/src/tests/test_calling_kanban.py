@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from src.models import (
     CallingProposal, CallingComment, CallingApproval, CallingInterview,
+    CallingSustainment, CallingSettingApart,
     Calling, UserCalling, KanbanUpdate, KanbanStages, Permission, Permissions, Ward,
     User,
 )
@@ -83,6 +84,82 @@ def test_create_get_list_proposal(client: TestClient, auth_headers, db_session: 
     assert r.status_code == 200
     got = r.json()
     assert got["id"] == proposal_id
+
+
+def test_calling_sustainment_model_and_endpoints(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    proposal_response = client.post(
+        "/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers
+    )
+    assert proposal_response.status_code == 200
+    proposal_id = proposal_response.json()["id"]
+
+    reader, _ = create_user()
+    db_session.add(reader)
+    db_session.commit()
+    db_session.refresh(reader)
+
+    sustainment = CallingSustainment(proposal_id=proposal_id, sustained_reader_id=reader.id)
+    db_session.add(sustainment)
+    db_session.commit()
+    db_session.refresh(sustainment)
+    assert sustainment.id is not None
+    assert sustainment.sustained_date is not None
+
+    response = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/sustainment"
+        f"?sustained_reader_id={reader.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["proposal_id"] == proposal_id
+    assert response.json()["sustained_reader_id"] == reader.id
+
+    response = client.get(
+        f"/calling-kanban/proposals/{proposal_id}/sustainment", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == sustainment.id
+    assert response.json()["sustained_reader_id"] == reader.id
+
+
+def test_calling_setting_apart_model_and_endpoints(
+    client: TestClient, auth_headers, db_session: Session, create_user
+):
+    proposal_response = client.post(
+        "/calling-kanban/proposals", json=create_proposal_payload(), headers=auth_headers
+    )
+    assert proposal_response.status_code == 200
+    proposal_id = proposal_response.json()["id"]
+
+    setter, _ = create_user()
+    db_session.add(setter)
+    db_session.commit()
+    db_session.refresh(setter)
+
+    setting_apart = CallingSettingApart(proposal_id=proposal_id, set_apart_by_id=setter.id)
+    db_session.add(setting_apart)
+    db_session.commit()
+    db_session.refresh(setting_apart)
+    assert setting_apart.id is not None
+    assert setting_apart.set_apart_date is not None
+
+    response = client.post(
+        f"/calling-kanban/proposals/{proposal_id}/setting-apart"
+        f"?set_apart_by_id={setter.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["proposal_id"] == proposal_id
+    assert response.json()["set_apart_by_id"] == setter.id
+
+    response = client.get(
+        f"/calling-kanban/proposals/{proposal_id}/setting-apart", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == setting_apart.id
+    assert response.json()["set_apart_by_id"] == setter.id
 
 
 def test_update_proposal_and_permissions(client: TestClient, auth_headers, userpass, db_session: Session):

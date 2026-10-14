@@ -17,7 +17,9 @@ from .calling_kanban import (
     CallingProposal,
     CallingComment,
     CallingApproval,
-    CallingInterview
+    CallingInterview,
+    CallingSustainment,
+    CallingSettingApart
 )
 from .ward import Ward
 from .presidency_assignment import PresidencyAssignment

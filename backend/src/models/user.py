@@ -43,6 +43,14 @@ class User(BaseModel, table=True):
         back_populates="interviewer_user",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
+    sustainment_actions: List["CallingSustainment"] = Relationship(
+        back_populates="sustained_reader_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    set_apart_actions: List["CallingSettingApart"] = Relationship(
+        back_populates="set_apart_by_user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
     
     @classmethod
     def from_request_safe_user(cls, request_safe_user: "RequestSafeUser", password_hash: str) -> "User":

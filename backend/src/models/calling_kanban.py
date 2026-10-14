@@ -44,6 +44,8 @@ class CallingProposal(BaseModel, table=True):
     comments: List["CallingComment"] = Relationship(back_populates="proposal")  # type: ignore
     approvals: List["CallingApproval"] = Relationship(back_populates="proposal")  # type: ignore
     interviews: List["CallingInterview"] = Relationship(back_populates="proposal")  # type: ignore
+    sustainments: List["CallingSustainment"] = Relationship(back_populates="proposal")  # type: ignore
+    setting_apart: List["CallingSettingApart"] = Relationship(back_populates="proposal")  # type: ignore
     
 class CallingComment(BaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
@@ -77,3 +79,24 @@ class CallingInterview(BaseModel, table=True):
     # Relationships
     proposal: "CallingProposal" = Relationship(back_populates="interviews")  # type: ignore
     interviewer_user: "User" = Relationship(back_populates="interviews_conducted")  # type: ignore
+
+class CallingSettingApart(BaseModel, table=True):
+    id: int = Field(default=None, primary_key=True)
+    proposal_id: int = Field(foreign_key="callingproposal.id", index=True)
+    set_apart_by_id: int = Field(foreign_key="user.id", index=True)
+    set_apart_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    proposal: "CallingProposal" = Relationship(back_populates="setting_apart")  # type: ignore
+    set_apart_by_user: "User" = Relationship(back_populates="set_apart_actions")  # type: ignore
+
+class CallingSustainment(BaseModel, table=True):
+    id: int = Field(default=None, primary_key=True)
+    proposal_id: int = Field(foreign_key="callingproposal.id", index=True)
+    sustained_reader_id: int = Field(foreign_key="user.id", index=True)
+    sustained_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    proposal: "CallingProposal" = Relationship(back_populates="sustainments")  # type: ignore
+    sustained_reader_user: "User" = Relationship(back_populates="sustainment_actions")  # type: ignore
+    

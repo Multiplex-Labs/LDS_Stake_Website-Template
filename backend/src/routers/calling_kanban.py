@@ -37,7 +37,9 @@ from ..models import (
     User,
     ResponseSafeUser,
     Ward,
-    Permission
+    Permission,
+    CallingSustainment,
+    CallingSettingApart
 )
 
 logger = getLogger("application")
@@ -567,6 +569,87 @@ def get_interview(
         raise HTTPException(status_code=404, detail="Interview not found")
     return interview
 
+# Calling Sustainment endpoints
+@router.post("/proposals/{proposal_id}/sustainment", response_model=CallingSustainment)
+def create_sustainment(
+    request: Request,
+    proposal_id: int,
+    sustained_reader_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Schedule an interview for a calling proposal"""
+    statement = select(CallingSustainment).where(CallingSustainment.proposal_id == proposal_id)
+    sustainment = session.exec(statement).first()
+    if not sustainment:
+        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+
+    sustained_reader = session.get(User, sustained_reader_id)
+    if not sustained_reader:
+        raise HTTPException(status_code=404, detail="Sustained reader not found")
+
+    sustainment.proposal_id = proposal_id
+    sustainment.sustained_reader_id = sustained_reader_id
+    session.add(sustainment)
+    session.commit()
+    session.refresh(sustainment)
+
+    return sustainment
+
+
+@router.get("/proposals/{proposal_id}/sustainment", response_model=CallingSustainment)
+def get_sustainment(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+):
+    """Get sustainment for a calling proposal"""
+    statement = select(CallingSustainment).where(CallingSustainment.proposal_id == proposal_id)
+    sustainment = session.exec(statement).first()
+    if not sustainment:
+        raise HTTPException(status_code=404, detail="Sustainment not found")
+    return sustainment
+
+# Calling Setting Apart endpoints
+@router.post("/proposals/{proposal_id}/setting-apart", response_model=CallingSettingApart)
+def create_setting_apart(
+    request: Request,
+    proposal_id: int,
+    set_apart_by_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.MANAGE_CALLING_PROPOSALS)),
+):
+    """Schedule an interview for a calling proposal"""
+    statement = select(CallingSettingApart).where(CallingSettingApart.proposal_id == proposal_id)
+    setting_apart = session.exec(statement).first()
+    if not setting_apart:
+        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+
+    set_apart_by = session.get(User, set_apart_by_id)
+    if not set_apart_by:
+        raise HTTPException(status_code=404, detail="Set-apart user not found")
+
+    setting_apart.proposal_id = proposal_id
+    setting_apart.set_apart_by_id = set_apart_by_id
+    session.add(setting_apart)
+    session.commit()
+    session.refresh(setting_apart)
+
+    return setting_apart
+
+
+@router.get("/proposals/{proposal_id}/setting-apart", response_model=CallingSettingApart)
+def get_setting_apart(
+    proposal_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(CallingUser(permissions=Permission.VIEW_CALLING_PROPOSALS))
+):
+    """Get setting apart for a calling proposal"""
+    statement = select(CallingSettingApart).where(CallingSettingApart.proposal_id == proposal_id)
+    setting_apart = session.exec(statement).first()
+    if not setting_apart:
+        raise HTTPException(status_code=404, detail="Setting apart not found")
+    return setting_apart
 class KanbanUpdateResponse(BaseModel):
     id: int
     proposal_id: int
