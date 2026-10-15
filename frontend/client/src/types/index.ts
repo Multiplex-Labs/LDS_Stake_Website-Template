@@ -111,6 +111,20 @@ export interface CallingInterview {
   interview_date: string | null;
 }
 
+export interface CallingSustainment {
+  id: number;
+  proposal_id: number;
+  sustained_reader_id: number;
+  sustained_date: string;
+}
+
+export interface CallingSettingApart {
+  id: number;
+  proposal_id: number;
+  set_apart_by_id: number;
+  set_apart_date: string;
+}
+
 // Numeric literal union for KanbanStages (0–6), mirrors backend KanbanStages enum.
 export type KanbanStage = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 

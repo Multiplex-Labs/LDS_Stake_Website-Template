@@ -582,11 +582,11 @@ def create_sustainment(
     statement = select(CallingSustainment).where(CallingSustainment.proposal_id == proposal_id)
     sustainment = session.exec(statement).first()
     if not sustainment:
-        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+        sustainment = CallingSustainment(proposal_id=proposal_id, sustained_reader_id=sustained_reader_id)
 
     sustained_reader = session.get(User, sustained_reader_id)
     if not sustained_reader:
-        raise HTTPException(status_code=404, detail="Sustained reader not found")
+        raise HTTPException(status_code=404, detail="Sustaining reader not found")
 
     sustainment.proposal_id = proposal_id
     sustainment.sustained_reader_id = sustained_reader_id
@@ -623,7 +623,7 @@ def create_setting_apart(
     statement = select(CallingSettingApart).where(CallingSettingApart.proposal_id == proposal_id)
     setting_apart = session.exec(statement).first()
     if not setting_apart:
-        raise HTTPException(status_code=404, detail="Proposal not found or at improper stage")
+        setting_apart = CallingSettingApart(proposal_id=proposal_id, set_apart_by_id=set_apart_by_id)
 
     set_apart_by = session.get(User, set_apart_by_id)
     if not set_apart_by:

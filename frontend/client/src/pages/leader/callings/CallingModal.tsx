@@ -39,7 +39,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiErrorStatus } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { STAGE_LABELS, STAGE_BADGE_VARIANT, SK_DONE, SK_SUSTAIN } from "@/lib/constants";
-import type { CallingProposal, Ward, ApiUser, CallingComment, KanbanTransition, CallingInterview } from "@/types";
+import type { CallingProposal, Ward, ApiUser, CallingComment, KanbanTransition, CallingInterview, CallingSustainment, CallingSettingApart } from "@/types";
 
 export interface ProposalWithStage extends CallingProposal {
   stageKey: string;
@@ -77,6 +77,8 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
 
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [interviewerId, setInterviewerId] = useState("");
+  const [sustainingReaderId, setSustainingReaderId] = useState("");
+  const [setApartById, setSetApartById] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [newComment, setNewComment] = useState("");
@@ -85,6 +87,8 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
   useEffect(() => {
     if (!proposal) return;
     setInterviewerId("");
+    setSustainingReaderId("");
+    setSetApartById("");
     setEditingCommentId(null);
     setEditDraft("");
     setNewComment("");
@@ -131,11 +135,35 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
     enabled: !!proposal,
   });
 
+  const { data: proposalSustainment, isLoading: sustainmentLoading } = useQuery<CallingSustainment>({
+    queryKey: ["/api/calling-kanban/proposals", proposal?.id, "sustainment"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/sustainment`).then((r) => r.json()),
+    enabled: !!proposal,
+  });
+
+  const { data: proposalSettingApart, isLoading: settingApartLoading } = useQuery<CallingSettingApart>({
+    queryKey: ["/api/calling-kanban/proposals", proposal?.id, "setting-apart"],
+    queryFn: () => apiRequest("GET", `/api/calling-kanban/proposals/${proposal!.id}/setting-apart`).then((r) => r.json()),
+    enabled: !!proposal,
+  });
+
   useEffect(() => {
-  if (proposalInterviewer?.interviewer_id != null) {
-    setInterviewerId(String(proposalInterviewer.interviewer_id));
-  }
+    if (proposalInterviewer?.interviewer_id != null) {
+      setInterviewerId(String(proposalInterviewer.interviewer_id));
+    }
   }, [proposalInterviewer?.interviewer_id]);
+
+  useEffect(() => {
+    if (proposalSustainment?.sustained_reader_id != null) {
+      setSustainingReaderId(String(proposalSustainment.sustained_reader_id));
+    }
+  }, [proposalSustainment?.sustained_reader_id]);
+
+  useEffect(() => {
+    if (proposalSettingApart?.set_apart_by_id != null) {
+      setSetApartById(String(proposalSettingApart.set_apart_by_id));
+    }
+  }, [proposalSettingApart?.set_apart_by_id]);
 
   function closeDialog() {
     onClose();
@@ -193,6 +221,38 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
       } else {
         toast.error("Failed to assign interviewer", { description: "Please refresh and try again." });
       }
+    },
+  });
+
+  const assignSustainingReaderMutation = useMutation({
+    mutationFn: ({ id, readerId }: { id: number; readerId: number }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/sustainment?sustained_reader_id=${readerId}`),
+    onSuccess: (_, { id }) => {
+      toast.success("Sustaining reader assigned");
+      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/proposals", id, "sustainment"] });
+    },
+    onError: (err: unknown) => {
+      console.error("[CallingModal] assignSustainedReaderMutation error:", err);
+      const status = apiErrorStatus(err);
+      if (status === 401) toast.error("Session expired", { description: "Please log in again." });
+      else if (status === 403) toast.error("Not authorized", { description: "You don't have permission to assign a sustaining reader." });
+      else toast.error("Failed to assign sustaining reader", { description: "Please refresh and try again." });
+    },
+  });
+
+  const assignSetApartByMutation = useMutation({
+    mutationFn: ({ id, userId }: { id: number; userId: number }) =>
+      apiRequest("POST", `/api/calling-kanban/proposals/${id}/setting-apart?set_apart_by_id=${userId}`),
+    onSuccess: (_, { id }) => {
+      toast.success("Setting-apart person assigned");
+      queryClient.invalidateQueries({ queryKey: ["/api/calling-kanban/proposals", id, "setting-apart"] });
+    },
+    onError: (err: unknown) => {
+      console.error("[CallingModal] assignSetApartByMutation error:", err);
+      const status = apiErrorStatus(err);
+      if (status === 401) toast.error("Session expired", { description: "Please log in again." });
+      else if (status === 403) toast.error("Not authorized", { description: "You don't have permission to assign a setting-apart person." });
+      else toast.error("Failed to assign setting-apart person", { description: "Please refresh and try again." });
     },
   });
 
@@ -304,6 +364,7 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
 
   const anyMutating =
     updateMutation.isPending || scheduleInterviewMutation.isPending ||
+    assignSustainingReaderMutation.isPending || assignSetApartByMutation.isPending ||
     completeInterviewMutation.isPending || sustainMutation.isPending ||
     setApartMutation.isPending || lcrMutation.isPending ||
     addCommentMutation.isPending || editCommentMutation.isPending || deleteCommentMutation.isPending ||
@@ -382,17 +443,71 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                       )}
 
                       {proposal.stageKey === "3" && (
-                        <Button size="sm" className="gap-2 w-full" disabled={anyMutating} onClick={() => sustainMutation.mutate(proposal.id)}>
-                          <ArrowRight className="h-3.5 w-3.5" />
-                          Mark as Sustained → {proposal.is_release ? "LCR Update" : "Setting Apart"}
-                        </Button>
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Assign Sustaining Reader</Label>
+                            <div className="flex gap-2">
+                              <Select value={sustainingReaderId} onValueChange={setSustainingReaderId}>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder="Select a user…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {users.map((u) => (
+                                    <SelectItem key={u.id} value={String(u.id)}>
+                                      {u.fname} {u.lname}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!sustainingReaderId || anyMutating}
+                                onClick={() => assignSustainingReaderMutation.mutate({ id: proposal.id, readerId: Number(sustainingReaderId) })}
+                              >
+                                Assign
+                              </Button>
+                            </div>
+                          </div>
+                          <Button size="sm" className="gap-2 w-full" disabled={anyMutating} onClick={() => sustainMutation.mutate(proposal.id)}>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                            Mark as Sustained → {proposal.is_release ? "LCR Update" : "Setting Apart"}
+                          </Button>
+                        </div>
                       )}
 
                       {proposal.stageKey === "4" && (
-                        <Button size="sm" className="gap-2 w-full" disabled={anyMutating} onClick={() => setApartMutation.mutate(proposal.id)}>
-                          <ArrowRight className="h-3.5 w-3.5" />
-                          Mark as Set Apart → LCR Update
-                        </Button>
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Assign Set Apart By</Label>
+                            <div className="flex gap-2">
+                              <Select value={setApartById} onValueChange={setSetApartById}>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue placeholder="Select a user…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {users.map((u) => (
+                                    <SelectItem key={u.id} value={String(u.id)}>
+                                      {u.fname} {u.lname}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!setApartById || anyMutating}
+                                onClick={() => assignSetApartByMutation.mutate({ id: proposal.id, userId: Number(setApartById) })}
+                              >
+                                Assign
+                              </Button>
+                            </div>
+                          </div>
+                          <Button size="sm" className="gap-2 w-full" disabled={anyMutating} onClick={() => setApartMutation.mutate(proposal.id)}>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                            Mark as Set Apart → LCR Update
+                          </Button>
+                        </div>
                       )}
 
                       {proposal.stageKey === "5" && (
@@ -461,24 +576,52 @@ export function CallingModal({ proposal, canManage, wards, users, onClose }: Cal
                               </p>
                             </div>
                           </div>
-                          <div className="col-span-2 pt-4">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-                              <span className="text-sm font-medium">Interviewer</span>
-                              <span className="text-sm text-muted-foreground">
-                                {interviewerLoading
-                                  ? "Loading interviewer…"
-                                  : interviewerId
-                                    ? selectedInterviewer
-                                      ? `${selectedInterviewer.fname} ${selectedInterviewer.lname}`
-                                      : "Interviewer details unavailable."
-                                    : "No interviewer assigned."}
-                              </span>
-                            </div>
-                          </div>
                         </div>
                       </div>
                     </div>
                   )}
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold">Assigned Participants</p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Interviewer</p>
+                        <p className="text-sm text-muted-foreground">
+                          {interviewerLoading
+                            ? "Loading…"
+                            : interviewerId
+                              ? selectedInterviewer
+                                ? `${selectedInterviewer.fname} ${selectedInterviewer.lname}`
+                                : "Details unavailable."
+                              : "Not assigned."}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Sustaining Reader</p>
+                        <p className="text-sm text-muted-foreground">
+                          {sustainmentLoading
+                            ? "Loading…"
+                            : sustainingReaderId
+                              ? userMap.get(Number(sustainingReaderId))
+                                ? `${userMap.get(Number(sustainingReaderId))!.fname} ${userMap.get(Number(sustainingReaderId))!.lname}`
+                                : "Details unavailable."
+                              : "Not assigned."}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Set Apart By</p>
+                        <p className="text-sm text-muted-foreground">
+                          {settingApartLoading
+                            ? "Loading…"
+                            : setApartById
+                              ? userMap.get(Number(setApartById))
+                                ? `${userMap.get(Number(setApartById))!.fname} ${userMap.get(Number(setApartById))!.lname}`
+                                : "Details unavailable."
+                              : "Not assigned."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
                   <Separator />
 
