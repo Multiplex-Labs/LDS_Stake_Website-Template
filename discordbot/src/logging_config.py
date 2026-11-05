@@ -6,11 +6,21 @@ from rich.traceback import install as install_rich_traceback
 # Install rich traceback for nicer exception output
 install_rich_traceback()
 
+class IgnoreHealthChecks(logging.Filter):
+    def filter(self, record):
+        message = record.getMessage()
+        return '"GET /hello' not in message
+
 def setup_logging(log_level="INFO"):
 
     logging_config = {
         "version": 1,
         "disable_existing_loggers": False,
+        "filters": {
+            "ignore_health_checks": {
+                "()": IgnoreHealthChecks
+            }
+        },
         "formatters": {
             "rich_uvicorn": {
                 "datefmt": "[%X]",
@@ -28,11 +38,13 @@ def setup_logging(log_level="INFO"):
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_application",
                 "rich_tracebacks": True,
+                "log_time_format": "[%Y-%m-%d %H:%M:%S]",
                 "level": "NOTSET"
             },
             "rich_uvicorn": {
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_uvicorn",
+                "log_time_format": "[%Y-%m-%d %H:%M:%S]",
                 "rich_tracebacks": True,
                 "level": "NOTSET"
             }

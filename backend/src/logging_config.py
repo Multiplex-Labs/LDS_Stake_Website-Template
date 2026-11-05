@@ -2,11 +2,21 @@ import logging
 from logging.config import dictConfig
 from rich.logging import RichHandler
 
+class IgnoreHealthChecks(logging.Filter):
+    def filter(self, record):
+        message = record.getMessage()
+        return '"GET /health' not in message
+
 def setup_logging(log_level="INFO"):
 
     logging_config = {
         "version": 1,
         "disable_existing_loggers": True,
+        "filters": {
+            "ignore_health_checks": {
+                "()": IgnoreHealthChecks
+            }
+        },
         "formatters": {
             "rich_uvicorn": {
                 "datefmt": "[%X]",
@@ -28,12 +38,14 @@ def setup_logging(log_level="INFO"):
             "rich_application": {
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_application",
+                "log_time_format": "[%Y-%m-%d %H:%M:%S]",
                 "rich_tracebacks": True,
                 "level": "NOTSET"
             },
             "rich_uvicorn": {
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_uvicorn",
+                "log_time_format": "[%Y-%m-%d %H:%M:%S]",
                 "rich_tracebacks": True,
                 "level": "NOTSET"
             },
