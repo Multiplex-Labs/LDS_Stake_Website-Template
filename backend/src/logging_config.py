@@ -19,17 +19,14 @@ def setup_logging(log_level="INFO"):
         },
         "formatters": {
             "rich_uvicorn": {
-                "datefmt": "[%X]",
                 # Rich handles the timestamp and level, so we just need the message
                 "format": "%(message)s"
             },
             "rich_application": {
-                "datefmt": "[%X]",
                 "format": "%(funcName)s - %(message)s",
                 "markup": True
             },
             "rich_sqlalchemy": {
-                "datefmt": "[%X]",
                 "format": "%(funcName)s - %(message)s",
                 "markup": True
             }
@@ -52,6 +49,7 @@ def setup_logging(log_level="INFO"):
             "rich_sqlalchemy": {
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_sqlalchemy",
+                "log_time_format": "[%Y-%m-%d %H:%M:%S]",
                 "rich_tracebacks": True,
                 "level": "WARNING"
             }

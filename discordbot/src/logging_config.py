@@ -23,12 +23,10 @@ def setup_logging(log_level="INFO"):
         },
         "formatters": {
             "rich_uvicorn": {
-                "datefmt": "[%X]",
                 # Rich handles the timestamp and level, so we just need the message
                 "format": "%(message)s"
             },
             "rich_application": {
-                "datefmt": "[%X]",
                 "format": "%(funcName)s - %(message)s",
                 "markup": True
             }
