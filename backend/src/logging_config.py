@@ -43,6 +43,7 @@ def setup_logging(log_level="INFO"):
                 "class": "rich.logging.RichHandler",
                 "formatter": "rich_uvicorn",
                 "log_time_format": "[%Y-%m-%d %H:%M:%S]",
+                "filters": ["ignore_health_checks"],
                 "rich_tracebacks": True,
                 "level": "NOTSET"
             },
